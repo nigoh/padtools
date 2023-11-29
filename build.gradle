@@ -7,17 +7,16 @@ sourceCompatibility = 1.8
 
 repositories {
     mavenCentral()
-    maven {
-        url "http://jfontchooser.osdn.jp/repository/"
-    }
+    maven { url 'https://oss.sonatype.org/service/local/repositories/releases/content/' }
 }
 dependencies {
-    compile 'org.apache.xmlgraphics:batik-svggen:1.14'
-    compile 'org.apache.xmlgraphics:batik-dom:1.14'
-    compile 'say.swing:jfontchooser:1.0.5'
-    compile group: 'org.jfree', name: 'jfreesvg', version: '3.3'
-    testCompile group: 'junit', name: 'junit', version: '4.11'
+    implementation 'org.apache.xmlgraphics:batik-svggen:1.14'
+    implementation 'org.apache.xmlgraphics:batik-dom:1.14'
+    implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
+    implementation group: 'org.jfree', name: 'jfreesvg', version: '3.3'
+    testImplementation group: 'junit', name: 'junit', version: '4.11'
 }
+
 
 def defaultEncoding = 'UTF-8'
 
@@ -26,10 +25,10 @@ compileJava {
 }
 
 jar {
-    archiveName = "PadTools.jar"
+    archiveFileName = "PadTools.jar"
     manifest {
         attributes 'Main-Class' : "padtools.Main"
-        attributes 'Class-Path' : configurations.compile.collect{'libs/' + it.name}.join(' ')
+        attributes 'Class-Path' : configurations.runtimeClasspath.collect{'libs/' + it.name}.join(' ')
     }
 }
 
@@ -40,7 +39,7 @@ task makeZip(type : Zip, dependsOn: ['jar']) {
     from 'build/libs/PadTools.jar'
 
     into ('libs') {
-        from configurations.runtime
+        from configurations.runtimeClasspath
     }
 }
 

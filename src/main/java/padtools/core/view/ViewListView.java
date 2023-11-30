@@ -1,7 +1,5 @@
 package padtools.core.view;
 
-import padtools.core.models.TerminalNode;
-
 import java.awt.Graphics2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;

@@ -1,15 +1,10 @@
 package padtools.converter;
-
-import padtools.Setting;
 import padtools.core.formats.spd.ParseErrorException;
 import padtools.core.formats.spd.ParseErrorReceiver;
 import padtools.core.formats.spd.SPDParser;
 import padtools.core.models.PADModel;
 import padtools.core.view.Model2View;
 import padtools.core.view.View2Image;
-import padtools.util.Option;
-import padtools.util.OptionParser;
-import padtools.util.UnknownOptionException;
 
 import javax.imageio.ImageIO;
 import java.io.*;

@@ -101,7 +101,7 @@ public class MainFrame extends JFrame {
     private final SPDEditor editor;
 
     //エラー一覧部コントロール
-    private final JList messageList;
+    private final JList<String> messageList;
 
     //ビュー部コントロール
     private BufferedView view = null;
@@ -124,7 +124,7 @@ public class MainFrame extends JFrame {
 
         //各コンポーネントを生成を生成
         editor = new SPDEditor();
-        messageList = new JList(new DefaultListModel());
+        messageList = new JList<String>(new DefaultListModel<String>());
 
         //アイコンを読み込む
         loadIcons();
@@ -376,14 +376,14 @@ public class MainFrame extends JFrame {
         JMenuItem item = new JMenuItem("新規作成(N)", iconNew);
         menu.add(item);
         item.addActionListener(actionNew);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_MASK));
+        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
 
         menu.addSeparator();
 
         item = new JMenuItem("開く(O)", iconOpen);
         menu.add(item);
         item.addActionListener(actionOpen);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_MASK));
+        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
 
         menu.addSeparator();
 
@@ -391,7 +391,7 @@ public class MainFrame extends JFrame {
             item = new JMenuItem("保存(S)", iconSave);
             menu.add(item);
             item.addActionListener(actionSave);
-            item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_MASK));
+            item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         }
 
         item = new JMenuItem("名前を付けて保存(A)", null);
@@ -421,7 +421,7 @@ public class MainFrame extends JFrame {
         item = new JMenuItem("再描画(R)", iconRefresh);
         menu.add(item);
         item.addActionListener(actionRefresh);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_MASK));
+        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK));
         
         item = new JMenuItem("エディタフォント");
         menu.add(item);
@@ -563,13 +563,13 @@ public class MainFrame extends JFrame {
     }
 
     private void applyLogic() {
-        ((DefaultListModel) messageList.getModel()).removeAllElements();
+        ((DefaultListModel<String>) messageList.getModel()).removeAllElements();
         editor.refreshHighlight();
 
         final PADModel model = SPDParser.parse(editor.getText(), new ParseErrorReceiver() {
 
             public boolean receiveParseError(String lineStr, int lineNo, ParseErrorException err) {
-                ((DefaultListModel) messageList.getModel()).addElement(String.format("line %d, %s", lineNo + 1, err.getUserMessage()));
+                ((DefaultListModel<String>) messageList.getModel()).addElement(String.format("line %d, %s", lineNo + 1, err.getUserMessage()));
                 editor.setErrorLine(lineNo);
                 return true;
             }

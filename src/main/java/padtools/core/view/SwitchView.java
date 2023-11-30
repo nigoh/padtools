@@ -67,8 +67,6 @@ public class SwitchView extends View{
         double subvieww = 0.0;
         double h = 0.0;
         
-        double x = mar.left;
-        double y = mar.top;
 
         // labelw <- ラベルの最大幅
         // h <- ラベルと、サブビューの合計値
@@ -120,7 +118,7 @@ public class SwitchView extends View{
             
             //高さを更新
             h += lastdy;
-            ymap.put(entry.getKey(), new Double(h));
+            ymap.put(entry.getKey(), Double.valueOf(h));
 
             //tmp <- 高さ追記分
             if( bottomly > subSize.y){
@@ -216,7 +214,7 @@ public class SwitchView extends View{
             
             //高さを更新
             h += lastdy;
-            ymap.put(entry.getKey(), new Double(h));
+            ymap.put(entry.getKey(), Double.valueOf(h));
 
             //tmp <- 高さ追記分
             if( bottomly > subSize.y){

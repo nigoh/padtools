@@ -1,20 +1,17 @@
 package padtools.core.models;
 
 import java.util.HashMap;
-import java.util.Map;
 
 /**
  * PADをモデル化したクラス。
  */
 public class PADModel {
     private NodeBase topNode;
-    private final Map<String, String> additionalInformation;
-
     /**
      * コンストラクタ。
      */
     public PADModel(){
-        additionalInformation = new HashMap<String, String>();
+        new HashMap<String, String>();
     }
 
     /**

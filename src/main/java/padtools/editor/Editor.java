@@ -1,13 +1,8 @@
 package padtools.editor;
 
-import padtools.util.Option;
-import padtools.util.OptionParser;
-import padtools.util.UnknownOptionException;
 
 import javax.swing.*;
 import java.io.File;
-import java.util.Enumeration;
-import java.util.Properties;
 
 public class Editor {
     public static void openEditor(final File file) {

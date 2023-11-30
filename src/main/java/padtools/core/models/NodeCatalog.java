@@ -26,11 +26,11 @@ public enum NodeCatalog {
     ;
 
     private static final Map<String, NodeCatalog> catalogTypeMap;
-    private static final Map<Class, NodeCatalog> catalogClassMap;
+    private static final Map<Class<?>, NodeCatalog> catalogClassMap;
     static{
         //ノード種別からマップを作成。
         catalogTypeMap = new HashMap<String, NodeCatalog>();
-        catalogClassMap = new HashMap<Class, NodeCatalog>();
+        catalogClassMap = new HashMap<Class<?>, NodeCatalog>();
         for(NodeCatalog c : NodeCatalog.values()){
             catalogTypeMap.put(c.getTypeName(), c);
             catalogClassMap.put(c.getImplementClass(), c);
@@ -52,14 +52,14 @@ public enum NodeCatalog {
      * @param cls クラス
      * @return 列挙体の値
      */
-    public static NodeCatalog getByClass(Class cls){
+    public static NodeCatalog getByClass(Class<?> cls){
         return catalogClassMap.get(cls);
     }
 
     private final String typeName;
-    private final Class implementsClass;
+    private final Class<?> implementsClass;
 
-    NodeCatalog(String typeName, Class implementClass){
+    NodeCatalog(String typeName, Class<?> implementClass){
         this.typeName = typeName;
         this.implementsClass = implementClass;
     }
@@ -76,7 +76,7 @@ public enum NodeCatalog {
      * 実装クラスを取得する。
      * @return 実装クラス
      */
-    public Class getImplementClass(){
+    public Class<?> getImplementClass(){
         return implementsClass;
     }
 

@@ -162,6 +162,8 @@ public class BoxView extends View{
                         viewOption.getRoundLong().intValue(),
                         viewOption.getRoundShort().intValue());
                 break;
+            default:
+                break;
         }
 
             
@@ -196,6 +198,8 @@ public class BoxView extends View{
                 g.drawRoundRect((int)box.x, (int)box.y, (int)box.width, (int)box.height,
                         viewOption.getRoundLong().intValue(),
                         viewOption.getRoundShort().intValue());
+                break;
+            default:
                 break;
         }
     }

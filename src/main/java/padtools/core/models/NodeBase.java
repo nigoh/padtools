@@ -1,7 +1,5 @@
 package padtools.core.models;
 
-import padtools.core.models.ModelValidationException;
-
 import java.util.Map;
 
 /**

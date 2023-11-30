@@ -8,15 +8,24 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
+import javax.swing.KeyStroke;
 import javax.swing.border.LineBorder;
+import javax.swing.event.DocumentEvent;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
@@ -26,6 +35,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.TabSet;
 import javax.swing.text.TabStop;
+import javax.swing.undo.UndoManager;
 
 import padtools.Main;
 /**
@@ -52,16 +62,16 @@ class SPDEditor extends JTextPane {
             
             Element elm = SPDEditor.this.getDocument().getDefaultRootElement();
             Rectangle rect = grphcs.getClipBounds();
-            int startno = elm.getElementIndex(SPDEditor.this.viewToModel(new Point(0, rect.y)));
-            int endno = elm.getElementIndex(SPDEditor.this.viewToModel(new Point(0, rect.y + rect.height)));
-            
+            int startno = elm.getElementIndex(SPDEditor.this.viewToModel2D(new Point2D.Double(0, rect.y)));
+            int endno = elm.getElementIndex(SPDEditor.this.viewToModel2D(new Point2D.Double(0, rect.y + rect.height)));
+
             for(int no=startno; no<=endno; ++no){
-                try {              
-                    Rectangle re = SPDEditor.this.modelToView(elm.getElement(no).getStartOffset());
-                    
+                try {
+                    Rectangle2D re = SPDEditor.this.modelToView2D(elm.getElement(no).getStartOffset());
+
                     if( re != null){
                         grphcs.setColor(Color.DARK_GRAY);
-                        grphcs.drawString(String.format("%03d", no + 1), 0, re.y + fontHeight - 2);
+                        grphcs.drawString(String.format("%03d", no + 1), 0, (int) (re.getY() + fontHeight - 2));
                     }
                 } catch (BadLocationException ex) {
                     Logger.getLogger(SPDEditor.class.getName()).log(Level.SEVERE, null, ex);
@@ -181,7 +191,8 @@ class SPDEditor extends JTextPane {
     private final RowHeader rowHeader;
     private boolean edited = false;
     private boolean reqSave = false;
-    
+    private UndoManager undoManager;
+
     public SPDEditor() {
         setDocument(doc = (SimpleSyntaxDocument)new SimpleSyntaxDocument());
         MutableAttributeSet attr = new SimpleAttributeSet();
@@ -207,6 +218,9 @@ class SPDEditor extends JTextPane {
 
         //右クリックメニューをつける
         new JTextEditPopupMenu(this).assignEvent();
+
+        undoManager = new UndoManager();
+        setupUndoRedo();
     }
     
     public void updateFont(Font font){
@@ -288,4 +302,50 @@ class SPDEditor extends JTextPane {
         this.reqSave = reqSave;
     }
     
+    /**
+     * @return the undoManager
+     */
+    public void setupUndoRedo() {
+        getDocument().addUndoableEditListener(e -> {
+            if (e.getEdit() instanceof DocumentEvent) {
+                DocumentEvent de = (DocumentEvent) e.getEdit();
+                DocumentEvent.EventType type = de.getType();
+    
+                if (type == DocumentEvent.EventType.INSERT) {
+                    System.out.println("INSERT");
+                    undoManager.addEdit(e.getEdit());
+                } else if (type == DocumentEvent.EventType.REMOVE) {
+                    System.out.println("REMOVE");
+                    undoManager.addEdit(e.getEdit());
+                } else if (type == DocumentEvent.EventType.CHANGE) {
+                    System.out.println("CHANGE");
+                }
+            }
+        });
+    
+        InputMap inputMap = getInputMap(JComponent.WHEN_FOCUSED);
+        ActionMap actionMap = getActionMap();
+    
+        inputMap.put(KeyStroke.getKeyStroke("ctrl Z"), "undo");
+        actionMap.put("undo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (undoManager.canUndo()) {
+                    undoManager.undo();
+                    refreshHighlight();
+                }
+            }
+        });
+    
+        inputMap.put(KeyStroke.getKeyStroke("ctrl Y"), "redo");
+        actionMap.put("redo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (undoManager.canRedo()) {
+                    undoManager.redo();
+                    refreshHighlight();
+                }
+            }
+        });
+    }
 }

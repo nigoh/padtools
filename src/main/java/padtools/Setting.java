@@ -20,6 +20,14 @@ public class Setting {
     private Font viewFont   = new Font("Dialog", Font.PLAIN, 14);
     /** PAD図の前景色 */
     private Color viewColor=new Color(0.2f, 0.2f, 0.2f);
+
+    /** ウィンドウ位置・サイズ */
+    private int windowX = -1;
+    private int windowY = -1;
+    private int windowWidth = 800;
+    private int windowHeight = 600;
+    private int mainSplitLocation = -1;
+    private int leftSplitLocation = -1;
     
     public boolean isDisableSaveMenu() {
         return disableSaveMenu;
@@ -51,6 +59,19 @@ public class Setting {
     public void setViewColor(Color viewColor){
         this.viewColor = viewColor;
     }
+
+    public int getWindowX() { return windowX; }
+    public void setWindowX(int windowX) { this.windowX = windowX; }
+    public int getWindowY() { return windowY; }
+    public void setWindowY(int windowY) { this.windowY = windowY; }
+    public int getWindowWidth() { return windowWidth; }
+    public void setWindowWidth(int windowWidth) { this.windowWidth = windowWidth; }
+    public int getWindowHeight() { return windowHeight; }
+    public void setWindowHeight(int windowHeight) { this.windowHeight = windowHeight; }
+    public int getMainSplitLocation() { return mainSplitLocation; }
+    public void setMainSplitLocation(int mainSplitLocation) { this.mainSplitLocation = mainSplitLocation; }
+    public int getLeftSplitLocation() { return leftSplitLocation; }
+    public void setLeftSplitLocation(int leftSplitLocation) { this.leftSplitLocation = leftSplitLocation; }
 
     public void saveToFile(File f) throws IOException {
         if (f == null) throw new IOException("File is null");

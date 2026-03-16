@@ -312,13 +312,9 @@ class SPDEditor extends JTextPane {
                 DocumentEvent.EventType type = de.getType();
     
                 if (type == DocumentEvent.EventType.INSERT) {
-                    System.out.println("INSERT");
                     undoManager.addEdit(e.getEdit());
                 } else if (type == DocumentEvent.EventType.REMOVE) {
-                    System.out.println("REMOVE");
                     undoManager.addEdit(e.getEdit());
-                } else if (type == DocumentEvent.EventType.CHANGE) {
-                    System.out.println("CHANGE");
                 }
             }
         });

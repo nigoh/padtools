@@ -3,7 +3,9 @@ package padtools.core.formats.spd;
 import padtools.core.models.*;
 
 import java.io.*;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -30,7 +32,7 @@ public class SPDParser {
     /**
      * パース中のコンテキストを扱うクラス。
      */
-    private static class Context {
+    static class Context {
         public enum OptionStatus{
             Default,
             Else
@@ -52,8 +54,112 @@ public class SPDParser {
         public String optionArg = null;
     }
 
+    /**
+     * コマンドハンドラのインターフェース。
+     */
+    @FunctionalInterface
+    private interface CommandHandler {
+        void handle(Context context, String arg) throws ParseErrorException;
+    }
+
     //コメントを判定する正規表現オブジェクト
     private final static Pattern patternComment = Pattern.compile("^\\s*(#.*)?$");
+
+    //コマンドレジストリ
+    private static final Map<String, CommandHandler> commandRegistry = new HashMap<>();
+    static {
+        commandRegistry.put("call", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            CallNode node = new CallNode();
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("terminal", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            TerminalNode node = new TerminalNode();
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("comment", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            CommentNode node = new CommentNode();
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("while", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            LoopNode node = new LoopNode();
+            node.setWhile(true);
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("dowhile", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            LoopNode node = new LoopNode();
+            node.setWhile(false);
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("if", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            IfNode node = new IfNode();
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("switch", (context, arg) -> {
+            if (arg == null) throw new RequireArgumentException();
+            SwitchNode node = new SwitchNode();
+            node.setText(arg);
+            context.nodeList.add(node);
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("else", (context, arg) -> {
+            NodeBase node = context.nodeList.size() == 0 ? null : context.nodeList.getLast();
+            if (node == null || !(node instanceof IfNode)) {
+                throw new UnexpectedElseException();
+            }
+            if (arg != null) {
+                throw new NotRequireArgumentException();
+            }
+            context.optionStatus = Context.OptionStatus.Else;
+            context.optionArg = null;
+        });
+
+        commandRegistry.put("case", (context, arg) -> {
+            NodeBase node = context.nodeList.size() == 0 ? null : context.nodeList.getLast();
+            if (node == null || !(node instanceof SwitchNode)) {
+                throw new UnexpectedCaseException();
+            }
+            if (arg == null) {
+                throw new RequireArgumentException();
+            }
+            if (((SwitchNode) node).getCases().containsKey(arg)) {
+                throw new CaseDuplicateException();
+            }
+            context.optionStatus = Context.OptionStatus.Default;
+            context.optionArg = arg;
+        });
+    }
 
     /**
      * 本文を処理する
@@ -64,7 +170,7 @@ public class SPDParser {
         //状態の制御
         if(context.nodeList.size() > 0){
             NodeBase lnode = context.nodeList.getLast();
-            if( context.optionArg != null && SwitchNode.class.isInstance(lnode)){
+            if( context.optionArg != null && lnode instanceof SwitchNode){
                 SwitchNode node = (SwitchNode)lnode;
                 node.getCases().put(context.optionArg, null);
                 context.optionArg = null;
@@ -78,104 +184,10 @@ public class SPDParser {
             String cmd = ss[0].substring(1);
             String arg = ss.length > 1 ? body.substring(ss[0].length()).trim() : null;
 
-            if( "call".equals(cmd) ){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                CallNode node = new CallNode();
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("terminal".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                TerminalNode node = new TerminalNode();
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("comment".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                CommentNode node = new CommentNode();
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("while".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                LoopNode node = new LoopNode();
-                node.setWhile(true);
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("dowhile".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                LoopNode node = new LoopNode();
-                node.setWhile(false);
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("if".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                IfNode node = new IfNode();
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("switch".equals(cmd)){
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                SwitchNode node = new SwitchNode();
-                node.setText(arg);
-                context.nodeList.add(node);
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = null;
-            }
-            else if("else".equals(cmd)){
-                NodeBase node = context.nodeList.size() == 0 ? null : context.nodeList.getLast();
-                if(node == null || !IfNode.class.isInstance(node)){
-                    throw new UnexpectedElseException();
-                }
-                if(arg != null){
-                    throw new NotRequireArgumentException();
-                }
-                context.optionStatus = Context.OptionStatus.Else;
-                context.optionArg = null;
-            }
-            else if("case".equals(cmd)){
-                NodeBase node = context.nodeList.size() == 0 ? null : context.nodeList.getLast();
-                if(node == null || !SwitchNode.class.isInstance(node)){
-                    throw new UnexpectedCaseException();
-                }
-                if(arg == null){
-                    throw new RequireArgumentException();
-                }
-                if( ((SwitchNode)node).getCases().containsKey(arg) ){
-                    throw new CaseDuplicateException();
-                }
-                context.optionStatus = Context.OptionStatus.Default;
-                context.optionArg = arg;
-            }
-            else{
+            CommandHandler handler = commandRegistry.get(cmd);
+            if (handler != null) {
+                handler.handle(context, arg);
+            } else {
                 throw new UnknownCommandException();
             }
         }
@@ -201,7 +213,7 @@ public class SPDParser {
         //状態の制御
         if(context.nodeList.size() > 0){
             NodeBase lnode = context.nodeList.getLast();
-            if( context.optionArg != null && SwitchNode.class.isInstance(lnode)){
+            if( context.optionArg != null && lnode instanceof SwitchNode){
                 SwitchNode node = (SwitchNode)lnode;
                 node.getCases().put(context.optionArg, null);
                 context.optionArg = null;
@@ -226,22 +238,22 @@ public class SPDParser {
             newNode = nodeList;
         }
         else{
-            throw new UnexpectedInnerExpection("Parent node is not found");
+            throw new UnexpectedInnerException("Parent node is not found");
         }
 
         //ノードの追加先となるノード。
         NodeBase pnode = context.parent.nodeList.getLast();
 
         //ノードの種類に応じてノードの追加先に追加。
-        if(WithChildNode.class.isInstance(pnode)){
+        if(pnode instanceof WithChildNode){
             WithChildNode node = (WithChildNode)pnode;
             node.setChildNode(newNode);
         }
-        else if(SwitchNode.class.isInstance(pnode)){
+        else if(pnode instanceof SwitchNode){
             SwitchNode node = (SwitchNode)pnode;
             node.getCases().put(context.parent.optionArg, newNode);
         }
-        else if(IfNode.class.isInstance(pnode)){
+        else if(pnode instanceof IfNode){
             IfNode node = (IfNode)pnode;
             if(context.parent.optionStatus == Context.OptionStatus.Default){
                 node.setTrueNode(newNode);
@@ -250,11 +262,11 @@ public class SPDParser {
                 node.setFalseNode(newNode);
             }
             else {
-                throw new UnexpectedInnerExpection("Illegal option status");
+                throw new UnexpectedInnerException("Illegal option status");
             }
         }
         else{
-            throw new UnexpectedInnerExpection("Illegal command");
+            throw new UnexpectedInnerException("Illegal command");
         }
 
         //親ノードの状態をリセットする。
@@ -316,11 +328,11 @@ public class SPDParser {
 
                         //正当性をチェックする。
                         NodeBase parentNode = context.nodeList.getLast();
-                        if( tabNum > context.depth + 1 || CommentNode.class.isInstance(parentNode)){
+                        if( tabNum > context.depth + 1 || parentNode instanceof CommentNode){
                             //親がコメントか２階層以上離れているのは不正。
                             throw new IllegalIndentException();
                         }
-                        if( SwitchNode.class.isInstance(parentNode) && context.optionArg == null){
+                        if( parentNode instanceof SwitchNode && context.optionArg == null){
                             //子を持たないタイプの場合は不正。
                             throw new IllegalIndentException();
                         }
@@ -338,7 +350,7 @@ public class SPDParser {
                     }
 
                     //本文は行のデータをtrimしたものとする。
-                    //行末が ¥ の場合は複数行扱いとする。
+                    //行末が @ の場合は複数行扱いとする。
                     String body = line.trim();
                     if(body.endsWith("@")){
                         StringWriter sw = new StringWriter();
@@ -350,7 +362,7 @@ public class SPDParser {
                             //コメント行で止まる
                             if(patternComment.matcher(line).matches()) break;
 
-                            //行末に @ が間読み込む
+                            //行末に @ がある場合は読み込む
                             body = line.trim();
                             if(body.endsWith("@")){
                                 pw.println(body.substring(0, body.length() - 1));

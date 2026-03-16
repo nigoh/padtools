@@ -8,6 +8,7 @@ import padtools.core.view.View2Image;
 
 import javax.imageio.ImageIO;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 
 /**
  * コンバーターのメインクラス
@@ -49,7 +50,7 @@ public class Converter {
         }
 
         //入力する
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
+        BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         StringWriter sw = new StringWriter();
         PrintWriter pw = new PrintWriter(sw);
         String buf;

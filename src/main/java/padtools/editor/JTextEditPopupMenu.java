@@ -9,6 +9,8 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
+import padtools.util.Messages;
+
 public class JTextEditPopupMenu extends JPopupMenu {
     private final JTextComponent owner;
     private final JMenuItem itemCut;
@@ -24,19 +26,19 @@ public class JTextEditPopupMenu extends JPopupMenu {
         ActionMap am = text.getActionMap();
 
         itemCut = add(am.get(DefaultEditorKit.cutAction));
-        itemCut.setText("切り取り(X)");
+        itemCut.setText(Messages.get("popup.cut"));
         itemCut.setMnemonic('X');
 
         itemCopy = add(am.get(DefaultEditorKit.copyAction));
-        itemCopy.setText("コピー(C)");
+        itemCopy.setText(Messages.get("popup.copy"));
         itemCopy.setMnemonic('C');
 
         itemPaste = add(am.get(DefaultEditorKit.pasteAction));
-        itemPaste.setText("貼り付け(V)");
+        itemPaste.setText(Messages.get("popup.paste"));
         itemPaste.setMnemonic('V');
 
         itemSelectAll = add(am.get(DefaultEditorKit.selectAllAction));
-        itemSelectAll.setText("全て選択(A)");
+        itemSelectAll.setText(Messages.get("popup.selectAll"));
         itemSelectAll.setMnemonic('A');
 
         addPopupMenuListener(new PopupMenuListener() {

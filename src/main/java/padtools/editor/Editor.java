@@ -21,13 +21,8 @@ public class Editor {
             public void run() {
                 JFrame.setDefaultLookAndFeelDecorated(true);
                 MainFrame frame = new MainFrame(file);
-
-                frame.setSize(800, 600);
-                frame.setLocationRelativeTo(null);
                 frame.setVisible(true);
             }
         });
     }
-
-
 }

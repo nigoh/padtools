@@ -1,9 +1,10 @@
 group 'com.padtools'
-version '1.4'
+version '1.5'
 
 apply plugin: 'java'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 11
+targetCompatibility = 11
 
 repositories {
     mavenCentral()
@@ -14,7 +15,7 @@ dependencies {
     implementation 'org.apache.xmlgraphics:batik-dom:1.14'
     implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
     implementation group: 'org.jfree', name: 'jfreesvg', version: '3.3'
-    testImplementation group: 'junit', name: 'junit', version: '4.11'
+    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 }
 
 
@@ -22,6 +23,18 @@ def defaultEncoding = 'UTF-8'
 
 compileJava {
     options.encoding = defaultEncoding
+}
+
+compileTestJava {
+    options.encoding = defaultEncoding
+}
+
+test {
+    useJUnit()
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+    }
 }
 
 jar {
@@ -41,8 +54,4 @@ task makeZip(type : Zip, dependsOn: ['jar']) {
     into ('libs') {
         from configurations.runtimeClasspath
     }
-}
-
-compileTestJava {
-    options.encoding = defaultEncoding
 }

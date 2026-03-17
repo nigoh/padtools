@@ -8,6 +8,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
+import java.awt.image.BufferedImage;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
@@ -123,9 +124,16 @@ public class PreviewPanel extends JPanel {
         view = new BufferedView(model2View.toView(model), true);
         editor.setEdited(false);
 
-        Point2D.Double sz = view.getSize(graphics);
-        viewWidth = sz.x;
-        viewHeight = sz.y;
+        BufferedImage tempImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D tempGraphics = tempImage.createGraphics();
+        try {
+            Point2D.Double sz = view.getSize(tempGraphics);
+            viewWidth = sz.x;
+            viewHeight = sz.y;
+        } finally {
+            tempGraphics.dispose();
+            tempImage.flush();
+        }
         updatePreferredSize();
     }
 

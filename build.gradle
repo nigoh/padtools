@@ -1,9 +1,11 @@
 group 'com.padtools'
-version '1.4'
+version '1.5'
 
 apply plugin: 'java'
+apply plugin: 'checkstyle'
 
-sourceCompatibility = 1.8
+sourceCompatibility = 11
+targetCompatibility = 11
 
 repositories {
     mavenCentral()
@@ -14,7 +16,7 @@ dependencies {
     implementation 'org.apache.xmlgraphics:batik-dom:1.14'
     implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
     implementation group: 'org.jfree', name: 'jfreesvg', version: '3.3'
-    testImplementation group: 'junit', name: 'junit', version: '4.11'
+    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 }
 
 
@@ -24,12 +26,39 @@ compileJava {
     options.encoding = defaultEncoding
 }
 
+compileTestJava {
+    options.encoding = defaultEncoding
+}
+
+test {
+    useJUnit()
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = false
+    }
+}
+
 jar {
     archiveFileName = "PadTools.jar"
     manifest {
         attributes 'Main-Class' : "padtools.Main"
         attributes 'Class-Path' : configurations.runtimeClasspath.collect{'libs/' + it.name}.join(' ')
     }
+}
+
+checkstyle {
+    toolVersion = '10.12.5'
+    configFile = file("${projectDir}/config/checkstyle/checkstyle.xml")
+    ignoreFailures = false
+    maxWarnings = 0
+}
+
+checkstyleMain {
+    source = 'src/main/java'
+}
+
+checkstyleTest {
+    source = 'src/test/java'
 }
 
 task makeZip(type : Zip, dependsOn: ['jar']) {
@@ -41,8 +70,4 @@ task makeZip(type : Zip, dependsOn: ['jar']) {
     into ('libs') {
         from configurations.runtimeClasspath
     }
-}
-
-compileTestJava {
-    options.encoding = defaultEncoding
 }

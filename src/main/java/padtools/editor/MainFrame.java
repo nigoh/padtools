@@ -4,39 +4,21 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GradientPaint;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.RenderingHints;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
+import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.WindowListener;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Point2D;
-import java.awt.image.BufferedImage;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
-import java.io.Writer;
 import java.util.Objects;
 
 import javax.imageio.ImageIO;
@@ -46,8 +28,8 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JColorChooser;
 import javax.swing.JComponent;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
@@ -59,43 +41,36 @@ import javax.swing.JSplitPane;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.border.BevelBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
-import javax.swing.filechooser.FileNameExtensionFilter;
-
-import org.apache.batik.dom.GenericDOMImplementation;
-import org.apache.batik.svggen.SVGGraphics2D;
-import org.apache.batik.svggen.SVGGraphics2DIOException;
-import org.w3c.dom.DOMImplementation;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
+import javax.swing.event.CaretEvent;
+import javax.swing.event.CaretListener;
+import javax.swing.text.Element;
 
 import padtools.Constants;
 import padtools.Main;
 import padtools.Setting;
-import padtools.core.formats.spd.ParseErrorException;
-import padtools.core.formats.spd.ParseErrorReceiver;
-import padtools.core.formats.spd.SPDParser;
-import padtools.core.models.PADModel;
-import padtools.core.view.BufferedView;
 import padtools.core.view.Model2View;
 import padtools.core.view.ViewOption;
-import padtools.util.PathUtil;
+import padtools.util.Messages;
 import say.swing.JFontChooser;
 
-/*
- *
+/**
+ * メインウインドウ。
  * @author monaou
  */
 public class MainFrame extends JFrame {
 
-    //現在開いているファイル
-    private File filePath = null;
-    //最後に選択された行
-    private int beforeLine = 0;
-
     //モデル変換
     private final Model2View model2View = new Model2View();
+
+    //リアルタイムプレビュー用タイマー（500ms遅延）
+    private final Timer refreshTimer = new Timer(500, e -> applyLogic());
+    {
+        refreshTimer.setRepeats(false);
+    }
 
     //エディタ部コントロール
     private final SPDEditor editor;
@@ -103,59 +78,74 @@ public class MainFrame extends JFrame {
     //エラー一覧部コントロール
     private final JList<String> messageList;
 
-    //ビュー部コントロール
-    private BufferedView view = null;
-    private final JPanel viewPanel = new JPanel() {
+    //ファイル管理
+    private final FileManager fileManager;
 
-        @Override
-        protected void paintComponent(Graphics grphcs) {
-            Graphics2D g = (Graphics2D) grphcs;
-            Dimension s = getSize();
-            g.setPaint(new GradientPaint(new Point(), Color.white, new Point(s.width, s.height), Color.lightGray));
-            g.fillRect(0, 0, s.width, s.height);
-            if (view != null) {
-                view.draw(g, new Point2D.Double());
-            }
-        }
-    };
+    //画像エクスポート
+    private final ImageExporter imageExporter;
+
+    //プレビューパネル
+    private final PreviewPanel previewPanel;
+
+    //ステータスバー
+    private final JLabel statusLine = new JLabel("1");
+    private final JLabel statusColumn = new JLabel("1");
+    private final JLabel statusFile = new JLabel("NEW");
+    private final JLabel statusParse = new JLabel("OK");
+    private final JLabel statusZoom = new JLabel("100%");
+
+    //スプリットペイン（ウィンドウサイズ記憶用）
+    private JSplitPane mainSplit;
+    private JSplitPane leftSplit;
+
+    //アイコン
+    private ImageIcon iconNew, iconOpen, iconSave, iconSavePad, iconRefresh, iconHelp;
 
     public MainFrame(final File file) {
         Setting setting = Main.getSetting();
 
-        //各コンポーネントを生成を生成
+        //各コンポーネントを生成
         editor = new SPDEditor();
-        messageList = new JList<String>(new DefaultListModel<String>());
+        messageList = new JList<>(new DefaultListModel<>());
+        fileManager = new FileManager(this);
+        imageExporter = new ImageExporter(this);
+        previewPanel = new PreviewPanel(model2View);
 
         //アイコンを読み込む
         loadIcons();
 
         //イベント設定
         initSPDEditorEvent();
+        initErrorListEvent();
 
         //描画の設定
         ViewOption defOpt = model2View.getOptionMap().get(model2View.KEY_DEFAULT);
-        defOpt.setPaint(Main.getSetting().getViewColor());
+        defOpt.setPaint(setting.getViewColor());
         defOpt.setStroke(new BasicStroke(2.0f));
-        defOpt.setFont(Main.getSetting().getViewFont());
+        defOpt.setFont(setting.getViewFont());
 
         //全体のパネル生成
         JPanel mainPanel = new JPanel(new BorderLayout());
         setLayout(new BorderLayout(10, 10));
 
         //ツールバー設定
-        try {
-            setJMenuBar(createMenuBar());
-            if(!setting.isDisableToolbar()) {
-                mainPanel.add(createToolBar(), BorderLayout.NORTH);
-            }
-        } catch (IOException ex) {
+        setJMenuBar(createMenuBar(setting));
+        if (!setting.isDisableToolbar()) {
+            mainPanel.add(createToolBar(setting), BorderLayout.NORTH);
         }
 
         //レイアウト及びスクロールバー生成
         JComponent editorWithScroll = editor.withScroll();
-        JSplitPane leftSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new TitledPanel(editorWithScroll, "Logic入力"), new TitledPanel(messageList, "エラー情報"));
-        JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftSplit, new JScrollPane(viewPanel));
+        leftSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                new TitledPanel(editorWithScroll, Messages.get("panel.editor")),
+                new TitledPanel(messageList, Messages.get("panel.errors")));
+        mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                leftSplit, new JScrollPane(previewPanel));
         mainPanel.add(mainSplit, BorderLayout.CENTER);
+
+        //ステータスバー
+        mainPanel.add(createStatusBar(), BorderLayout.SOUTH);
+
         add(mainPanel, BorderLayout.CENTER);
 
         //表示の調整
@@ -169,364 +159,419 @@ public class MainFrame extends JFrame {
 
         //メインウインドウの動作を設定
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        initMainWindowListener();
-
-        SwingUtilities.invokeLater(new Runnable() {
+        addWindowListener(new WindowAdapter() {
             @Override
-            public void run() {
-                //初期値設定
-                if(file == null){
-                    initWithDefaultText();
-                }
-                else {
-                    open(file);
+            public void windowClosing(WindowEvent we) {
+                if (releaseOK()) {
+                    saveWindowState();
+                    MainFrame.this.dispose();
                 }
             }
         });
 
-        //タイトルを更新する
+        //ウィンドウサイズの復元
+        restoreWindowState(setting);
+
+        SwingUtilities.invokeLater(() -> {
+            //スプリットペイン位置の復元
+            if (setting.getMainSplitLocation() > 0) {
+                mainSplit.setDividerLocation(setting.getMainSplitLocation());
+            }
+            if (setting.getLeftSplitLocation() > 0) {
+                leftSplit.setDividerLocation(setting.getLeftSplitLocation());
+            }
+
+            if (file == null) {
+                initWithDefaultText();
+            } else {
+                open(file);
+            }
+        });
+
         updateTitle();
     }
 
-    private ImageIcon iconNew;
-    private ImageIcon iconOpen;
-    private ImageIcon iconSave;
-    private ImageIcon iconSavePad;
-    private ImageIcon iconRefresh;
-    private ImageIcon iconHelp;
-    private void loadIcons() {
-        //アイコンの読み込み
-        //画像を読み込む
+    // --- ステータスバー ---
+
+    private JPanel createStatusBar() {
+        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 2));
+        statusBar.setBorder(new BevelBorder(BevelBorder.LOWERED));
+        statusBar.setPreferredSize(new Dimension(0, 22));
+
+        statusBar.add(new JLabel(Messages.get("status.line") + ":"));
+        statusBar.add(statusLine);
+        statusBar.add(new JLabel(Messages.get("status.column") + ":"));
+        statusBar.add(statusColumn);
+        statusBar.add(new JLabel("|"));
+        statusBar.add(statusFile);
+        statusBar.add(new JLabel("|"));
+        statusBar.add(statusParse);
+        statusBar.add(new JLabel("|"));
+        statusBar.add(new JLabel(Messages.get("status.zoom") + ":"));
+        statusBar.add(statusZoom);
+
+        return statusBar;
+    }
+
+    private void updateStatusBar() {
         try {
-            iconNew = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/new.png")));
-        } catch (IOException io) {
-            iconNew = null;
+            int caretPos = editor.getCaretPosition();
+            Element root = editor.getDocument().getDefaultRootElement();
+            int line = root.getElementIndex(caretPos) + 1;
+            int col = caretPos - root.getElement(line - 1).getStartOffset() + 1;
+            statusLine.setText(String.valueOf(line));
+            statusColumn.setText(String.valueOf(col));
+        } catch (Exception e) {
+            // ignore
         }
-        try {
-            iconOpen = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/open.png")));
-        } catch (IOException io) {
-            iconOpen = null;
-        }
-        try {
-            iconSave = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/save.png")));
-        } catch (IOException io) {
-            iconSave = null;
-        }
-        try {
-            iconRefresh = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/refresh.png")));
-        } catch (IOException io) {
-            iconRefresh = null;
-        }
-        try {
-            iconSavePad = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/pictures.png")));
-        } catch (IOException io) {
-            iconSavePad = null;
-        }
-        try {
-            iconHelp = new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream("images/help.png")));
-        } catch (IOException io) {
-            iconHelp = null;
+
+        File f = fileManager.getCurrentFile();
+        statusFile.setText(f == null ? "NEW" : f.getName());
+
+        int errorCount = ((DefaultListModel<String>) messageList.getModel()).size();
+        if (errorCount == 0) {
+            statusParse.setText(Messages.get("status.parseOk"));
+            statusParse.setForeground(new Color(0, 128, 0));
+        } else {
+            statusParse.setText(errorCount + " " + Messages.get("status.parseErrors"));
+            statusParse.setForeground(Color.RED);
         }
     }
 
-    //新規作成アクション
-    private ActionListener actionNew = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            if (releaseOK()) {
-                initWithDefaultText();
-                filePath = null;
-                updateTitle();
-            }
-        }
-    };
-    //開くアクション
-    private ActionListener actionOpen = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            if (releaseOK()) {
-                open();
-            }
-        }
-    };
-    //保存アクション
-    private ActionListener actionSave = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            save();
-        }
-    };
-    //名前をつけて保存アクション
-    private ActionListener actionSaveAs = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            saveAs();
-        }
-    };
-    //PNG形式で保存アクション
-    private ActionListener actionSavePadImageAsPng = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            applyLogic();
-            savePadImageAsPng();
-        }
-    };
-    //SVG形式で保存アクション
-    private ActionListener actionSavePadImageAsSvg = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            applyLogic();
-            savePadImageAsSvg();
-        }
-    };
-    //画面の更新アクション
-    private ActionListener actionRefresh = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            applyLogic();
-        }
-    };
-    //エディタフォント更新アクション
-    private ActionListener actionEditorFont = new ActionListener(){
-        public void actionPerformed(ActionEvent e){
-            showEditorFontDialog();
-        }
-    };
-    //Viewフォント更新アクション
-    private ActionListener actionViewFont = new ActionListener(){
-        public void actionPerformed(ActionEvent e){
-            showViewFontDialog();
-        }
-    };
-    //Viewカラー更新アクション
-    private ActionListener actionViewColor = new ActionListener(){
-        public void actionPerformed(ActionEvent e){
-            showViewColorDialog();
-        }
-    };
-    //バージョン情報アクション
-    private ActionListener actionVersion = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            JOptionPane.showMessageDialog(MainFrame.this, Constants.APP_NAME + " " + Constants.APP_VERSION, "バージョン情報", JOptionPane.INFORMATION_MESSAGE);
-        }
-    };
-    //閉じるアクション
-    private ActionListener actionClose = new ActionListener() {
-        public void actionPerformed(ActionEvent ae) {
-            if (releaseOK()) {
-                MainFrame.this.dispose();
-            }
-        }
-    };
-    private JToolBar createToolBar() throws IOException {
-        Setting setting = Main.getSetting();
+    // --- ウィンドウ状態の保存・復元 ---
 
+    private void restoreWindowState(Setting setting) {
+        if (setting.getWindowX() >= 0 && setting.getWindowY() >= 0) {
+            setLocation(setting.getWindowX(), setting.getWindowY());
+        } else {
+            setLocationRelativeTo(null);
+        }
+        setSize(setting.getWindowWidth(), setting.getWindowHeight());
+    }
+
+    private void saveWindowState() {
+        Setting setting = Main.getSetting();
+        setting.setWindowX(getX());
+        setting.setWindowY(getY());
+        setting.setWindowWidth(getWidth());
+        setting.setWindowHeight(getHeight());
+        setting.setMainSplitLocation(mainSplit.getDividerLocation());
+        setting.setLeftSplitLocation(leftSplit.getDividerLocation());
+        Main.saveSetting();
+    }
+
+    // --- アイコン読み込み ---
+
+    private void loadIcons() {
+        iconNew = loadIcon("images/new.png");
+        iconOpen = loadIcon("images/open.png");
+        iconSave = loadIcon("images/save.png");
+        iconRefresh = loadIcon("images/refresh.png");
+        iconSavePad = loadIcon("images/pictures.png");
+        iconHelp = loadIcon("images/help.png");
+    }
+
+    private ImageIcon loadIcon(String path) {
+        try {
+            return new ImageIcon(ImageIO.read(ClassLoader.getSystemResourceAsStream(path)));
+        } catch (IOException | NullPointerException e) {
+            return null;
+        }
+    }
+
+    // --- アクション定義 ---
+
+    private final ActionListener actionNew = ae -> doNew();
+
+    private final ActionListener actionOpen = ae -> {
+        if (releaseOK()) {
+            openWithDialog();
+        }
+    };
+
+    private final ActionListener actionSave = ae -> save();
+
+    private final ActionListener actionSaveAs = ae -> saveAs();
+
+    private final ActionListener actionSavePadImageAsPng = ae -> doExportPng();
+
+    private final ActionListener actionSavePadImageAsSvg = ae -> doExportSvg();
+
+    private final ActionListener actionRefresh = ae -> applyLogic();
+
+    private final ActionListener actionEditorFont = ae -> showEditorFontDialog();
+
+    private final ActionListener actionViewFont = ae -> showViewFontDialog();
+
+    private final ActionListener actionViewColor = ae -> showViewColorDialog();
+
+    private final ActionListener actionVersion = ae ->
+            JOptionPane.showMessageDialog(MainFrame.this,
+                    Constants.APP_NAME + " " + Constants.APP_VERSION,
+                    Messages.get("dialog.about.title"), JOptionPane.INFORMATION_MESSAGE);
+
+    private final ActionListener actionClose = ae -> {
+        if (releaseOK()) {
+            saveWindowState();
+            MainFrame.this.dispose();
+        }
+    };
+
+    private void doNew() {
+        if (releaseOK()) {
+            initWithDefaultText();
+            fileManager.setCurrentFile(null);
+            updateTitle();
+            updateStatusBar();
+        }
+    }
+
+    private void doNewFromTemplate(String templateKey) {
+        if (releaseOK()) {
+            String template = Messages.get(templateKey).replace("\\n", "\n").replace("\\t", "\t");
+            editor.requestFocusInWindow();
+            editor.setText(template);
+            editor.setEdited(false);
+            editor.setRequireSave(false);
+            fileManager.setCurrentFile(null);
+            applyLogic();
+            updateTitle();
+            updateStatusBar();
+        }
+    }
+
+    private void doExportPng() {
+        applyLogic();
+        imageExporter.exportAsPng(previewPanel.getBufferedView(), fileManager.getCurrentFile());
+    }
+
+    private void doExportSvg() {
+        applyLogic();
+        imageExporter.exportAsSvg(previewPanel.getBufferedView(), fileManager.getCurrentFile(), previewPanel.getViewBounds());
+    }
+
+    private void doExportPdf() {
+        applyLogic();
+        imageExporter.exportAsPdf(previewPanel.getBufferedView(), fileManager.getCurrentFile());
+    }
+
+    private void doCopyDiagram() {
+        applyLogic();
+        imageExporter.copyToClipboard(previewPanel.getBufferedView());
+    }
+
+    private void doPrint() {
+        applyLogic();
+        imageExporter.print(previewPanel.getBufferedView());
+    }
+
+    private void doShowHelp() {
+        HelpDialog dialog = new HelpDialog(this);
+        dialog.setVisible(true);
+    }
+
+    // --- ツールバー / メニューバー ---
+
+    private JToolBar createToolBar(Setting setting) {
         JToolBar toolBar = new JToolBar();
         toolBar.setBorderPainted(false);
         toolBar.setFloatable(false);
         toolBar.setFocusCycleRoot(false);
 
-        JButton button = new JButton("新規作成", iconNew);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionNew);
+        addToolButton(toolBar, Messages.get("toolbar.new"), iconNew, actionNew);
+        addToolButton(toolBar, Messages.get("toolbar.open"), iconOpen, actionOpen);
 
-        button = new JButton("開く", iconOpen);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionOpen);
-
-        if(!setting.isDisableSaveMenu()) {
-            button = new JButton("保存", iconSave);
-            toolBar.add(button);
-            button.setBorderPainted(false);
-            button.addActionListener(actionSave);
+        if (!setting.isDisableSaveMenu()) {
+            addToolButton(toolBar, Messages.get("toolbar.save"), iconSave, actionSave);
         }
 
         toolBar.addSeparator();
-
-        button = new JButton("再描画", iconRefresh);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionRefresh);
-
+        addToolButton(toolBar, Messages.get("toolbar.refresh"), iconRefresh, actionRefresh);
         toolBar.addSeparator();
-
-        button = new JButton("PNG形式で保存", iconSavePad);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionSavePadImageAsPng);
-
-        button = new JButton("SVG形式で保存", iconSavePad);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionSavePadImageAsSvg);
-
+        addToolButton(toolBar, Messages.get("toolbar.exportPng"), iconSavePad, actionSavePadImageAsPng);
+        addToolButton(toolBar, Messages.get("toolbar.exportSvg"), iconSavePad, actionSavePadImageAsSvg);
+        addToolButton(toolBar, Messages.get("toolbar.exportPdf"), iconSavePad, ae -> doExportPdf());
+        toolBar.addSeparator();
+        addToolButton(toolBar, Messages.get("toolbar.copyDiagram"), null, ae -> doCopyDiagram());
         toolBar.add(Box.createGlue());
         toolBar.addSeparator();
-
-        button = new JButton("バージョン情報", iconHelp);
-        toolBar.add(button);
-        button.setBorderPainted(false);
-        button.addActionListener(actionVersion);
+        addToolButton(toolBar, Messages.get("toolbar.about"), iconHelp, actionVersion);
 
         return toolBar;
     }
-    private JMenuBar createMenuBar() throws IOException {
-        Setting setting = Main.getSetting();
 
+    private void addToolButton(JToolBar toolBar, String text, ImageIcon icon, ActionListener action) {
+        JButton button = new JButton(text, icon);
+        button.setBorderPainted(false);
+        button.addActionListener(action);
+        toolBar.add(button);
+    }
+
+    private JMenuBar createMenuBar(Setting setting) {
         JMenuBar menuBar = new JMenuBar();
 
-        JMenu menu = new JMenu("ファイル(F)");
-        menuBar.add(menu);
+        // ファイルメニュー
+        JMenu fileMenu = new JMenu(Messages.get("menu.file"));
+        menuBar.add(fileMenu);
 
-        JMenuItem item = new JMenuItem("新規作成(N)", iconNew);
-        menu.add(item);
-        item.addActionListener(actionNew);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(fileMenu, Messages.get("menu.file.new"), iconNew, actionNew,
+                KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
 
-        menu.addSeparator();
+        // テンプレートサブメニュー
+        JMenu templateMenu = new JMenu(Messages.get("menu.file.newFromTemplate"));
+        fileMenu.add(templateMenu);
+        addMenuItem(templateMenu, Messages.get("template.basic.name"), null,
+                ae -> doNewFromTemplate("template.basic"), null);
+        addMenuItem(templateMenu, Messages.get("template.ifelse.name"), null,
+                ae -> doNewFromTemplate("template.ifelse"), null);
+        addMenuItem(templateMenu, Messages.get("template.loop.name"), null,
+                ae -> doNewFromTemplate("template.loop"), null);
+        addMenuItem(templateMenu, Messages.get("template.switch.name"), null,
+                ae -> doNewFromTemplate("template.switch"), null);
 
-        item = new JMenuItem("開く(O)", iconOpen);
-        menu.add(item);
-        item.addActionListener(actionOpen);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        fileMenu.addSeparator();
+        addMenuItem(fileMenu, Messages.get("menu.file.open"), iconOpen, actionOpen,
+                KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        fileMenu.addSeparator();
 
-        menu.addSeparator();
-
-        if(!setting.isDisableSaveMenu()) {
-            item = new JMenuItem("保存(S)", iconSave);
-            menu.add(item);
-            item.addActionListener(actionSave);
-            item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
+        if (!setting.isDisableSaveMenu()) {
+            addMenuItem(fileMenu, Messages.get("menu.file.save"), iconSave, actionSave,
+                    KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
         }
 
-        item = new JMenuItem("名前を付けて保存(A)", null);
-        menu.add(item);
-        item.addActionListener(actionSaveAs);
+        addMenuItem(fileMenu, Messages.get("menu.file.saveAs"), null, actionSaveAs,
+                KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+        fileMenu.addSeparator();
+        addMenuItem(fileMenu, Messages.get("menu.file.print"), null, ae -> doPrint(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_DOWN_MASK));
+        fileMenu.addSeparator();
+        addMenuItem(fileMenu, Messages.get("menu.file.close"), null, actionClose, null);
 
-        menu.addSeparator();
+        // 編集メニュー
+        JMenu editMenu = new JMenu(Messages.get("menu.edit"));
+        menuBar.add(editMenu);
+        addMenuItem(editMenu, Messages.get("menu.edit.copyDiagram"), null, ae -> doCopyDiagram(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
 
-        item = new JMenuItem("閉じる(X)", null);
-        menu.add(item);
-        item.addActionListener(actionClose);
+        // 出力メニュー
+        JMenu outputMenu = new JMenu(Messages.get("menu.output"));
+        menuBar.add(outputMenu);
+        addMenuItem(outputMenu, Messages.get("menu.output.png"), iconSavePad, actionSavePadImageAsPng,
+                KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(outputMenu, Messages.get("menu.output.svg"), iconSavePad, actionSavePadImageAsSvg, null);
+        addMenuItem(outputMenu, Messages.get("menu.output.pdf"), iconSavePad, ae -> doExportPdf(), null);
 
-        menu = new JMenu("出力(O)");
-        menuBar.add(menu);
+        // 表示メニュー
+        JMenu viewMenu = new JMenu(Messages.get("menu.view"));
+        menuBar.add(viewMenu);
+        addMenuItem(viewMenu, Messages.get("menu.view.refresh"), iconRefresh, actionRefresh,
+                KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
+        viewMenu.addSeparator();
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomIn"), null, ae -> doZoom(0.25),
+                KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomOut"), null, ae -> doZoom(-0.25),
+                KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomFit"), null, ae -> doZoomFit(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomReset"), null, ae -> doZoomReset(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
+        viewMenu.addSeparator();
+        addMenuItem(viewMenu, Messages.get("menu.view.editorFont"), null, actionEditorFont, null);
+        addMenuItem(viewMenu, Messages.get("menu.view.padFont"), null, actionViewFont, null);
+        addMenuItem(viewMenu, Messages.get("menu.view.padColor"), null, actionViewColor, null);
 
-        item = new JMenuItem("PNG形式で保存(I)", iconSavePad);
-        menu.add(item);
-        item.addActionListener(actionSavePadImageAsPng);
-
-        item = new JMenuItem("SVG形式で保存(J)", iconSavePad);
-        menu.add(item);
-        item.addActionListener(actionSavePadImageAsSvg);
-
-        menu = new JMenu("表示(V)");
-        menuBar.add(menu);
-
-        item = new JMenuItem("再描画(R)", iconRefresh);
-        menu.add(item);
-        item.addActionListener(actionRefresh);
-        item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK));
-        
-        item = new JMenuItem("エディタフォント");
-        menu.add(item);
-        item.addActionListener(actionEditorFont);
-        
-        item = new JMenuItem("PAD図フォント");
-        menu.add(item);
-        item.addActionListener(actionViewFont);
-        
-        item = new JMenuItem("PAD図カラー");
-        menu.add(item);
-        item.addActionListener(actionViewColor);
-        
-        menu = new JMenu("ヘルプ(H)");
-        menuBar.add(menu);
-
-        item = new JMenuItem("バージョン情報(A)", iconHelp);
-        menu.add(item);
-        item.addActionListener(actionVersion);
+        // ヘルプメニュー
+        JMenu helpMenu = new JMenu(Messages.get("menu.help"));
+        menuBar.add(helpMenu);
+        addMenuItem(helpMenu, Messages.get("menu.help.syntaxRef"), iconHelp, ae -> doShowHelp(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+        addMenuItem(helpMenu, Messages.get("menu.help.about"), iconHelp, actionVersion, null);
 
         return menuBar;
     }
 
+    private void addMenuItem(JMenu menu, String text, ImageIcon icon, ActionListener action, KeyStroke accelerator) {
+        JMenuItem item = new JMenuItem(text, icon);
+        item.addActionListener(action);
+        if (accelerator != null) {
+            item.setAccelerator(accelerator);
+        }
+        menu.add(item);
+    }
+
+    // --- イベント設定 ---
+
     private void initSPDEditorEvent() {
-        editor.addKeyListener(new KeyListener() {
-
-            public void keyTyped(KeyEvent ke) {
-            }
-
-            public void keyPressed(KeyEvent ke) {
-            }
-
+        editor.addKeyListener(new KeyAdapter() {
+            @Override
             public void keyReleased(KeyEvent ke) {
-                checkRefresh();
+                refreshTimer.restart();
                 updateTitle();
+                updateStatusBar();
             }
         });
-        editor.addFocusListener(new FocusListener() {
-
+        editor.addFocusListener(new FocusAdapter() {
+            @Override
             public void focusGained(FocusEvent fe) {
                 if (editor.isEdited()) {
                     applyLogic();
                 }
-                beforeLine = editor.getDocument().getDefaultRootElement().getElementIndex(editor.getSelectionStart());
             }
-
+            @Override
             public void focusLost(FocusEvent fe) {
                 if (editor.isEdited()) {
                     applyLogic();
                 }
             }
         });
-        editor.addMouseListener(new MouseListener() {
-
+        editor.addMouseListener(new MouseAdapter() {
+            @Override
             public void mouseClicked(MouseEvent me) {
-                checkRefresh();
+                if (editor.isEdited()) {
+                    applyLogic();
+                }
+                updateStatusBar();
             }
-
-            public void mousePressed(MouseEvent me) {
-            }
-
-            public void mouseReleased(MouseEvent me) {
-            }
-
-            public void mouseEntered(MouseEvent me) {
-            }
-
-            public void mouseExited(MouseEvent me) {
+        });
+        editor.addCaretListener(new CaretListener() {
+            @Override
+            public void caretUpdate(CaretEvent e) {
+                updateStatusBar();
             }
         });
     }
 
-    private void initMainWindowListener() {
-        addWindowListener(new WindowListener() {
-
-            public void windowOpened(WindowEvent we) {
-            }
-
-            public void windowClosing(WindowEvent we) {
-                if (releaseOK()) {
-                    MainFrame.this.dispose();
+    private void initErrorListEvent() {
+        messageList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int index = messageList.locationToIndex(e.getPoint());
+                if (index < 0) return;
+                String errorMsg = messageList.getModel().getElementAt(index);
+                // "line N, ..." 形式のメッセージから行番号を抽出
+                if (errorMsg.startsWith("line ")) {
+                    try {
+                        String numStr = errorMsg.substring(5, errorMsg.indexOf(','));
+                        int lineNo = Integer.parseInt(numStr.trim()) - 1;
+                        Element root = editor.getDocument().getDefaultRootElement();
+                        if (lineNo >= 0 && lineNo < root.getElementCount()) {
+                            int offset = root.getElement(lineNo).getStartOffset();
+                            editor.setCaretPosition(offset);
+                            editor.requestFocusInWindow();
+                        }
+                    } catch (NumberFormatException | IndexOutOfBoundsException ex) {
+                        // ignore
+                    }
                 }
             }
-
-            public void windowClosed(WindowEvent we) {
-            }
-
-            public void windowIconified(WindowEvent we) {
-            }
-
-            public void windowDeiconified(WindowEvent we) {
-            }
-
-            public void windowActivated(WindowEvent we) {
-            }
-
-            public void windowDeactivated(WindowEvent we) {
-            }
         });
     }
 
-    private void initWithDefaultText(){
-        //初期文字列設定
+    // --- 内部ロジック ---
+
+    private void initWithDefaultText() {
         String header = ":terminal START\n\n";
-        String comment = "#ロジックを記述してください\nロジック";
+        String comment = "#" + Messages.get("default.comment").substring(1) + "\n" + Messages.get("default.logic");
         String footer = "\n\n:terminal END";
         editor.requestFocusInWindow();
         editor.setText(header + comment + footer);
@@ -537,102 +582,72 @@ public class MainFrame extends JFrame {
     }
 
     private void updateTitle() {
-        String fn;
-        if(filePath == null) {
-            fn = "NEW";
-        } else {
-            fn = filePath.getPath();
-        }
-        String flag;
-        if(editor.isRequireSave()) {
-            flag = "*";
-        } else {
-            flag = "";
-        }
+        File currentFile = fileManager.getCurrentFile();
+        String fn = currentFile == null ? "NEW" : currentFile.getPath();
+        String flag = editor.isRequireSave() ? "*" : "";
         this.setTitle(Constants.APP_NAME + " " + Constants.APP_VERSION + " " + "[" + flag + fn + "]");
     }
 
-    private void checkRefresh() {
-        int line = editor.getDocument().getDefaultRootElement().getElementIndex(editor.getSelectionStart());
-        if (beforeLine != line) {
-            beforeLine = line;
-            if (editor.isEdited()) {
-                applyLogic();
-            }
-        }
-    }
-
     private void applyLogic() {
-        ((DefaultListModel<String>) messageList.getModel()).removeAllElements();
-        editor.refreshHighlight();
-
-        final PADModel model = SPDParser.parse(editor.getText(), new ParseErrorReceiver() {
-
-            public boolean receiveParseError(String lineStr, int lineNo, ParseErrorException err) {
-                ((DefaultListModel<String>) messageList.getModel()).addElement(String.format("line %d, %s", lineNo + 1, err.getUserMessage()));
-                editor.setErrorLine(lineNo);
-                return true;
-            }
-        });
-
-        view = new BufferedView(model2View.toView(model), true);
-        editor.setEdited(false);
-
-        Point2D.Double s = view.getSize((Graphics2D) getGraphics());
-        Dimension d = new Dimension((int) s.x, (int) s.y);
-        viewPanel.setSize(d);
-        viewPanel.setPreferredSize(d);
-        viewPanel.updateUI();
-    }
-    
-    private static interface FontConsumer{
-        void consume(Font font);
-    }
-    private void showFontDialog(Font oldFont,FontConsumer setFont){
-        JFontChooser f = new JFontChooser();
-        f.setSelectedFont(oldFont);
-        if(f.showDialog(MainFrame.this)==JFontChooser.OK_OPTION){
-            Font newFont = f.getSelectedFont();
-            if(!Objects.equals(newFont, oldFont)){
-                setFont.consume(newFont);
-                Main.saveSetting();
-            }
+        BufferedImage tmpImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = tmpImage.createGraphics();
+        try {
+            previewPanel.refresh(editor.getText(), editor, messageList, g2);
+        } finally {
+            g2.dispose();
         }
+        updateStatusBar();
     }
-    private void showEditorFontDialog(){
-        showFontDialog(Main.getSetting().getEditorFont(), new FontConsumer(){
-            public void consume(Font font){
-                editor.updateFont(font);
-                Main.getSetting().setEditorFont(font);
-            }
-        });
+
+    // --- ファイル操作 ---
+
+    private void open(File file) {
+        String content = fileManager.openFile(file);
+        if (content != null) {
+            editor.setText(content);
+            editor.setRequireSave(false);
+        }
+        applyLogic();
+        updateTitle();
+        updateStatusBar();
     }
-    private void showViewFontDialog(){
-        showFontDialog(Main.getSetting().getViewFont(), new FontConsumer(){
-            public void consume(Font font){
-                ViewOption defOpt = model2View.getOptionMap().get(model2View.KEY_DEFAULT);
-                defOpt.setFont(font);
-                Main.getSetting().setViewFont(font);
-                applyLogic();
-            }
-        });
-    }
-    private void showViewColorDialog(){
-        Color oldColor = Main.getSetting().getViewColor();
-        Color c = JColorChooser.showDialog(this, "Select Color", oldColor);
-        if(c!=null && !Objects.equals(oldColor, c)){
-            ViewOption defOpt = model2View.getOptionMap().get(model2View.KEY_DEFAULT);
-            defOpt.setPaint(c);
-            Main.getSetting().setViewColor(c);
+
+    private void openWithDialog() {
+        String content = fileManager.openWithDialog();
+        if (content != null) {
+            editor.setText(content);
+            editor.setRequireSave(false);
             applyLogic();
-            Main.saveSetting();
+            updateTitle();
+            updateStatusBar();
         }
     }
 
-    /**
-     * 解放してよいか確認する。
-     * @return 開放して良いか。 
-     */
+    private boolean save() {
+        boolean result = fileManager.save(editor.getText());
+        if (result) {
+            editor.setRequireSave(false);
+            applyLogic();
+            updateTitle();
+        } else if (fileManager.getCurrentFile() != null) {
+            return saveAs();
+        } else {
+            return false;
+        }
+        return result;
+    }
+
+    private boolean saveAs() {
+        boolean result = fileManager.saveWithDialog(editor.getText());
+        if (result) {
+            editor.setRequireSave(false);
+            applyLogic();
+            updateTitle();
+            updateStatusBar();
+        }
+        return result;
+    }
+
     private boolean releaseOK() {
         if (!editor.isRequireSave()) {
             return true;
@@ -640,11 +655,10 @@ public class MainFrame extends JFrame {
 
         switch (JOptionPane.showConfirmDialog(
                 this,
-                "編集されています。\n保存しますか？",
-                "編集されています",
+                Messages.get("dialog.unsaved.message"),
+                Messages.get("dialog.unsaved.title"),
                 JOptionPane.YES_NO_CANCEL_OPTION,
                 JOptionPane.QUESTION_MESSAGE)) {
-
             case JOptionPane.YES_OPTION:
                 return save();
             case JOptionPane.NO_OPTION:
@@ -655,168 +669,66 @@ public class MainFrame extends JFrame {
         }
     }
 
-    private void open(File file) {
-        filePath = file;
-        try {
-            FileReader fr = new FileReader(file);
-            BufferedReader br = new BufferedReader(fr);
-            StringWriter sw = new StringWriter();
+    // --- フォント/カラーダイアログ ---
 
-            String buf;
-            while ((buf = br.readLine()) != null) {
-                sw.append(buf);
-                sw.append("\n");
-            }
-
-            br.close();
-            fr.close();
-            editor.setText(sw.toString());
-            editor.setRequireSave(false);
-        } catch (IOException ex) {
-            JOptionPane.showConfirmDialog(
-                    this,
-                    ex.getLocalizedMessage(),
-                    "読み込み失敗",
-                    JOptionPane.OK_OPTION,
-                    JOptionPane.ERROR_MESSAGE);
-        }
-        
-        applyLogic();
-        updateTitle();
-    }
-
-    private void open() {
-        JFileChooser fc = new JFileChooser(filePath == null ? new File(".") : filePath);
-        fc.setFileFilter(new FileNameExtensionFilter("Simple Pad Description(*.spd)", "spd"));
-
-        if (fc.showOpenDialog(MainFrame.this) == JFileChooser.APPROVE_OPTION) {
-            open(fc.getSelectedFile());
-        }
-    }
-
-    private boolean save() {
-        return filePath == null ? saveAs() : save(filePath);
-    }
-
-    private boolean save(File file) {
-        filePath = file;
-        try {
-            PrintWriter ps = new PrintWriter(file);
-            ps.print(editor.getText());
-            ps.close();
-            editor.setRequireSave(false);
-        } catch (IOException ex) {
-            JOptionPane.showConfirmDialog(
-                    this,
-                    ex.getLocalizedMessage(),
-                    "保存失敗",
-                    JOptionPane.OK_OPTION,
-                    JOptionPane.ERROR_MESSAGE);
-
-            return saveAs();
-        }
-        applyLogic();
-        updateTitle();
-        return true;
-    }
-
-    private boolean saveAs() {
-        JFileChooser fc = new JFileChooser(filePath == null ? new File(".") : filePath);
-        fc.setFileFilter(new FileNameExtensionFilter("Simple Pad Description(*.spd)", "spd"));
-        fc.setSelectedFile(new File("new_document.spd"));
-        if (fc.showSaveDialog(MainFrame.this) == JFileChooser.APPROVE_OPTION) {
-            return save(fc.getSelectedFile());
-        } else {
-            return false;
-        }
-    }
-
-    private void savePadImageAsPng() {
-        applyLogic();
-        JFileChooser fc = new JFileChooser(filePath == null ? new File(".") : filePath);
-        fc.setFileFilter(new FileNameExtensionFilter("png image(*.png)", "png"));
-        
-        File sel;
-        if(filePath == null){
-            sel = new File("./new_pad.png");
-        }
-        else{
-            sel = new File(PathUtil.extConvert(filePath.getPath(), "png"));
-        }
-        
-        fc.setSelectedFile(sel);
-
-        if (fc.showSaveDialog(MainFrame.this) == JFileChooser.APPROVE_OPTION) {
-            BufferedImage tmp = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
-            Graphics2D tmpg = tmp.createGraphics();
-            
-            Point2D.Double size = view.getSize(tmpg);
-            double scale = 1.0;
-
-            BufferedImage img = new BufferedImage((int) (size.x * scale), (int) (size.y * scale), BufferedImage.TYPE_3BYTE_BGR);
-            Graphics2D g = img.createGraphics();
-            g.setTransform(AffineTransform.getScaleInstance(scale, scale));
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, img.getWidth(), img.getHeight());
-            view.getView().draw(g, new Point2D.Double());
-
-            try {
-                ImageIO.write(img, "png", fc.getSelectedFile());
-            } catch (IOException ex) {
-                ex.printStackTrace();
+    private void showFontDialog(Font oldFont, java.util.function.Consumer<Font> setFont) {
+        JFontChooser f = new JFontChooser();
+        f.setSelectedFont(oldFont);
+        if (f.showDialog(MainFrame.this) == JFontChooser.OK_OPTION) {
+            Font newFont = f.getSelectedFont();
+            if (!Objects.equals(newFont, oldFont)) {
+                setFont.accept(newFont);
+                Main.saveSetting();
             }
         }
     }
 
-    void outputSVG(File f) {
-        Rectangle r = viewPanel.getBounds();
-        DOMImplementation domImpl = GenericDOMImplementation.getDOMImplementation();
-        Document document = domImpl.createDocument(null, "svg", null);
-        SVGGraphics2D svg2d = new SVGGraphics2D(document);
-        svg2d.setBackground(new Color(255,255,255,0));
-        svg2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-        view.getView().draw(svg2d, new Point2D.Double());
-        Element sv = svg2d.getRoot();
-        sv.setAttribute("xml:space", "preserve");
-        sv.setAttribute("width", Integer.toString((int)r.getWidth()));
-        sv.setAttribute("height", Integer.toString((int)r.getHeight()));
-        sv.setAttribute("viewBox",
-                        "0 0 "+
-                        Integer.toString((int)r.getWidth())+" "+
-                        Integer.toString((int)r.getHeight())
-        );
-        try (OutputStream os = new FileOutputStream(f);
-             BufferedOutputStream bos = new BufferedOutputStream(os);
-             Writer out = new OutputStreamWriter(bos, "UTF-8");){
-           svg2d.stream(sv,out);
-        } catch (UnsupportedEncodingException ue){
-            ue.printStackTrace();
-        } catch (SVGGraphics2DIOException se){
-            se.printStackTrace();
-        } catch (IOException ioe){
-            ioe.printStackTrace();
-       }
+    private void showEditorFontDialog() {
+        showFontDialog(Main.getSetting().getEditorFont(), font -> {
+            editor.updateFont(font);
+            Main.getSetting().setEditorFont(font);
+        });
     }
 
-    private void savePadImageAsSvg() {
-        applyLogic();
-        JFileChooser fc = new JFileChooser(filePath == null ? new File(".") : filePath);
-        fc.setFileFilter(new FileNameExtensionFilter("svg image(*.svg)", "svg"));
+    private void showViewFontDialog() {
+        showFontDialog(Main.getSetting().getViewFont(), font -> {
+            ViewOption defOpt = model2View.getOptionMap().get(model2View.KEY_DEFAULT);
+            defOpt.setFont(font);
+            Main.getSetting().setViewFont(font);
+            applyLogic();
+        });
+    }
 
-        File sel;
-        if(filePath == null){
-            sel = new File("./new_pad.svg");
-        }
-        else{
-            sel = new File(PathUtil.extConvert(filePath.getPath(), "svg"));
-        }
-
-        fc.setSelectedFile(sel);
-
-        if (fc.showSaveDialog(MainFrame.this) == JFileChooser.APPROVE_OPTION) {
-            outputSVG(fc.getSelectedFile());
+    private void showViewColorDialog() {
+        Color oldColor = Main.getSetting().getViewColor();
+        Color c = JColorChooser.showDialog(this, Messages.get("dialog.colorChooser"), oldColor);
+        if (c != null && !Objects.equals(oldColor, c)) {
+            ViewOption defOpt = model2View.getOptionMap().get(model2View.KEY_DEFAULT);
+            defOpt.setPaint(c);
+            Main.getSetting().setViewColor(c);
+            applyLogic();
+            Main.saveSetting();
         }
     }
-    
 
+    // --- ズーム操作 ---
+
+    private void doZoom(double delta) {
+        previewPanel.adjustZoom(delta);
+        updateZoomStatus();
+    }
+
+    private void doZoomFit() {
+        previewPanel.zoomToFit();
+        updateZoomStatus();
+    }
+
+    private void doZoomReset() {
+        previewPanel.setZoomLevel(1.0);
+        updateZoomStatus();
+    }
+
+    private void updateZoomStatus() {
+        statusZoom.setText((int) (previewPanel.getZoomLevel() * 100) + "%");
+    }
 }

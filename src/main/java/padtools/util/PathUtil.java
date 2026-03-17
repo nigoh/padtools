@@ -14,6 +14,9 @@ public class PathUtil {
      * @return 拡張子が変換されたファイル名
      */
     public static String extConvert(String base, String ext){
+        if (ext != null) {
+            ext = ext.replaceAll("[^a-zA-Z0-9]", "");
+        }
         String ret;
         File f = new File(base);
         String fn = f.getName();

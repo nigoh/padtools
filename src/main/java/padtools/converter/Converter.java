@@ -4,10 +4,15 @@ import padtools.core.formats.spd.ParseErrorReceiver;
 import padtools.core.formats.spd.SPDParser;
 import padtools.core.models.PADModel;
 import padtools.core.view.Model2View;
+import padtools.core.view.PdfWriter;
+import padtools.core.view.View;
 import padtools.core.view.View2Image;
+import padtools.editor.ImageExporter;
 
 import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 
 /**
  * コンバーターのメインクラス
@@ -49,19 +54,22 @@ public class Converter {
         }
 
         //入力する
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        String buf;
-        try{
+        String content;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            String buf;
             while((buf = br.readLine()) != null ){
                 pw.println(buf);
             }
-        }
-        catch (IOException ex){
+            content = sw.toString();
+        } catch (IOException ex) {
+            System.err.println("Failed to read input: " + ex.getMessage());
+            System.exit(1);
+            return;
         }
 
-        PADModel pad = SPDParser.parse(sw.toString(), new ParseErrorReceiver() {
+        PADModel pad = SPDParser.parse(content, new ParseErrorReceiver() {
             @Override
             public boolean receiveParseError(String lineStr, int lineNo, ParseErrorException err) {
                 System.err.println(String.format("%d: %s", lineNo, err.getUserMessage()));
@@ -70,12 +78,28 @@ public class Converter {
         });
 
         Model2View m2v = new Model2View();
+        View view = m2v.toView(pad);
+        BufferedImage image = View2Image.toImage(view, scale);
+
+        String outputName = file_out != null ? file_out.getName().toLowerCase() : "";
         try{
-            ImageIO.write(View2Image.toImage(m2v.toView(pad), scale), "png", out);
+            if (outputName.endsWith(".pdf")) {
+                PdfWriter.writeImageAsPdf(image, file_out);
+            } else if (outputName.endsWith(".svg") && file_out != null) {
+                java.awt.Rectangle bounds = new java.awt.Rectangle(image.getWidth(), image.getHeight());
+                ImageExporter.writeSvg(view, file_out, bounds);
+            } else {
+                ImageIO.write(image, "png", out);
+            }
         }
         catch(IOException ex){
-            System.err.println(ex.getLocalizedMessage());
+            System.err.println("Failed to write output: " + ex.getMessage());
             System.exit(1);
+        }
+        finally{
+            if(file_out != null && out != System.out){
+                out.close();
+            }
         }
     }
 }

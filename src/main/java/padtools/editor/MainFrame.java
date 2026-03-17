@@ -589,7 +589,13 @@ public class MainFrame extends JFrame {
     }
 
     private void applyLogic() {
-        previewPanel.refresh(editor.getText(), editor, messageList, (Graphics2D) getGraphics());
+        BufferedImage tmpImage = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = tmpImage.createGraphics();
+        try {
+            previewPanel.refresh(editor.getText(), editor, messageList, g2);
+        } finally {
+            g2.dispose();
+        }
         updateStatusBar();
     }
 

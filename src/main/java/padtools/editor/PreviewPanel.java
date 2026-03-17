@@ -93,6 +93,7 @@ public class PreviewPanel extends JPanel {
 
     @Override
     protected void paintComponent(Graphics grphcs) {
+        super.paintComponent(grphcs);
         Graphics2D g = (Graphics2D) grphcs;
         Dimension s = getSize();
         g.setPaint(new GradientPaint(new Point(), Color.white, new Point(s.width, s.height), Color.lightGray));

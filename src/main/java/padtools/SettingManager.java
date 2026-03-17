@@ -42,7 +42,7 @@ public class SettingManager {
             try {
                 setting.saveToFile(settingFile);
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("Failed to save initial settings: " + e.getMessage());
             }
         }
         instance = new SettingManager(setting, settingFile);
@@ -57,7 +57,7 @@ public class SettingManager {
         try {
             setting.saveToFile(settingFile);
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Failed to save settings: " + e.getMessage());
         }
     }
 }

@@ -6,7 +6,6 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
@@ -401,6 +400,8 @@ class SPDEditor extends JTextPane {
                         case KeyEvent.VK_ESCAPE:
                             hideAutocomplete();
                             e.consume();
+                            break;
+                        default:
                             break;
                     }
                 }

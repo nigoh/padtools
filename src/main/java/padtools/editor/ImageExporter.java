@@ -89,7 +89,7 @@ public class ImageExporter {
         try {
             ImageIO.write(img, "png", file);
         } catch (IOException ex) {
-            ex.printStackTrace();
+            System.err.println("Failed to write PNG: " + ex.getMessage());
         }
     }
 
@@ -134,11 +134,11 @@ public class ImageExporter {
              Writer out = new OutputStreamWriter(bos, "UTF-8")) {
             svg2d.stream(sv, out);
         } catch (UnsupportedEncodingException ue) {
-            ue.printStackTrace();
+            System.err.println("Failed to write SVG (encoding): " + ue.getMessage());
         } catch (SVGGraphics2DIOException se) {
-            se.printStackTrace();
+            System.err.println("Failed to write SVG: " + se.getMessage());
         } catch (IOException ioe) {
-            ioe.printStackTrace();
+            System.err.println("Failed to write SVG (IO): " + ioe.getMessage());
         }
     }
 
@@ -180,7 +180,7 @@ public class ImageExporter {
         try {
             PdfWriter.writeImageAsPdf(img, file);
         } catch (IOException ex) {
-            ex.printStackTrace();
+            System.err.println("Failed to write PDF: " + ex.getMessage());
         }
     }
 
@@ -242,7 +242,7 @@ public class ImageExporter {
             try {
                 job.print();
             } catch (PrinterException ex) {
-                ex.printStackTrace();
+                System.err.println("Failed to print: " + ex.getMessage());
             }
         }
     }

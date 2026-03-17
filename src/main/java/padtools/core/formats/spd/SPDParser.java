@@ -63,7 +63,7 @@ public class SPDParser {
     }
 
     //コメントを判定する正規表現オブジェクト
-    private final static Pattern patternComment = Pattern.compile("^\\s*(#.*)?$");
+    private static final Pattern patternComment = Pattern.compile("^\\s*(#.*)?$");
 
     //コマンドレジストリ
     private static final Map<String, CommandHandler> commandRegistry = new HashMap<>();

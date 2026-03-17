@@ -2,6 +2,7 @@ group 'com.padtools'
 version '1.5'
 
 apply plugin: 'java'
+apply plugin: 'checkstyle'
 
 sourceCompatibility = 11
 targetCompatibility = 11
@@ -43,6 +44,21 @@ jar {
         attributes 'Main-Class' : "padtools.Main"
         attributes 'Class-Path' : configurations.runtimeClasspath.collect{'libs/' + it.name}.join(' ')
     }
+}
+
+checkstyle {
+    toolVersion = '10.12.5'
+    configFile = file("${projectDir}/config/checkstyle/checkstyle.xml")
+    ignoreFailures = false
+    maxWarnings = 0
+}
+
+checkstyleMain {
+    source = 'src/main/java'
+}
+
+checkstyleTest {
+    source = 'src/test/java'
 }
 
 task makeZip(type : Zip, dependsOn: ['jar']) {

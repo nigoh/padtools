@@ -21,11 +21,6 @@ public class PdfWriter {
      * BufferedImageをPDFファイルとして書き出す。
      */
     public static void writeImageAsPdf(BufferedImage image, File file) throws IOException {
-        // PNG画像データをバイト列に変換
-        ByteArrayOutputStream imgBytes = new ByteArrayOutputStream();
-        ImageIO.write(image, "png", imgBytes);
-        byte[] imageData = imgBytes.toByteArray();
-
         int imgWidth = image.getWidth();
         int imgHeight = image.getHeight();
 

@@ -7,7 +7,6 @@ import padtools.core.view.Model2View;
 import padtools.core.view.PdfWriter;
 import padtools.core.view.View;
 import padtools.core.view.View2Image;
-import padtools.core.view.BufferedView;
 import padtools.editor.ImageExporter;
 
 import javax.imageio.ImageIO;
@@ -55,19 +54,22 @@ public class Converter {
         }
 
         //入力する
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        String buf;
-        try{
+        String content;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            String buf;
             while((buf = br.readLine()) != null ){
                 pw.println(buf);
             }
-        }
-        catch (IOException ex){
+            content = sw.toString();
+        } catch (IOException ex) {
+            System.err.println("Failed to read input: " + ex.getMessage());
+            System.exit(1);
+            return;
         }
 
-        PADModel pad = SPDParser.parse(sw.toString(), new ParseErrorReceiver() {
+        PADModel pad = SPDParser.parse(content, new ParseErrorReceiver() {
             @Override
             public boolean receiveParseError(String lineStr, int lineNo, ParseErrorException err) {
                 System.err.println(String.format("%d: %s", lineNo, err.getUserMessage()));
@@ -84,7 +86,6 @@ public class Converter {
             if (outputName.endsWith(".pdf")) {
                 PdfWriter.writeImageAsPdf(image, file_out);
             } else if (outputName.endsWith(".svg") && file_out != null) {
-                BufferedView bv = new BufferedView(view, true);
                 java.awt.Rectangle bounds = new java.awt.Rectangle(image.getWidth(), image.getHeight());
                 ImageExporter.writeSvg(view, file_out, bounds);
             } else {
@@ -92,8 +93,13 @@ public class Converter {
             }
         }
         catch(IOException ex){
-            System.err.println(ex.getLocalizedMessage());
+            System.err.println("Failed to write output: " + ex.getMessage());
             System.exit(1);
+        }
+        finally{
+            if(file_out != null && out != System.out){
+                out.close();
+            }
         }
     }
 }

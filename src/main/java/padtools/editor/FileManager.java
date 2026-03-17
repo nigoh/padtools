@@ -38,9 +38,8 @@ public class FileManager {
      */
     public String openFile(File file) {
         currentFile = file;
-        try {
-            InputStreamReader isr = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
-            BufferedReader br = new BufferedReader(isr);
+        try (InputStreamReader isr = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
+             BufferedReader br = new BufferedReader(isr)) {
             StringWriter sw = new StringWriter();
 
             String buf;
@@ -49,8 +48,6 @@ public class FileManager {
                 sw.append("\n");
             }
 
-            br.close();
-            isr.close();
             return sw.toString();
         } catch (IOException ex) {
             JOptionPane.showConfirmDialog(
@@ -81,10 +78,8 @@ public class FileManager {
      */
     public boolean saveFile(File file, String content) {
         currentFile = file;
-        try {
-            PrintWriter ps = new PrintWriter(file, "UTF-8");
+        try (PrintWriter ps = new PrintWriter(file, "UTF-8")) {
             ps.print(content);
-            ps.close();
             return true;
         } catch (IOException ex) {
             JOptionPane.showConfirmDialog(

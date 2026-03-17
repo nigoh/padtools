@@ -34,6 +34,13 @@ public class PathUtilTest {
     }
 
     @Test
+    public void testExtConvertSanitizesPathTraversal() {
+        String result = PathUtil.extConvert("file.spd", "../../../etc/passwd");
+        // Path separators and dots should be stripped from extension
+        assertEquals("file.etcpasswd", result);
+    }
+
+    @Test
     public void testGetBasePath() {
         String path = PathUtil.getBasePath();
         assertNotNull(path);

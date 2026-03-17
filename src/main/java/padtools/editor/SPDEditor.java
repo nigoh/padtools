@@ -9,9 +9,13 @@ import java.awt.Graphics;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,10 +24,13 @@ import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
+import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.border.LineBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.text.AttributeSet;
@@ -187,11 +194,20 @@ class SPDEditor extends JTextPane {
         }
     }
 
+    private static final String[] COMMANDS = {
+        ":if", ":else", ":while", ":dowhile", ":switch", ":case", ":call", ":terminal", ":comment"
+    };
+
     private final SimpleSyntaxDocument doc;
     private final RowHeader rowHeader;
     private boolean edited = false;
     private boolean reqSave = false;
     private UndoManager undoManager;
+
+    // オートコンプリート
+    private JPopupMenu autocompletePopup;
+    private JList<String> autocompleteList;
+    private int autocompleteStart = -1;
 
     public SPDEditor() {
         setDocument(doc = (SimpleSyntaxDocument)new SimpleSyntaxDocument());
@@ -221,6 +237,7 @@ class SPDEditor extends JTextPane {
 
         undoManager = new UndoManager();
         setupUndoRedo();
+        setupAutocomplete();
     }
     
     public void updateFont(Font font){
@@ -343,5 +360,141 @@ class SPDEditor extends JTextPane {
                 }
             }
         });
+    }
+
+    // --- オートコンプリート ---
+
+    private void setupAutocomplete() {
+        autocompleteList = new JList<>();
+        autocompleteList.setFont(getFont());
+        autocompletePopup = new JPopupMenu();
+        autocompletePopup.setBorder(new LineBorder(Color.GRAY));
+        autocompletePopup.add(new JScrollPane(autocompleteList));
+
+        autocompleteList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 1) {
+                    applyAutocomplete();
+                }
+            }
+        });
+
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (autocompletePopup.isVisible()) {
+                    switch (e.getKeyCode()) {
+                        case KeyEvent.VK_DOWN:
+                            moveAutocompleteSelection(1);
+                            e.consume();
+                            break;
+                        case KeyEvent.VK_UP:
+                            moveAutocompleteSelection(-1);
+                            e.consume();
+                            break;
+                        case KeyEvent.VK_ENTER:
+                        case KeyEvent.VK_TAB:
+                            applyAutocomplete();
+                            e.consume();
+                            break;
+                        case KeyEvent.VK_ESCAPE:
+                            hideAutocomplete();
+                            e.consume();
+                            break;
+                    }
+                }
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_DOWN || e.getKeyCode() == KeyEvent.VK_UP
+                        || e.getKeyCode() == KeyEvent.VK_ENTER || e.getKeyCode() == KeyEvent.VK_TAB
+                        || e.getKeyCode() == KeyEvent.VK_ESCAPE
+                        || e.getKeyCode() == KeyEvent.VK_SHIFT || e.getKeyCode() == KeyEvent.VK_CONTROL
+                        || e.getKeyCode() == KeyEvent.VK_ALT) {
+                    return;
+                }
+                SwingUtilities.invokeLater(() -> updateAutocomplete());
+            }
+        });
+    }
+
+    private void updateAutocomplete() {
+        try {
+            int caretPos = getCaretPosition();
+            Element root = doc.getDefaultRootElement();
+            int lineIdx = root.getElementIndex(caretPos);
+            int lineStart = root.getElement(lineIdx).getStartOffset();
+            String lineText = doc.getText(lineStart, caretPos - lineStart);
+
+            // 行頭の空白を除去した位置から「:」で始まるプレフィックスを探す
+            String trimmed = lineText.stripLeading();
+            if (trimmed.startsWith(":") && !trimmed.contains(" ") && !trimmed.contains("\t")) {
+                String prefix = trimmed;
+                autocompleteStart = caretPos - prefix.length();
+
+                List<String> matches = new ArrayList<>();
+                for (String cmd : COMMANDS) {
+                    if (cmd.startsWith(prefix) && !cmd.equals(prefix)) {
+                        matches.add(cmd);
+                    }
+                }
+
+                if (!matches.isEmpty()) {
+                    showAutocomplete(matches);
+                } else {
+                    hideAutocomplete();
+                }
+            } else {
+                hideAutocomplete();
+            }
+        } catch (BadLocationException e) {
+            hideAutocomplete();
+        }
+    }
+
+    private void showAutocomplete(List<String> items) {
+        autocompleteList.setListData(items.toArray(new String[0]));
+        autocompleteList.setSelectedIndex(0);
+        autocompleteList.setVisibleRowCount(Math.min(items.size(), 9));
+
+        try {
+            Rectangle2D r = modelToView2D(getCaretPosition());
+            if (r != null) {
+                autocompletePopup.setPopupSize(150, Math.min(items.size(), 9) * 20 + 4);
+                autocompletePopup.show(this, (int) r.getX(), (int) (r.getY() + r.getHeight()));
+            }
+        } catch (BadLocationException e) {
+            // ignore
+        }
+    }
+
+    private void hideAutocomplete() {
+        autocompletePopup.setVisible(false);
+        autocompleteStart = -1;
+    }
+
+    private void moveAutocompleteSelection(int delta) {
+        int idx = autocompleteList.getSelectedIndex() + delta;
+        int size = autocompleteList.getModel().getSize();
+        if (idx >= 0 && idx < size) {
+            autocompleteList.setSelectedIndex(idx);
+            autocompleteList.ensureIndexIsVisible(idx);
+        }
+    }
+
+    private void applyAutocomplete() {
+        String selected = autocompleteList.getSelectedValue();
+        if (selected != null && autocompleteStart >= 0) {
+            try {
+                int caretPos = getCaretPosition();
+                doc.remove(autocompleteStart, caretPos - autocompleteStart);
+                doc.insertString(autocompleteStart, selected + " ", null);
+            } catch (BadLocationException e) {
+                // ignore
+            }
+        }
+        hideAutocomplete();
     }
 }

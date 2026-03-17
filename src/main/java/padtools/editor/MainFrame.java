@@ -7,6 +7,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -19,6 +21,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -94,6 +97,7 @@ public class MainFrame extends JFrame {
     private final JLabel statusColumn = new JLabel("1");
     private final JLabel statusFile = new JLabel("NEW");
     private final JLabel statusParse = new JLabel("OK");
+    private final JLabel statusZoom = new JLabel("100%");
 
     //スプリットペイン（ウィンドウサイズ記憶用）
     private JSplitPane mainSplit;
@@ -207,6 +211,9 @@ public class MainFrame extends JFrame {
         statusBar.add(statusFile);
         statusBar.add(new JLabel("|"));
         statusBar.add(statusParse);
+        statusBar.add(new JLabel("|"));
+        statusBar.add(new JLabel(Messages.get("status.zoom") + ":"));
+        statusBar.add(statusZoom);
 
         return statusBar;
     }
@@ -324,6 +331,20 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void doNewFromTemplate(String templateKey) {
+        if (releaseOK()) {
+            String template = Messages.get(templateKey).replace("\\n", "\n").replace("\\t", "\t");
+            editor.requestFocusInWindow();
+            editor.setText(template);
+            editor.setEdited(false);
+            editor.setRequireSave(false);
+            fileManager.setCurrentFile(null);
+            applyLogic();
+            updateTitle();
+            updateStatusBar();
+        }
+    }
+
     private void doExportPng() {
         applyLogic();
         imageExporter.exportAsPng(previewPanel.getBufferedView(), fileManager.getCurrentFile());
@@ -332,6 +353,26 @@ public class MainFrame extends JFrame {
     private void doExportSvg() {
         applyLogic();
         imageExporter.exportAsSvg(previewPanel.getBufferedView(), fileManager.getCurrentFile(), previewPanel.getViewBounds());
+    }
+
+    private void doExportPdf() {
+        applyLogic();
+        imageExporter.exportAsPdf(previewPanel.getBufferedView(), fileManager.getCurrentFile());
+    }
+
+    private void doCopyDiagram() {
+        applyLogic();
+        imageExporter.copyToClipboard(previewPanel.getBufferedView());
+    }
+
+    private void doPrint() {
+        applyLogic();
+        imageExporter.print(previewPanel.getBufferedView());
+    }
+
+    private void doShowHelp() {
+        HelpDialog dialog = new HelpDialog(this);
+        dialog.setVisible(true);
     }
 
     // --- ツールバー / メニューバー ---
@@ -354,6 +395,9 @@ public class MainFrame extends JFrame {
         toolBar.addSeparator();
         addToolButton(toolBar, Messages.get("toolbar.exportPng"), iconSavePad, actionSavePadImageAsPng);
         addToolButton(toolBar, Messages.get("toolbar.exportSvg"), iconSavePad, actionSavePadImageAsSvg);
+        addToolButton(toolBar, Messages.get("toolbar.exportPdf"), iconSavePad, ae -> doExportPdf());
+        toolBar.addSeparator();
+        addToolButton(toolBar, Messages.get("toolbar.copyDiagram"), null, ae -> doCopyDiagram());
         toolBar.add(Box.createGlue());
         toolBar.addSeparator();
         addToolButton(toolBar, Messages.get("toolbar.about"), iconHelp, actionVersion);
@@ -377,6 +421,19 @@ public class MainFrame extends JFrame {
 
         addMenuItem(fileMenu, Messages.get("menu.file.new"), iconNew, actionNew,
                 KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
+
+        // テンプレートサブメニュー
+        JMenu templateMenu = new JMenu(Messages.get("menu.file.newFromTemplate"));
+        fileMenu.add(templateMenu);
+        addMenuItem(templateMenu, Messages.get("template.basic.name"), null,
+                ae -> doNewFromTemplate("template.basic"), null);
+        addMenuItem(templateMenu, Messages.get("template.ifelse.name"), null,
+                ae -> doNewFromTemplate("template.ifelse"), null);
+        addMenuItem(templateMenu, Messages.get("template.loop.name"), null,
+                ae -> doNewFromTemplate("template.loop"), null);
+        addMenuItem(templateMenu, Messages.get("template.switch.name"), null,
+                ae -> doNewFromTemplate("template.switch"), null);
+
         fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.open"), iconOpen, actionOpen,
                 KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
@@ -390,7 +447,16 @@ public class MainFrame extends JFrame {
         addMenuItem(fileMenu, Messages.get("menu.file.saveAs"), null, actionSaveAs,
                 KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         fileMenu.addSeparator();
+        addMenuItem(fileMenu, Messages.get("menu.file.print"), null, ae -> doPrint(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_DOWN_MASK));
+        fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.close"), null, actionClose, null);
+
+        // 編集メニュー
+        JMenu editMenu = new JMenu(Messages.get("menu.edit"));
+        menuBar.add(editMenu);
+        addMenuItem(editMenu, Messages.get("menu.edit.copyDiagram"), null, ae -> doCopyDiagram(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
 
         // 出力メニュー
         JMenu outputMenu = new JMenu(Messages.get("menu.output"));
@@ -398,12 +464,23 @@ public class MainFrame extends JFrame {
         addMenuItem(outputMenu, Messages.get("menu.output.png"), iconSavePad, actionSavePadImageAsPng,
                 KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK));
         addMenuItem(outputMenu, Messages.get("menu.output.svg"), iconSavePad, actionSavePadImageAsSvg, null);
+        addMenuItem(outputMenu, Messages.get("menu.output.pdf"), iconSavePad, ae -> doExportPdf(), null);
 
         // 表示メニュー
         JMenu viewMenu = new JMenu(Messages.get("menu.view"));
         menuBar.add(viewMenu);
         addMenuItem(viewMenu, Messages.get("menu.view.refresh"), iconRefresh, actionRefresh,
                 KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
+        viewMenu.addSeparator();
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomIn"), null, ae -> doZoom(0.25),
+                KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomOut"), null, ae -> doZoom(-0.25),
+                KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomFit"), null, ae -> doZoomFit(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(viewMenu, Messages.get("menu.view.zoomReset"), null, ae -> doZoomReset(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
+        viewMenu.addSeparator();
         addMenuItem(viewMenu, Messages.get("menu.view.editorFont"), null, actionEditorFont, null);
         addMenuItem(viewMenu, Messages.get("menu.view.padFont"), null, actionViewFont, null);
         addMenuItem(viewMenu, Messages.get("menu.view.padColor"), null, actionViewColor, null);
@@ -411,6 +488,8 @@ public class MainFrame extends JFrame {
         // ヘルプメニュー
         JMenu helpMenu = new JMenu(Messages.get("menu.help"));
         menuBar.add(helpMenu);
+        addMenuItem(helpMenu, Messages.get("menu.help.syntaxRef"), iconHelp, ae -> doShowHelp(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
         addMenuItem(helpMenu, Messages.get("menu.help.about"), iconHelp, actionVersion, null);
 
         return menuBar;
@@ -629,5 +708,26 @@ public class MainFrame extends JFrame {
             applyLogic();
             Main.saveSetting();
         }
+    }
+
+    // --- ズーム操作 ---
+
+    private void doZoom(double delta) {
+        previewPanel.adjustZoom(delta);
+        updateZoomStatus();
+    }
+
+    private void doZoomFit() {
+        previewPanel.zoomToFit();
+        updateZoomStatus();
+    }
+
+    private void doZoomReset() {
+        previewPanel.setZoomLevel(1.0);
+        updateZoomStatus();
+    }
+
+    private void updateZoomStatus() {
+        statusZoom.setText((int) (previewPanel.getZoomLevel() * 100) + "%");
     }
 }

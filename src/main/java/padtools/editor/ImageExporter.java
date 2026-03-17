@@ -2,10 +2,21 @@ package padtools.editor;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
+import java.awt.print.PageFormat;
+import java.awt.print.Printable;
+import java.awt.print.PrinterException;
+import java.awt.print.PrinterJob;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -14,7 +25,6 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
-import java.awt.Graphics2D;
 import java.awt.Rectangle;
 
 import javax.imageio.ImageIO;
@@ -29,11 +39,12 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 import padtools.core.view.BufferedView;
+import padtools.core.view.PdfWriter;
 import padtools.core.view.View;
 import padtools.util.PathUtil;
 
 /**
- * PAD図をPNG/SVG形式で出力するクラス。
+ * PAD図をPNG/SVG/PDF形式で出力するクラス。
  */
 public class ImageExporter {
     private final Component parent;
@@ -42,9 +53,8 @@ public class ImageExporter {
         this.parent = parent;
     }
 
-    /**
-     * PNG形式で保存ダイアログを表示し、エクスポートする。
-     */
+    // --- PNG ---
+
     public void exportAsPng(BufferedView view, File currentFile) {
         JFileChooser fc = new JFileChooser(currentFile == null ? new File(".") : currentFile);
         fc.setFileFilter(new FileNameExtensionFilter("png image(*.png)", "png"));
@@ -63,9 +73,6 @@ public class ImageExporter {
         }
     }
 
-    /**
-     * PNG画像をファイルに書き出す。
-     */
     public static void writePng(BufferedView view, File file, double scale) {
         BufferedImage tmp = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
         Graphics2D tmpg = tmp.createGraphics();
@@ -86,9 +93,8 @@ public class ImageExporter {
         }
     }
 
-    /**
-     * SVG形式で保存ダイアログを表示し、エクスポートする。
-     */
+    // --- SVG ---
+
     public void exportAsSvg(BufferedView view, File currentFile, Rectangle viewBounds) {
         JFileChooser fc = new JFileChooser(currentFile == null ? new File(".") : currentFile);
         fc.setFileFilter(new FileNameExtensionFilter("svg image(*.svg)", "svg"));
@@ -107,9 +113,6 @@ public class ImageExporter {
         }
     }
 
-    /**
-     * SVG画像をファイルに書き出す。
-     */
     public static void writeSvg(View view, File file, Rectangle bounds) {
         DOMImplementation domImpl = GenericDOMImplementation.getDOMImplementation();
         Document document = domImpl.createDocument(null, "svg", null);
@@ -136,6 +139,140 @@ public class ImageExporter {
             se.printStackTrace();
         } catch (IOException ioe) {
             ioe.printStackTrace();
+        }
+    }
+
+    // --- PDF ---
+
+    public void exportAsPdf(BufferedView view, File currentFile) {
+        JFileChooser fc = new JFileChooser(currentFile == null ? new File(".") : currentFile);
+        fc.setFileFilter(new FileNameExtensionFilter("PDF document(*.pdf)", "pdf"));
+
+        File sel;
+        if (currentFile == null) {
+            sel = new File("./new_pad.pdf");
+        } else {
+            sel = new File(PathUtil.extConvert(currentFile.getPath(), "pdf"));
+        }
+
+        fc.setSelectedFile(sel);
+
+        if (fc.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
+            writePdf(view, fc.getSelectedFile(), 1.0);
+        }
+    }
+
+    public static void writePdf(BufferedView view, File file, double scale) {
+        BufferedImage tmp = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
+        Graphics2D tmpg = tmp.createGraphics();
+        Point2D.Double size = view.getSize(tmpg);
+
+        int w = (int) (size.x * scale);
+        int h = (int) (size.y * scale);
+
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+        Graphics2D g = img.createGraphics();
+        g.setTransform(AffineTransform.getScaleInstance(scale, scale));
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, w, h);
+        view.getView().draw(g, new Point2D.Double());
+
+        try {
+            PdfWriter.writeImageAsPdf(img, file);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    // --- クリップボード ---
+
+    public void copyToClipboard(BufferedView view) {
+        if (view == null) return;
+        BufferedImage tmp = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
+        Graphics2D tmpg = tmp.createGraphics();
+        Point2D.Double size = view.getSize(tmpg);
+
+        int w = (int) size.x;
+        int h = (int) size.y;
+        if (w <= 0 || h <= 0) return;
+
+        BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_3BYTE_BGR);
+        Graphics2D g = img.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, w, h);
+        view.getView().draw(g, new Point2D.Double());
+
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(new ImageSelection(img), null);
+    }
+
+    private static class ImageSelection implements Transferable {
+        private final BufferedImage image;
+
+        ImageSelection(BufferedImage image) {
+            this.image = image;
+        }
+
+        @Override
+        public DataFlavor[] getTransferDataFlavors() {
+            return new DataFlavor[]{DataFlavor.imageFlavor};
+        }
+
+        @Override
+        public boolean isDataFlavorSupported(DataFlavor flavor) {
+            return DataFlavor.imageFlavor.equals(flavor);
+        }
+
+        @Override
+        public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException {
+            if (!isDataFlavorSupported(flavor)) {
+                throw new UnsupportedFlavorException(flavor);
+            }
+            return image;
+        }
+    }
+
+    // --- 印刷 ---
+
+    public void print(BufferedView view) {
+        if (view == null) return;
+        PrinterJob job = PrinterJob.getPrinterJob();
+        job.setPrintable(new PadPrintable(view));
+        if (job.printDialog()) {
+            try {
+                job.print();
+            } catch (PrinterException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    private static class PadPrintable implements Printable {
+        private final BufferedView view;
+
+        PadPrintable(BufferedView view) {
+            this.view = view;
+        }
+
+        @Override
+        public int print(Graphics graphics, PageFormat pageFormat, int pageIndex) {
+            if (pageIndex > 0) return NO_SUCH_PAGE;
+
+            Graphics2D g = (Graphics2D) graphics;
+            g.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+
+            BufferedImage tmp = new BufferedImage(1, 1, BufferedImage.TYPE_3BYTE_BGR);
+            Point2D.Double size = view.getSize(tmp.createGraphics());
+
+            double scaleX = pageFormat.getImageableWidth() / size.x;
+            double scaleY = pageFormat.getImageableHeight() / size.y;
+            double scale = Math.min(scaleX, scaleY);
+            if (scale > 1.0) scale = 1.0;
+
+            g.scale(scale, scale);
+            view.getView().draw(g, new Point2D.Double());
+
+            return PAGE_EXISTS;
         }
     }
 }

@@ -4,9 +4,14 @@ import padtools.core.formats.spd.ParseErrorReceiver;
 import padtools.core.formats.spd.SPDParser;
 import padtools.core.models.PADModel;
 import padtools.core.view.Model2View;
+import padtools.core.view.PdfWriter;
+import padtools.core.view.View;
 import padtools.core.view.View2Image;
+import padtools.core.view.BufferedView;
+import padtools.editor.ImageExporter;
 
 import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
@@ -71,8 +76,20 @@ public class Converter {
         });
 
         Model2View m2v = new Model2View();
+        View view = m2v.toView(pad);
+        BufferedImage image = View2Image.toImage(view, scale);
+
+        String outputName = file_out != null ? file_out.getName().toLowerCase() : "";
         try{
-            ImageIO.write(View2Image.toImage(m2v.toView(pad), scale), "png", out);
+            if (outputName.endsWith(".pdf")) {
+                PdfWriter.writeImageAsPdf(image, file_out);
+            } else if (outputName.endsWith(".svg") && file_out != null) {
+                BufferedView bv = new BufferedView(view, true);
+                java.awt.Rectangle bounds = new java.awt.Rectangle(image.getWidth(), image.getHeight());
+                ImageExporter.writeSvg(view, file_out, bounds);
+            } else {
+                ImageIO.write(image, "png", out);
+            }
         }
         catch(IOException ex){
             System.err.println(ex.getLocalizedMessage());

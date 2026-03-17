@@ -112,43 +112,4 @@ public class FileManager {
             return false;
         }
     }
-
-    /**
-     * 未保存の変更がある場合に確認ダイアログを表示する。
-     */
-    public boolean confirmDiscard(boolean hasUnsavedChanges) {
-        if (!hasUnsavedChanges) {
-            return true;
-        }
-
-        switch (JOptionPane.showConfirmDialog(
-                parent,
-                "編集されています。\n保存しますか？",
-                "編集されています",
-                JOptionPane.YES_NO_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE)) {
-            case JOptionPane.YES_OPTION:
-                return true; // caller should save
-            case JOptionPane.NO_OPTION:
-                return true;
-            case JOptionPane.CANCEL_OPTION:
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * 確認ダイアログの結果が「はい」だったかを返す。
-     */
-    public int showSaveConfirmDialog() {
-        if (true) { // always show
-            return JOptionPane.showConfirmDialog(
-                    parent,
-                    "編集されています。\n保存しますか？",
-                    "編集されています",
-                    JOptionPane.YES_NO_CANCEL_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-        }
-        return JOptionPane.NO_OPTION;
-    }
 }

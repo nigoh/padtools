@@ -1,6 +1,8 @@
 package padtools;
 
 import padtools.converter.Converter;
+import padtools.core.formats.java.AndroidProjectScanner;
+import padtools.core.formats.java.JavaSourceConverter;
 import padtools.editor.Editor;
 import padtools.util.Option;
 import padtools.util.OptionParser;
@@ -8,7 +10,11 @@ import padtools.util.Messages;
 import padtools.util.UnknownOptionException;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 
 /**
  * エントリポイントクラス
@@ -41,9 +47,11 @@ public class Main {
         final Option optHelp = new Option("h", "help", false);
         final Option optOut = new Option("o", "output", true);
         final Option optScale = new Option("s", "scale", true);
+        final Option optJava = new Option("j", "java", false);
+        final Option optJavaProject = new Option("J", "java-project", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
-                optHelp, optOut, optScale});
+                optHelp, optOut, optScale, optJava, optJavaProject});
 
         try {
             optParser.parse(args, 1);
@@ -53,11 +61,7 @@ public class Main {
         }
 
         if (optHelp.isSet()) {
-            System.err.println("Arguments: [-o result_file] [-s scale] [-h] [spd_file]");
-            System.err.println("  -o result_file: Save to result_file.");
-            System.err.println("        -s scale: Image scale(available when result_file is set).");
-            System.err.println("              -h: Show this help.");
-            System.err.println("        spd_file: Open spd file.");
+            printUsage();
             System.exit(1);
         }
 
@@ -88,10 +92,92 @@ public class Main {
             }
         }
 
+        if (optJava.isSet() || optJavaProject.isSet()) {
+            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet());
+            return;
+        }
+
         if (file_out == null) {
             Editor.openEditor(file_in);
         } else {
             Converter.convert(file_in, file_out, scale);
         }
+    }
+
+    /**
+     * Java ソースを入力とした PAD 生成処理。
+     * @param fileIn 入力ファイル (.java) またはプロジェクトディレクトリ。null の場合は標準入力
+     * @param fileOut 出力先 (.spd または .png/.svg/.pdf)。null なら標準出力に SPD を書く
+     * @param scale 画像スケール
+     * @param projectMode true ならプロジェクトディレクトリ走査モード
+     */
+    private static void handleJavaInput(File fileIn, File fileOut,
+                                         Double scale, boolean projectMode) throws IOException {
+        String spd;
+        if (projectMode) {
+            if (fileIn == null) {
+                System.err.println("Project mode requires a directory argument.");
+                System.exit(1);
+                return;
+            }
+            spd = AndroidProjectScanner.convertProject(fileIn, null, null);
+        } else {
+            String src;
+            if (fileIn == null) {
+                src = readAll(System.in);
+            } else {
+                src = AndroidProjectScanner.readFile(fileIn);
+            }
+            spd = JavaSourceConverter.convert(src);
+        }
+
+        String outName = fileOut != null ? fileOut.getName().toLowerCase() : "";
+        if (fileOut == null || outName.endsWith(".spd") || outName.endsWith(".txt")) {
+            writeText(fileOut, spd);
+            return;
+        }
+
+        // 画像出力の場合は SPD をいったん一時ファイルへ書き、Converter で変換する
+        File tmp = File.createTempFile("padtools-java-", ".spd");
+        try {
+            writeText(tmp, spd);
+            Converter.convert(tmp, fileOut, scale);
+        } finally {
+            if (!tmp.delete()) {
+                tmp.deleteOnExit();
+            }
+        }
+    }
+
+    private static String readAll(java.io.InputStream in) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+        }
+        return sb.toString();
+    }
+
+    private static void writeText(File f, String content) throws IOException {
+        if (f == null) {
+            // System.out の既定エンコーディングに依存しないよう UTF-8 で明示出力
+            System.out.write(content.getBytes(StandardCharsets.UTF_8));
+            System.out.flush();
+            return;
+        }
+        try (Writer w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8)) {
+            w.write(content);
+        }
+    }
+
+    private static void printUsage() {
+        System.err.println("Arguments: [-o result_file] [-s scale] [-j|-J] [-h] [input]");
+        System.err.println("  -o result_file: Save to result_file (spd/png/svg/pdf).");
+        System.err.println("        -s scale: Image scale (available when result is image).");
+        System.err.println("              -h: Show this help.");
+        System.err.println("       -j --java: Treat input as a Java source file.");
+        System.err.println("-J --java-project: Treat input as a Gradle/Android project directory.");
+        System.err.println("           input: SPD file by default, or Java file/dir with -j/-J.");
     }
 }

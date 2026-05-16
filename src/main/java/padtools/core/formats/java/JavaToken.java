@@ -7,17 +7,18 @@ package padtools.core.formats.java;
  * を表す。これにより、後段の構文解析器はトークン間の空白を含めて
  * 元のソースをスライスすることでフォーマットを保ったまま式を再構築できる。</p>
  */
-final class JavaToken {
+public final class JavaToken {
 
-    enum Type { IDENT, NUMBER, STRING, CHAR, PUNCT, OP, EOF }
+    /** トークン種別。 */
+    public enum Type { IDENT, NUMBER, STRING, CHAR, PUNCT, OP, EOF }
 
-    final Type type;
-    final String text;
-    final int line;
-    final int start;
-    final int end;
+    public final Type type;
+    public final String text;
+    public final int line;
+    public final int start;
+    public final int end;
 
-    JavaToken(Type type, String text, int line, int start, int end) {
+    public JavaToken(Type type, String text, int line, int start, int end) {
         this.type = type;
         this.text = text;
         this.line = line;
@@ -25,11 +26,11 @@ final class JavaToken {
         this.end = end;
     }
 
-    boolean is(String s) {
+    public boolean is(String s) {
         return text.equals(s);
     }
 
-    boolean isKw(String kw) {
+    public boolean isKw(String kw) {
         return type == Type.IDENT && text.equals(kw);
     }
 }

@@ -391,6 +391,26 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void doGenerateClassDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateClassDiagram();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateSequenceDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateSequenceDiagram(null);
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
     private void applyImportedText(String spd) {
         editor.requestFocusInWindow();
         editor.setText(spd);
@@ -469,6 +489,10 @@ public class MainFrame extends JFrame {
                 KeyStroke.getKeyStroke(KeyEvent.VK_J, InputEvent.CTRL_DOWN_MASK));
         addMenuItem(fileMenu, Messages.get("menu.file.importJavaProject"), null,
                 ae -> doImportJavaProject(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.classDiagram"), null,
+                ae -> doGenerateClassDiagram(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagram"), null,
+                ae -> doGenerateSequenceDiagram(), null);
         fileMenu.addSeparator();
 
         if (!setting.isDisableSaveMenu()) {

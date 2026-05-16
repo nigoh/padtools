@@ -10,7 +10,7 @@ import java.util.List;
  * 識別子、数値、複合演算子 (>>, <=, &&, など) を扱える。
  * 制御構造解析に必要なトークンが正しく切り出せれば十分である。</p>
  */
-final class JavaLexer {
+public final class JavaLexer {
 
     private static final String[] LONG_OPS3 = {">>>", "<<=", ">>=", "..."};
     private static final String[] LONG_OPS2 = {
@@ -24,14 +24,14 @@ final class JavaLexer {
     private int pos;
     private int line;
 
-    JavaLexer(String src) {
+    public JavaLexer(String src) {
         this.src = src;
         this.len = src.length();
         this.pos = 0;
         this.line = 1;
     }
 
-    List<JavaToken> tokenize() {
+    public List<JavaToken> tokenize() {
         List<JavaToken> out = new ArrayList<>();
         while (pos < len) {
             char c = src.charAt(pos);
@@ -76,7 +76,7 @@ final class JavaLexer {
         return out;
     }
 
-    String getSource() {
+    public String getSource() {
         return src;
     }
 

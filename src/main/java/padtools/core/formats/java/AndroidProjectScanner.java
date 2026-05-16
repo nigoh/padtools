@@ -47,6 +47,8 @@ public final class AndroidProjectScanner {
         public boolean includeTests = false;
         /** Kotlin ファイルも含める (現状は変換非対応のため、ファイルリストのみ)。 */
         public boolean includeKotlin = false;
+        /** AIDL (.aidl) ファイルも含める。 */
+        public boolean includeAidl = false;
         /** 除外ディレクトリ名のセット。 */
         public Set<String> excludedDirs = DEFAULT_EXCLUDED_DIRS;
         /** 最大再帰深さ (負値で無制限)。 */
@@ -128,6 +130,9 @@ public final class AndroidProjectScanner {
             return true;
         }
         if (opts.includeKotlin && (name.endsWith(".kt") || name.endsWith(".kts"))) {
+            return true;
+        }
+        if (opts.includeAidl && name.endsWith(".aidl")) {
             return true;
         }
         return false;

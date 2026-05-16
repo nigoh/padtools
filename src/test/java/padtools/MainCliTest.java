@@ -132,4 +132,44 @@ public class MainCliTest {
         assertTrue(out, out.contains("S.m()"));
         assertTrue(out, out.contains("do_it()"));
     }
+
+    @Test
+    public void testClassDiagramCli() throws Exception {
+        File javaFile = tmp.newFile("Foo.java");
+        writeFile(javaFile, "package x; class Foo { Bar b; void m() {} } class Bar {}");
+        File outPuml = new File(tmp.getRoot(), "foo.puml");
+        Main.main(new String[]{"padtools", "-c", "-o", outPuml.getAbsolutePath(),
+                javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("class \"x.Foo\""));
+        assertTrue(puml, puml.contains("class \"x.Bar\""));
+        assertTrue(puml, puml.contains("@enduml"));
+    }
+
+    @Test
+    public void testSequenceDiagramCli() throws Exception {
+        File javaFile = tmp.newFile("Bar.java");
+        writeFile(javaFile, "class Bar { Service s; void run() { s.go(); } }");
+        File outPuml = new File(tmp.getRoot(), "bar.puml");
+        Main.main(new String[]{"padtools", "-q", "Bar.run", "-o", outPuml.getAbsolutePath(),
+                javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("Caller -> Bar: run()"));
+        assertTrue(puml, puml.contains("Bar -> Service: go()"));
+    }
+
+    @Test
+    public void testClassDiagramCliWithAidl() throws Exception {
+        File aidlFile = tmp.newFile("ICar.aidl");
+        writeFile(aidlFile, "package android.car; interface ICar { int getVersion(); }");
+        File outPuml = new File(tmp.getRoot(), "car.puml");
+        Main.main(new String[]{"padtools", "-c", "-o", outPuml.getAbsolutePath(),
+                aidlFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("<<AIDL>>"));
+        assertTrue(puml, puml.contains("interface \"android.car.ICar\""));
+        assertTrue(puml, puml.contains("getVersion(): int"));
+    }
 }

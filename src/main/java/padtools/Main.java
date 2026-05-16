@@ -3,6 +3,7 @@ package padtools;
 import padtools.converter.Converter;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
+import padtools.core.formats.uml.UmlGenerator;
 import padtools.editor.Editor;
 import padtools.util.Option;
 import padtools.util.OptionParser;
@@ -49,9 +50,12 @@ public class Main {
         final Option optScale = new Option("s", "scale", true);
         final Option optJava = new Option("j", "java", false);
         final Option optJavaProject = new Option("J", "java-project", false);
+        final Option optClassDiagram = new Option("c", "class-diagram", false);
+        final Option optSequenceDiagram = new Option("q", "sequence-diagram", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
-                optHelp, optOut, optScale, optJava, optJavaProject});
+                optHelp, optOut, optScale, optJava, optJavaProject,
+                optClassDiagram, optSequenceDiagram});
 
         try {
             optParser.parse(args, 1);
@@ -92,6 +96,13 @@ public class Main {
             }
         }
 
+        if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
+            handleUmlInput(file_in, file_out,
+                    optClassDiagram.isSet(),
+                    optSequenceDiagram.isSet()
+                            ? optSequenceDiagram.getArguments().getLast() : null);
+            return;
+        }
         if (optJava.isSet() || optJavaProject.isSet()) {
             handleJavaInput(file_in, file_out, scale, optJavaProject.isSet());
             return;
@@ -171,13 +182,59 @@ public class Main {
         }
     }
 
+    /**
+     * Java/AIDL ソースから PlantUML (クラス図 / シーケンス図) を生成。
+     * @param fileIn 入力ファイルまたはディレクトリ
+     * @param fileOut 出力ファイル (.puml/.plantuml/.txt)。null なら標準出力
+     * @param classDiagram true でクラス図モード
+     * @param sequenceEntry "Class.method" 形式のエントリ。null/空ならシーケンス図モードを無効化
+     */
+    private static void handleUmlInput(File fileIn, File fileOut,
+                                        boolean classDiagram,
+                                        String sequenceEntry) throws IOException {
+        if (fileIn == null) {
+            System.err.println("UML generation requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        String spec = sequenceEntry == null ? "" : sequenceEntry.trim();
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
+        if (fileIn.isDirectory()) {
+            infos = UmlGenerator.extractFromProject(fileIn);
+        } else {
+            String src = AndroidProjectScanner.readFile(fileIn);
+            infos = UmlGenerator.extractFromSource(src, fileIn.getName());
+        }
+
+        String output;
+        if (sequenceEntry != null && !spec.isEmpty()) {
+            int dot = spec.lastIndexOf('.');
+            if (dot < 0) {
+                System.err.println("Sequence entry must be in 'Class.method' format: " + spec);
+                System.exit(1);
+                return;
+            }
+            String entryClass = spec.substring(0, dot);
+            String entryMethod = spec.substring(dot + 1);
+            output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
+                    infos, entryClass, entryMethod, null);
+        } else if (classDiagram) {
+            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos);
+        } else {
+            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos);
+        }
+        writeText(fileOut, output);
+    }
+
     private static void printUsage() {
-        System.err.println("Arguments: [-o result_file] [-s scale] [-j|-J] [-h] [input]");
-        System.err.println("  -o result_file: Save to result_file (spd/png/svg/pdf).");
-        System.err.println("        -s scale: Image scale (available when result is image).");
-        System.err.println("              -h: Show this help.");
-        System.err.println("       -j --java: Treat input as a Java source file.");
-        System.err.println("-J --java-project: Treat input as a Gradle/Android project directory.");
-        System.err.println("           input: SPD file by default, or Java file/dir with -j/-J.");
+        System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-h] [input]");
+        System.err.println("  -o file: Save to file (spd/png/svg/pdf/puml).");
+        System.err.println("  -s scale: Image scale (available when result is image).");
+        System.err.println("  -h: Show this help.");
+        System.err.println("  -j --java: Treat input as a Java source file.");
+        System.err.println("  -J --java-project: Gradle/Android project directory.");
+        System.err.println("  -c --class-diagram: Output PlantUML class diagram.");
+        System.err.println("  -q --sequence-diagram Class.method: PlantUML sequence diagram.");
+        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q.");
     }
 }

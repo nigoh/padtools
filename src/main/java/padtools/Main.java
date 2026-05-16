@@ -54,10 +54,13 @@ public class Main {
         final Option optClassDiagram = new Option("c", "class-diagram", false);
         final Option optSequenceDiagram = new Option("q", "sequence-diagram", true);
         final Option optVerbose = new Option("v", "verbose", false);
+        final Option optLegend = new Option("L", "legend", false);
+        final Option optNoLegend = new Option(null, "no-legend", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
-                optClassDiagram, optSequenceDiagram, optVerbose});
+                optClassDiagram, optSequenceDiagram, optVerbose,
+                optLegend, optNoLegend});
 
         try {
             optParser.parse(args, 1);
@@ -100,16 +103,24 @@ public class Main {
 
         ErrorListener listener = optVerbose.isSet()
                 ? ErrorListener.stderr() : ErrorListener.silent();
+        // UML はデフォルトで凡例 ON、PAD は OFF。明示的な --legend / --no-legend で上書き可。
+        Boolean legendOverride = null;
+        if (optLegend.isSet()) {
+            legendOverride = Boolean.TRUE;
+        } else if (optNoLegend.isSet()) {
+            legendOverride = Boolean.FALSE;
+        }
         if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
             handleUmlInput(file_in, file_out,
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
                             ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener);
+                    listener, legendOverride);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
-            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet(), listener);
+            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet(),
+                    listener, legendOverride);
             return;
         }
 
@@ -130,7 +141,12 @@ public class Main {
      */
     private static void handleJavaInput(File fileIn, File fileOut, Double scale,
                                          boolean projectMode,
-                                         ErrorListener listener) throws IOException {
+                                         ErrorListener listener,
+                                         Boolean legendOverride) throws IOException {
+        JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
+        if (Boolean.TRUE.equals(legendOverride)) {
+            convOpts.includeLegend = true;
+        }
         String spd;
         if (projectMode) {
             if (fileIn == null) {
@@ -138,7 +154,7 @@ public class Main {
                 System.exit(1);
                 return;
             }
-            spd = AndroidProjectScanner.convertProject(fileIn, null, null, listener);
+            spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
         } else {
             String src;
             if (fileIn == null) {
@@ -146,7 +162,7 @@ public class Main {
             } else {
                 src = AndroidProjectScanner.readFile(fileIn);
             }
-            spd = JavaSourceConverter.convert(src, null, listener);
+            spd = JavaSourceConverter.convert(src, convOpts, listener);
         }
 
         String outName = fileOut != null ? fileOut.getName().toLowerCase() : "";
@@ -199,7 +215,8 @@ public class Main {
     private static void handleUmlInput(File fileIn, File fileOut,
                                         boolean classDiagram,
                                         String sequenceEntry,
-                                        ErrorListener listener) throws IOException {
+                                        ErrorListener listener,
+                                        Boolean legendOverride) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -224,12 +241,20 @@ public class Main {
             }
             String entryClass = spec.substring(0, dot);
             String entryMethod = spec.substring(dot + 1);
+            padtools.core.formats.uml.PlantUmlSequenceDiagram.Options sqOpts
+                    = new padtools.core.formats.uml.PlantUmlSequenceDiagram.Options();
+            if (Boolean.FALSE.equals(legendOverride)) {
+                sqOpts.includeLegend = false;
+            }
             output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
-                    infos, entryClass, entryMethod, null);
-        } else if (classDiagram) {
-            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos);
+                    infos, entryClass, entryMethod, sqOpts);
         } else {
-            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos);
+            padtools.core.formats.uml.PlantUmlClassDiagram.Options clOpts
+                    = new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
+            if (Boolean.FALSE.equals(legendOverride)) {
+                clOpts.includeLegend = false;
+            }
+            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
         writeText(fileOut, output);
     }
@@ -244,6 +269,8 @@ public class Main {
         System.err.println("  -c --class-diagram: Output PlantUML class diagram.");
         System.err.println("  -q --sequence-diagram Class.method: PlantUML sequence diagram.");
         System.err.println("  -v --verbose: Emit per-file warnings and summary to stderr.");
+        System.err.println("  -L --legend: Force include legend (PAD: opt-in).");
+        System.err.println("  --no-legend: Force exclude legend (UML: opt-out).");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q.");
     }
 }

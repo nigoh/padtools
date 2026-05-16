@@ -26,6 +26,8 @@ public final class PlantUmlClassDiagram {
         public boolean showMethods = true;
         public boolean groupByPackage = true;
         public boolean markAaosCategories = true;
+        /** 凡例ブロックをダイアグラム右に追加する。 */
+        public boolean includeLegend = true;
         /** 利用関係を出すフィールド型の最大要素数 (1 クラスあたり)。多すぎる場合に抑制。 */
         public int maxUsagePerClass = 30;
         /** タイトル文字列 (null で省略)。 */
@@ -111,8 +113,161 @@ public final class PlantUmlClassDiagram {
                 emitUsage(out, c, knownNames, aliasByQn, qnBySimple, o);
             }
         }
+        if (o.includeLegend) {
+            emitLegend(out, classes, o);
+        }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    /**
+     * ダイアグラム末尾に凡例ブロックを書き出す。実際に出現するステレオタイプや関係のみを
+     * 列挙して、不要な行を増やさないようにする。
+     */
+    private static void emitLegend(StringBuilder out, List<JavaClassInfo> classes,
+                                    Options o) {
+        // 利用関係を実際に発行するかは emit ロジックと同じフィルタで判定
+        Set<String> known = new HashSet<>();
+        for (JavaClassInfo c : classes) {
+            known.add(c.getQualifiedName());
+        }
+        // 出現するステレオタイプを収集
+        Set<String> stereos = new LinkedHashSet<>();
+        boolean hasAbstractClass = false;
+        boolean hasInterface = false;
+        boolean hasEnum = false;
+        boolean hasAnnotation = false;
+        boolean hasStatic = false;
+        boolean hasAbstractMember = false;
+        boolean hasInheritance = false;
+        boolean hasImplements = false;
+        boolean hasUsage = false;
+        for (JavaClassInfo c : classes) {
+            if (o.markAaosCategories) {
+                String cat = c.getAaosCategory();
+                if (cat == null) {
+                    cat = AaosPattern.categorize(c);
+                }
+                if (cat != null) {
+                    stereos.add(cat);
+                }
+            }
+            if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
+                stereos.add("aidl");
+            }
+            switch (c.getKind()) {
+                case INTERFACE:
+                case AIDL_INTERFACE:
+                    hasInterface = true;
+                    break;
+                case ENUM:
+                    hasEnum = true;
+                    break;
+                case ANNOTATION:
+                    hasAnnotation = true;
+                    break;
+                case CLASS:
+                default:
+                    if (c.isAbstract()) {
+                        hasAbstractClass = true;
+                    }
+                    break;
+            }
+            if (c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
+                hasInheritance = true;
+            }
+            if (!c.getInterfaces().isEmpty()) {
+                hasImplements = true;
+            }
+            for (JavaFieldInfo f : c.getFields()) {
+                if (f.isStatic()) {
+                    hasStatic = true;
+                }
+                // emitUsage と同じ条件で「実際に矢印を引くか」を判定する
+                if (!hasUsage) {
+                    String tgt = pickUsageTarget(f.getType(), known);
+                    if (tgt != null && !tgt.equals(c.getQualifiedName())
+                            && !tgt.equals(c.getSimpleName())) {
+                        hasUsage = true;
+                    }
+                }
+            }
+            for (JavaMethodInfo m : c.getMethods()) {
+                if (m.isStatic()) {
+                    hasStatic = true;
+                }
+                if (m.isAbstract()) {
+                    hasAbstractMember = true;
+                }
+            }
+        }
+
+        out.append("legend right\n");
+        if (o.showVisibility) {
+            out.append("== 可視性 ==\n");
+            out.append("+ public\n");
+            out.append("- private\n");
+            out.append("# protected\n");
+            out.append("~ package-private\n");
+        }
+        if (hasStatic || hasAbstractMember) {
+            out.append("== メンバー修飾 ==\n");
+            if (hasStatic) {
+                out.append("{static}    静的 (static)\n");
+            }
+            if (hasAbstractMember) {
+                out.append("{abstract}  抽象 (abstract)\n");
+            }
+        }
+        if (hasAbstractClass || hasInterface || hasEnum || hasAnnotation) {
+            out.append("== クラス種別 ==\n");
+            out.append("class        通常クラス\n");
+            if (hasAbstractClass) {
+                out.append("abstract     抽象クラス\n");
+            }
+            if (hasInterface) {
+                out.append("interface    インタフェース\n");
+            }
+            if (hasEnum) {
+                out.append("enum         列挙型\n");
+            }
+            if (hasAnnotation) {
+                out.append("annotation   アノテーション型\n");
+            }
+        }
+        if (!stereos.isEmpty()) {
+            out.append("== AAOS ステレオタイプ ==\n");
+            for (String s : stereos) {
+                out.append("<<").append(s).append(">> ").append(stereoDesc(s)).append('\n');
+            }
+        }
+        boolean anyRelation = (o.showInheritance && (hasInheritance || hasImplements))
+                || (o.showUsageRelations && hasUsage);
+        if (anyRelation) {
+            out.append("== 関係 ==\n");
+            if (o.showInheritance && hasInheritance) {
+                out.append("A <|-- B  : B extends A (継承)\n");
+            }
+            if (o.showInheritance && hasImplements) {
+                out.append("A <|.. B  : B implements A (実装)\n");
+            }
+            if (o.showUsageRelations && hasUsage) {
+                out.append("A --> B   : A uses B (利用関係)\n");
+            }
+        }
+        out.append("endlegend\n");
+    }
+
+    private static String stereoDesc(String stereo) {
+        switch (stereo) {
+            case "CarManager": return "AAOS の Car*Manager クラス";
+            case "CarService": return "AAOS の Car*Service クラス";
+            case "ICarInterface": return "ICar* 命名規約の AIDL 派生インタフェース";
+            case "AIDL": return "AIDL ファイル由来のインタフェース";
+            case "AaosApi": return "@AddedIn 等の AAOS API アノテーション付きクラス";
+            case "aidl": return "AIDL 由来 (補助)";
+            default: return stereo;
+        }
     }
 
     private static void emitClass(StringBuilder out, JavaClassInfo c,

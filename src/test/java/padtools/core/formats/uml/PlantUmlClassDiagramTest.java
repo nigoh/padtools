@@ -196,4 +196,61 @@ public class PlantUmlClassDiagramTest {
         assertTrue(puml, puml.contains("<<AIDL>>"));
         assertTrue(puml, puml.contains("interface \"c.ICar\""));
     }
+
+    // --- 凡例 ---
+
+    @Test
+    public void testLegendIncludedByDefault() {
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class A {}"));
+        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("endlegend"));
+    }
+
+    @Test
+    public void testLegendDisabled() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.includeLegend = false;
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class A {}"), o);
+        assertFalse(puml, puml.contains("legend right"));
+    }
+
+    @Test
+    public void testLegendShowsVisibilitySection() {
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class A { public int x; }"));
+        assertTrue(puml, puml.contains("== 可視性 =="));
+        assertTrue(puml, puml.contains("+ public"));
+    }
+
+    @Test
+    public void testLegendShowsStereotypeOnlyWhenUsed() {
+        // AAOS パターンを使わないクラスでは <<CarManager>> が凡例に出ない
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class Foo { void m() {} }"));
+        assertFalse(puml, puml.contains("<<CarManager>>"));
+        // AAOS Manager パターンのクラスを含む場合は出る
+        JavaClassInfo c = new JavaClassInfo();
+        c.setPackageName("android.car.audio");
+        c.setSimpleName("CarAudioManager");
+        c.setKind(JavaClassInfo.Kind.CLASS);
+        String puml2 = PlantUmlClassDiagram.generate(java.util.Arrays.asList(c));
+        assertTrue(puml2, puml2.contains("<<CarManager>>"));
+    }
+
+    @Test
+    public void testLegendOmitsUsageSectionWhenNoRelations() {
+        // すべて primitive 型 → --> セクションは凡例にも出ない
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class A { int a; String s; }"));
+        assertFalse(puml, puml.contains("A --> B"));
+    }
+
+    @Test
+    public void testLegendIncludesInheritanceWhenPresent() {
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class B {} class A extends B {}"));
+        assertTrue(puml, puml.contains("A <|-- B"));
+    }
 }

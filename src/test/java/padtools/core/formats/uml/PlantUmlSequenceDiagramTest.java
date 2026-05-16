@@ -135,4 +135,23 @@ public class PlantUmlSequenceDiagramTest {
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("A -> A: helper()"));
     }
+
+    @Test
+    public void testLegendIncludedByDefault() {
+        String puml = PlantUmlSequenceDiagram.generate(
+                JavaStructureExtractor.extract("class A { void m() {} }"),
+                "A", "m", null);
+        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("endlegend"));
+    }
+
+    @Test
+    public void testLegendDisabled() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.includeLegend = false;
+        String puml = PlantUmlSequenceDiagram.generate(
+                JavaStructureExtractor.extract("class A { void m() {} }"),
+                "A", "m", o);
+        assertFalse(puml, puml.contains("legend right"));
+    }
 }

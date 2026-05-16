@@ -38,6 +38,8 @@ public final class JavaSourceConverter {
         public String classSeparator = ".";
         /** 出力対象とするメソッド名フィルタ。null または空なら全メソッド。 */
         public Set<String> methodFilter = null;
+        /** 出力先頭に凡例 (各 PAD ノード形状の例) を付与する。 */
+        public boolean includeLegend = false;
     }
 
     /** デフォルト Options で変換。 */
@@ -64,7 +66,38 @@ public final class JavaSourceConverter {
         List<JavaToken> tokens = lex.tokenize();
         JavaParser p = new JavaParser(tokens, javaSource, o, l);
         p.parseFile();
-        return p.result();
+        String body = p.result();
+        if (o.includeLegend) {
+            return buildLegend() + (body.isEmpty() ? "" : "\n" + body);
+        }
+        return body;
+    }
+
+    /**
+     * PAD ノード形状の凡例 SPD を返す。SPD のコメント + 実ノードで描画される。
+     */
+    private static String buildLegend() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# === Legend (凡例) ===\n");
+        sb.append(":terminal 凡例: 開始/終了端子 (:terminal)\n");
+        sb.append("通常処理ノード (テキスト行)\n");
+        sb.append(":call サブルーチン呼出 (:call)\n");
+        sb.append(":comment コメントボックス (:comment)\n");
+        sb.append(":if 条件分岐 (:if / :else)\n");
+        sb.append("\ttrue 処理\n");
+        sb.append(":else\n");
+        sb.append("\tfalse 処理\n");
+        sb.append(":while 前判定ループ (:while)\n");
+        sb.append("\tループ本体\n");
+        sb.append(":dowhile 後判定ループ (:dowhile)\n");
+        sb.append("\tループ本体\n");
+        sb.append(":switch 多分岐 (:switch / :case)\n");
+        sb.append(":case ケース A\n");
+        sb.append("\tケースA 処理\n");
+        sb.append(":case ケース B\n");
+        sb.append("\tケースB 処理\n");
+        sb.append(":terminal 凡例ここまで\n");
+        return sb.toString();
     }
 
     private JavaSourceConverter() {

@@ -21,6 +21,8 @@ public final class PlantUmlSequenceDiagram {
         public String callerName = "Caller";
         /** receiver が空 (this 呼び出し) の場合に使用する自クラス名のサフィックス。 */
         public boolean inlineSelfCalls = true;
+        /** 凡例ブロックを末尾に追加する。 */
+        public boolean includeLegend = true;
     }
 
     /** クラス・メソッドを指定して 1 本のシーケンス図を生成する。 */
@@ -76,8 +78,24 @@ public final class PlantUmlSequenceDiagram {
             out.append("participant ").append(quote(p)).append('\n');
         }
         out.append(body);
+        if (o.includeLegend) {
+            emitLegend(out, participants.size());
+        }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    private static void emitLegend(StringBuilder out, int participantCount) {
+        out.append("legend right\n");
+        out.append("== シーケンス図 ==\n");
+        out.append("participant     関与クラス/オブジェクト\n");
+        out.append("A -> B : msg    A から B への同期メッセージ呼び出し\n");
+        out.append("activate B      B のアクティベーション開始\n");
+        out.append("deactivate B    B のアクティベーション終了\n");
+        if (participantCount > 0) {
+            out.append("Caller          仮想の呼び出し元 (オプションで変更可)\n");
+        }
+        out.append("endlegend\n");
     }
 
     /** すべてのメソッドに対してシーケンス図を順に生成 (簡易プロジェクトサマリ用)。 */

@@ -789,6 +789,32 @@ public class JavaSourceConverterTest {
         assertTrue("expected 2 switches, got: " + switchCount, switchCount >= 2);
     }
 
+    @Test
+    public void testLegendOffByDefault() {
+        String spd = JavaSourceConverter.convert("class A { void m() {} }");
+        assertFalse(spd, spd.contains("Legend (凡例)"));
+    }
+
+    @Test
+    public void testLegendOptIn() {
+        JavaSourceConverter.Options o = new JavaSourceConverter.Options();
+        o.includeLegend = true;
+        String spd = JavaSourceConverter.convert("class A { void m() {} }", o);
+        assertTrue(spd, spd.contains("Legend (凡例)"));
+        // 凡例セクションは SPD として正当
+        parseSpd(spd);
+    }
+
+    @Test
+    public void testLegendEmptyInput() {
+        JavaSourceConverter.Options o = new JavaSourceConverter.Options();
+        o.includeLegend = true;
+        String spd = JavaSourceConverter.convert("", o);
+        // 入力が空でも凡例だけ出力される
+        assertTrue(spd, spd.contains("Legend (凡例)"));
+        parseSpd(spd);
+    }
+
     /** PAD ノード木に指定型が含まれるかを再帰検索する。 */
     private boolean containsType(NodeBase root, Class<?> target) {
         if (root == null) {

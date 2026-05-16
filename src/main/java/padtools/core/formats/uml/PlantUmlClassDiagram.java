@@ -241,6 +241,19 @@ public final class PlantUmlClassDiagram {
                 out.append("<<").append(s).append(">> ").append(stereoDesc(s)).append('\n');
             }
         }
+        Set<String> androidStereos = new LinkedHashSet<>();
+        for (JavaClassInfo c : classes) {
+            String t = c.getAndroidComponentType();
+            if (t != null && !t.isEmpty()) {
+                androidStereos.add(t);
+            }
+        }
+        if (!androidStereos.isEmpty()) {
+            out.append("== Android コンポーネント ==\n");
+            for (String s : androidStereos) {
+                out.append("<<").append(s).append(">> ").append(androidStereoDesc(s)).append('\n');
+            }
+        }
         boolean anyRelation = (o.showInheritance && (hasInheritance || hasImplements))
                 || (o.showUsageRelations && hasUsage);
         if (anyRelation) {
@@ -266,6 +279,16 @@ public final class PlantUmlClassDiagram {
             case "AIDL": return "AIDL ファイル由来のインタフェース";
             case "AaosApi": return "@AddedIn 等の AAOS API アノテーション付きクラス";
             case "aidl": return "AIDL 由来 (補助)";
+            default: return stereo;
+        }
+    }
+
+    private static String androidStereoDesc(String stereo) {
+        switch (stereo) {
+            case "Activity": return "AndroidManifest.xml の <activity>";
+            case "Service": return "AndroidManifest.xml の <service>";
+            case "BroadcastReceiver": return "AndroidManifest.xml の <receiver>";
+            case "ContentProvider": return "AndroidManifest.xml の <provider>";
             default: return stereo;
         }
     }
@@ -320,6 +343,9 @@ public final class PlantUmlClassDiagram {
             if (cat != null) {
                 parts.add(cat);
             }
+        }
+        if (c.getAndroidComponentType() != null && !c.getAndroidComponentType().isEmpty()) {
+            parts.add(c.getAndroidComponentType());
         }
         if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
             parts.add("aidl");

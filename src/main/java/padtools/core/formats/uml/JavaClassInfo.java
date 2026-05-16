@@ -22,6 +22,7 @@ public class JavaClassInfo {
     private final List<JavaMethodInfo> methods = new ArrayList<>();
     private String enclosingClass;
     private String aaosCategory;
+    private String androidComponentType;
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
     public String getQualifiedName() {
@@ -107,5 +108,17 @@ public class JavaClassInfo {
 
     public void setAaosCategory(String aaosCategory) {
         this.aaosCategory = aaosCategory;
+    }
+
+    /**
+     * AndroidManifest.xml 上の宣言種別 (例: {@code "Activity"} / {@code "Service"} /
+     * {@code "BroadcastReceiver"} / {@code "ContentProvider"})。manifest と紐付かなければ null。
+     */
+    public String getAndroidComponentType() {
+        return androidComponentType;
+    }
+
+    public void setAndroidComponentType(String androidComponentType) {
+        this.androidComponentType = androidComponentType;
     }
 }

@@ -1,6 +1,15 @@
 package padtools;
 
 import padtools.converter.Converter;
+import padtools.core.formats.android.AndroidProjectAnalysis;
+import padtools.core.formats.android.AndroidProjectAnalyzer;
+import padtools.core.formats.android.AndroidManifestInfo;
+import padtools.core.formats.android.AndroidManifestParser;
+import padtools.core.formats.android.GradleProjectInfo;
+import padtools.core.formats.android.GradleScriptParser;
+import padtools.core.formats.android.PlantUmlComponentDiagram;
+import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
+import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
 import padtools.core.formats.uml.UmlGenerator;
@@ -56,11 +65,19 @@ public class Main {
         final Option optVerbose = new Option("v", "verbose", false);
         final Option optLegend = new Option("L", "legend", false);
         final Option optNoLegend = new Option(null, "no-legend", false);
+        final Option optGradle = new Option("g", "gradle", false);
+        final Option optManifest = new Option("m", "manifest", false);
+        final Option optComponent = new Option("d", "component-diagram", false);
+        final Option optDepGraph = new Option("G", "dependency-graph", false);
+        final Option optSummary = new Option(null, "summary", false);
+        final Option optNoManifestMerge = new Option(null, "no-manifest-merge", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
                 optClassDiagram, optSequenceDiagram, optVerbose,
-                optLegend, optNoLegend});
+                optLegend, optNoLegend,
+                optGradle, optManifest, optComponent, optDepGraph, optSummary,
+                optNoManifestMerge});
 
         try {
             optParser.parse(args, 1);
@@ -110,12 +127,33 @@ public class Main {
         } else if (optNoLegend.isSet()) {
             legendOverride = Boolean.FALSE;
         }
+        boolean mergeManifest = !optNoManifestMerge.isSet();
+        if (optGradle.isSet()) {
+            handleGradleInput(file_in, file_out, listener);
+            return;
+        }
+        if (optManifest.isSet()) {
+            handleManifestInput(file_in, file_out, listener);
+            return;
+        }
+        if (optComponent.isSet()) {
+            handleComponentDiagram(file_in, file_out, listener, legendOverride);
+            return;
+        }
+        if (optDepGraph.isSet()) {
+            handleDependencyGraph(file_in, file_out, listener, legendOverride);
+            return;
+        }
+        if (optSummary.isSet()) {
+            handleSummary(file_in, file_out, listener);
+            return;
+        }
         if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
             handleUmlInput(file_in, file_out,
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
                             ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener, legendOverride);
+                    listener, legendOverride, mergeManifest);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
@@ -216,7 +254,8 @@ public class Main {
                                         boolean classDiagram,
                                         String sequenceEntry,
                                         ErrorListener listener,
-                                        Boolean legendOverride) throws IOException {
+                                        Boolean legendOverride,
+                                        boolean mergeManifest) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -225,7 +264,7 @@ public class Main {
         String spec = sequenceEntry == null ? "" : sequenceEntry.trim();
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
         if (fileIn.isDirectory()) {
-            infos = UmlGenerator.extractFromProject(fileIn, null, listener);
+            infos = UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         } else {
             String src = AndroidProjectScanner.readFile(fileIn);
             infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
@@ -259,6 +298,94 @@ public class Main {
         writeText(fileOut, output);
     }
 
+    /** {@code --gradle}: 単一 build.gradle (もしくはディレクトリ) を Markdown サマリーに変換。 */
+    private static void handleGradleInput(File fileIn, File fileOut,
+                                            ErrorListener listener) throws IOException {
+        if (fileIn == null) {
+            System.err.println("Gradle mode requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        if (fileIn.isDirectory()) {
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+            writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+        } else {
+            String content = AndroidProjectScanner.readFile(fileIn);
+            GradleProjectInfo info = GradleScriptParser.parse(content, fileIn.getName(), listener);
+            AndroidProjectAnalysis fake = new AndroidProjectAnalysis();
+            fake.getGradleByModule().put(fileIn.getName(), info);
+            writeText(fileOut, TextSummaryReport.toMarkdown(fake));
+        }
+    }
+
+    /** {@code --manifest}: 単一 AndroidManifest.xml (もしくはディレクトリ) を Markdown サマリーに変換。 */
+    private static void handleManifestInput(File fileIn, File fileOut,
+                                              ErrorListener listener) throws IOException {
+        if (fileIn == null) {
+            System.err.println("Manifest mode requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        if (fileIn.isDirectory()) {
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+            writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+        } else {
+            String content = AndroidProjectScanner.readFile(fileIn);
+            AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
+            AndroidProjectAnalysis fake = new AndroidProjectAnalysis();
+            java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
+            list.add(info);
+            fake.getManifestsByModule().put(fileIn.getName(), list);
+            writeText(fileOut, TextSummaryReport.toMarkdown(fake));
+        }
+    }
+
+    /** {@code --component-diagram}: コンポーネント図 PlantUML を生成。 */
+    private static void handleComponentDiagram(File fileIn, File fileOut,
+                                                 ErrorListener listener,
+                                                 Boolean legendOverride) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("Component diagram requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+        PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            o.includeLegend = false;
+        }
+        writeText(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
+    }
+
+    /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
+    private static void handleDependencyGraph(File fileIn, File fileOut,
+                                                ErrorListener listener,
+                                                Boolean legendOverride) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("Dependency graph requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+        PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            o.includeLegend = false;
+        }
+        writeText(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
+    }
+
+    /** {@code --summary}: プロジェクト全体の Markdown サマリーを生成。 */
+    private static void handleSummary(File fileIn, File fileOut,
+                                        ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("Summary requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+        writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+    }
+
     private static void printUsage() {
         System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-v] [-h] [input]");
         System.err.println("  -o file: Save to file (spd/png/svg/pdf/puml).");
@@ -271,6 +398,12 @@ public class Main {
         System.err.println("  -v --verbose: Emit per-file warnings and summary to stderr.");
         System.err.println("  -L --legend: Force include legend (PAD: opt-in).");
         System.err.println("  --no-legend: Force exclude legend (UML: opt-out).");
-        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q.");
+        System.err.println("  -g --gradle: Output Markdown summary from build.gradle.");
+        System.err.println("  -m --manifest: Output Markdown summary from AndroidManifest.xml.");
+        System.err.println("  -d --component-diagram: PlantUML Android component diagram.");
+        System.err.println("  -G --dependency-graph: PlantUML Gradle dependency graph.");
+        System.err.println("  --summary: Full project Markdown summary (dir).");
+        System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
+        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary.");
     }
 }

@@ -286,6 +286,42 @@ public class AndroidProjectScannerTest {
     }
 
     @Test
+    public void testIncludeGradleAndManifest() throws IOException {
+        // ルート直下に build.gradle と AndroidManifest.xml を追加
+        writeFile(new File(root, "build.gradle"), "// root\n");
+        File appMain = new File(root, "app/src/main");
+        // (setupProject で app/src/main は作成済み)
+        writeFile(new File(appMain, "AndroidManifest.xml"), "<manifest package='p'/>");
+
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeGradle = true;
+        o.includeManifest = true;
+        List<File> files = AndroidProjectScanner.scan(root, o);
+        boolean foundGradle = false;
+        boolean foundManifest = false;
+        for (File f : files) {
+            if (f.getName().equals("build.gradle")) {
+                foundGradle = true;
+            }
+            if (f.getName().equals("AndroidManifest.xml")) {
+                foundManifest = true;
+            }
+        }
+        assertTrue("expected build.gradle", foundGradle);
+        assertTrue("expected AndroidManifest.xml", foundManifest);
+    }
+
+    @Test
+    public void testGradleAndManifestNotIncludedByDefault() throws IOException {
+        writeFile(new File(root, "build.gradle"), "// root\n");
+        List<File> files = AndroidProjectScanner.scan(root);
+        for (File f : files) {
+            assertFalse("build.gradle should not be returned by default: " + f,
+                    f.getName().equals("build.gradle"));
+        }
+    }
+
+    @Test
     public void testConvertProjectContinuesOnFailures() throws IOException {
         // 既存の有効ソースを変換しつつログにサマリが出ることを確認。
         // readFile の個別失敗は IO の挙動依存のため別途検証する。

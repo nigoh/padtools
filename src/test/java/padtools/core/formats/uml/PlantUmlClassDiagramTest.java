@@ -253,4 +253,25 @@ public class PlantUmlClassDiagramTest {
                 JavaStructureExtractor.extract("class B {} class A extends B {}"));
         assertTrue(puml, puml.contains("A <|-- B"));
     }
+
+    @Test
+    public void testAndroidComponentStereotype() {
+        JavaClassInfo c = new JavaClassInfo();
+        c.setPackageName("com.x");
+        c.setSimpleName("MainActivity");
+        c.setKind(JavaClassInfo.Kind.CLASS);
+        c.setAndroidComponentType("Activity");
+        String puml = PlantUmlClassDiagram.generate(java.util.Arrays.asList(c));
+        assertTrue(puml, puml.contains("<<Activity>>"));
+        // 凡例セクションに「Android コンポーネント」も出る
+        assertTrue(puml, puml.contains("== Android コンポーネント =="));
+    }
+
+    @Test
+    public void testNoAndroidSectionWhenAbsent() {
+        // androidComponentType が一切無いクラスでは Android セクションは凡例にも出ない
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract("class A {}"));
+        assertFalse(puml, puml.contains("== Android コンポーネント =="));
+    }
 }

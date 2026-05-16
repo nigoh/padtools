@@ -1,5 +1,10 @@
 package padtools.editor;
 
+import padtools.core.formats.android.AndroidProjectAnalysis;
+import padtools.core.formats.android.AndroidProjectAnalyzer;
+import padtools.core.formats.android.PlantUmlComponentDiagram;
+import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
+import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
@@ -162,6 +167,57 @@ public class JavaImporter {
             String result = PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
             showWarnings(warnings);
             return result;
+        } catch (IOException ex) {
+            showError(ex.getMessage());
+            return null;
+        }
+    }
+
+    /** プロジェクトディレクトリを選択し、Android コンポーネント図 PlantUML を生成。 */
+    public String chooseAndGenerateComponentDiagram() {
+        return chooseProjectAndGenerate("dialog.componentDiagram.title", true);
+    }
+
+    /** プロジェクトディレクトリを選択し、Gradle 依存グラフ PlantUML を生成。 */
+    public String chooseAndGenerateDependencyGraph() {
+        return chooseProjectAndGenerate("dialog.dependencyGraph.title", false);
+    }
+
+    /** プロジェクトディレクトリを選択し、Markdown サマリーを生成。 */
+    public String chooseAndGenerateSummary() {
+        JFileChooser fc = new JFileChooser(".");
+        fc.setDialogTitle(Messages.get("dialog.summary.title"));
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        try {
+            List<String> warnings = new ArrayList<>();
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(
+                    fc.getSelectedFile(), ErrorListener.collecting(warnings));
+            showWarnings(warnings);
+            return TextSummaryReport.toMarkdown(analysis);
+        } catch (IOException ex) {
+            showError(ex.getMessage());
+            return null;
+        }
+    }
+
+    private String chooseProjectAndGenerate(String titleKey, boolean component) {
+        JFileChooser fc = new JFileChooser(".");
+        fc.setDialogTitle(Messages.get(titleKey));
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        try {
+            List<String> warnings = new ArrayList<>();
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(
+                    fc.getSelectedFile(), ErrorListener.collecting(warnings));
+            showWarnings(warnings);
+            return component
+                    ? PlantUmlComponentDiagram.generate(analysis)
+                    : PlantUmlGradleDependencyGraph.generate(analysis);
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;

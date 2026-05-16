@@ -14,4 +14,7 @@
 
     <!-- JavaSourceConverterTest は網羅的なテストケースを 1 クラスにまとめており 800 行を超える -->
     <suppress checks="FileLength" files="JavaSourceConverterTest\.java" />
+
+    <!-- MainFrame は Swing UI 一式 + Java/Gradle/Manifest インポート/UML 生成のメニュー配線を含み 800 行を超える -->
+    <suppress checks="FileLength" files="MainFrame\.java" />
 </suppressions>

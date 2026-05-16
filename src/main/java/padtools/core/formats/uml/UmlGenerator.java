@@ -1,5 +1,8 @@
 package padtools.core.formats.uml;
 
+import padtools.core.formats.android.AndroidComponentInfo;
+import padtools.core.formats.android.AndroidProjectAnalysis;
+import padtools.core.formats.android.AndroidProjectAnalyzer;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.util.ErrorListener;
 
@@ -72,6 +75,19 @@ public final class UmlGenerator {
                                                           AndroidProjectScanner.Options opts,
                                                           ErrorListener listener)
             throws IOException {
+        return extractFromProject(root, opts, listener, true);
+    }
+
+    /**
+     * manifest 自動マージ制御つきプロジェクト走査。
+     * @param mergeManifest true なら同プロジェクト直下の AndroidManifest.xml を自動検出し、
+     *                       対応する JavaClassInfo に {@code androidComponentType} を反映
+     */
+    public static List<JavaClassInfo> extractFromProject(File root,
+                                                          AndroidProjectScanner.Options opts,
+                                                          ErrorListener listener,
+                                                          boolean mergeManifest)
+            throws IOException {
         if (root == null) {
             throw new IllegalArgumentException("root is null");
         }
@@ -99,7 +115,49 @@ public final class UmlGenerator {
                 l.onError(f.getName(), -1, "parse failed: " + ex.getMessage());
             }
         }
+        if (mergeManifest && root.isDirectory()) {
+            mergeManifestInto(all, root, l);
+        }
         return all;
+    }
+
+    /**
+     * 指定ディレクトリ配下の AndroidManifest.xml を解析し、対応するクラスに
+     * {@code androidComponentType} を反映する。
+     */
+    public static void mergeManifestInto(List<JavaClassInfo> classes, File root,
+                                          ErrorListener listener) {
+        ErrorListener l = listener != null ? listener : ErrorListener.silent();
+        try {
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(root, l);
+            for (AndroidComponentInfo c : analysis.allComponents()) {
+                String fqn = c.getName();
+                if (fqn == null || fqn.isEmpty()) {
+                    continue;
+                }
+                for (JavaClassInfo cls : classes) {
+                    if (matches(cls, fqn)) {
+                        cls.setAndroidComponentType(c.getKind().label());
+                        break;
+                    }
+                }
+            }
+        } catch (IOException ex) {
+            l.onError(null, -1, "manifest merge failed: " + ex.getMessage());
+        }
+    }
+
+    private static boolean matches(JavaClassInfo cls, String fqn) {
+        if (cls.getQualifiedName().equals(fqn)) {
+            return true;
+        }
+        // simple name match (manifest 側で package が省略されている場合の救済)
+        int dot = fqn.lastIndexOf('.');
+        if (dot >= 0) {
+            String simple = fqn.substring(dot + 1);
+            return cls.getSimpleName().equals(simple);
+        }
+        return cls.getSimpleName().equals(fqn);
     }
 
     /** クラス図 PlantUML テキストを Java ソース文字列 1 つから生成。 */

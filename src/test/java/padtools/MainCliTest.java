@@ -191,6 +191,94 @@ public class MainCliTest {
     }
 
     @Test
+    public void testGradleCliFromFile() throws Exception {
+        File gradle = tmp.newFile("build.gradle");
+        writeFile(gradle, "plugins { id 'com.android.application' }\n"
+                + "android {\n  namespace 'p'\n  defaultConfig { applicationId 'p' minSdk 24 }\n}\n");
+        File out = new File(tmp.getRoot(), "g.md");
+        Main.main(new String[]{"padtools", "-g", "-o", out.getAbsolutePath(),
+                gradle.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("# Android Project Summary"));
+        assertTrue(md, md.contains("com.android.application"));
+    }
+
+    @Test
+    public void testManifestCliFromFile() throws Exception {
+        File mf = tmp.newFile("AndroidManifest.xml");
+        writeFile(mf, "<manifest xmlns:android='http://schemas.android.com/apk/res/android' "
+                + "package='com.x'><application>"
+                + "<activity android:name='.A' android:exported='true'/></application></manifest>");
+        File out = new File(tmp.getRoot(), "m.md");
+        Main.main(new String[]{"padtools", "-m", "-o", out.getAbsolutePath(),
+                mf.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("com.x.A"));
+    }
+
+    @Test
+    public void testComponentAndDependencyAndSummary() throws Exception {
+        File root = tmp.newFolder("ProjY");
+        File app = new File(root, "app");
+        assertTrue(app.mkdirs());
+        writeFile(new File(root, "settings.gradle"), "include ':app'\n");
+        writeFile(new File(app, "build.gradle"),
+                "plugins { id 'com.android.application' }\n"
+                        + "android { namespace 'p' compileSdk 34 }\n"
+                        + "dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }\n");
+        File mainDir = new File(app, "src/main");
+        assertTrue(mainDir.mkdirs());
+        writeFile(new File(mainDir, "AndroidManifest.xml"),
+                "<manifest xmlns:android='http://schemas.android.com/apk/res/android' "
+                        + "package='com.example'><application>"
+                        + "<activity android:name='.MainActivity'>"
+                        + "<intent-filter><action android:name='android.intent.action.MAIN'/>"
+                        + "<category android:name='android.intent.category.LAUNCHER'/>"
+                        + "</intent-filter></activity></application></manifest>");
+
+        File compOut = new File(tmp.getRoot(), "comp.puml");
+        Main.main(new String[]{"padtools", "-d", "-o", compOut.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String comp = new String(Files.readAllBytes(compOut.toPath()), StandardCharsets.UTF_8);
+        assertTrue(comp, comp.contains("@startuml"));
+        assertTrue(comp, comp.contains("MainActivity"));
+
+        File depOut = new File(tmp.getRoot(), "dep.puml");
+        Main.main(new String[]{"padtools", "-G", "-o", depOut.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String dep = new String(Files.readAllBytes(depOut.toPath()), StandardCharsets.UTF_8);
+        assertTrue(dep, dep.contains("@startuml"));
+        assertTrue(dep, dep.contains("androidx.appcompat:appcompat"));
+
+        File sumOut = new File(tmp.getRoot(), "sum.md");
+        Main.main(new String[]{"padtools", "--summary", "-o", sumOut.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String sum = new String(Files.readAllBytes(sumOut.toPath()), StandardCharsets.UTF_8);
+        assertTrue(sum, sum.contains("Android Project Summary"));
+        assertTrue(sum, sum.contains("MainActivity"));
+    }
+
+    @Test
+    public void testClassDiagramAutomergeManifest() throws Exception {
+        File root = tmp.newFolder("ProjZ");
+        File pkg = new File(root, "app/src/main/java/com/x");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "MainActivity.java"),
+                "package com.x; public class MainActivity { void m() {} }");
+        File manifestDir = new File(root, "app/src/main");
+        writeFile(new File(manifestDir, "AndroidManifest.xml"),
+                "<manifest xmlns:android='http://schemas.android.com/apk/res/android' "
+                        + "package='com.x'><application>"
+                        + "<activity android:name='.MainActivity'/></application></manifest>");
+        File out = new File(tmp.getRoot(), "cls.puml");
+        Main.main(new String[]{"padtools", "-c", "-o", out.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue("expected <<Activity>> via manifest auto-merge: " + puml,
+                puml.contains("<<Activity>>"));
+    }
+
+    @Test
     public void testClassDiagramCliWithAidl() throws Exception {
         File aidlFile = tmp.newFile("ICar.aidl");
         writeFile(aidlFile, "package android.car; interface ICar { int getVersion(); }");

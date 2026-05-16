@@ -411,6 +411,36 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void doGenerateComponentDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateComponentDiagram();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateDependencyGraph() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateDependencyGraph();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateSummary() {
+        if (!releaseOK()) {
+            return;
+        }
+        String md = new JavaImporter(this).chooseAndGenerateSummary();
+        if (md != null) {
+            applyImportedText(md);
+        }
+    }
+
     private void applyImportedText(String spd) {
         editor.requestFocusInWindow();
         editor.setText(spd);
@@ -493,6 +523,13 @@ public class MainFrame extends JFrame {
                 ae -> doGenerateClassDiagram(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagram"), null,
                 ae -> doGenerateSequenceDiagram(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.componentDiagram"), null,
+                ae -> doGenerateComponentDiagram(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(fileMenu, Messages.get("menu.file.dependencyGraph"), null,
+                ae -> doGenerateDependencyGraph(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.summary"), null,
+                ae -> doGenerateSummary(), null);
         fileMenu.addSeparator();
 
         if (!setting.isDisableSaveMenu()) {

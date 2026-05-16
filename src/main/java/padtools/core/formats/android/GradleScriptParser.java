@@ -29,12 +29,23 @@ public final class GradleScriptParser {
 
     /** デフォルト (silent) リスナーでパース。 */
     public static GradleProjectInfo parse(String script, String fileName) {
-        return parse(script, fileName, null);
+        return parse(script, fileName, null, null);
     }
 
     /** リスナー付きパース。 */
     public static GradleProjectInfo parse(String script, String fileName,
                                            ErrorListener listener) {
+        return parse(script, fileName, listener, null);
+    }
+
+    /**
+     * Version Catalog 付きパース。{@code catalog} が non-null なら
+     * {@code libs.plugins.X} / {@code libs.versions.X} / {@code implementation(libs.X)}
+     * を実際の値に解決する。
+     */
+    public static GradleProjectInfo parse(String script, String fileName,
+                                           ErrorListener listener,
+                                           VersionCatalog catalog) {
         if (script == null) {
             throw new IllegalArgumentException("script is null");
         }
@@ -44,7 +55,7 @@ public final class GradleScriptParser {
             info.setModuleType(fileName.endsWith(".kts") ? "kotlin" : "groovy");
         }
         String cleaned = stripCommentsAndMaskStrings(script);
-        Impl impl = new Impl(cleaned, info, l);
+        Impl impl = new Impl(cleaned, info, l, catalog);
         impl.parse();
         return info;
     }
@@ -133,6 +144,16 @@ public final class GradleScriptParser {
         // alias(libs.plugins.android.application), alias(libs.plugins.kotlinAndroid)
         private static final Pattern PLUGIN_ALIAS = Pattern.compile(
                 "\\balias\\s*[(]\\s*(?:libs|deps|catalog)\\.plugins\\.([\\w.]+)");
+        // libs.versions.compileSdk.get().toInt() / libs.versions.X
+        private static final Pattern SDK_CATALOG_REF = Pattern.compile(
+                "\\b(compileSdk(?:Version)?|minSdk(?:Version)?|targetSdk(?:Version)?"
+                        + "|versionCode)\\s*[=]?\\s*libs\\.versions\\.([\\w.]+)");
+        // implementation(libs.androidx.core) / api(libs.foo.bar)
+        private static final Pattern DEP_CATALOG_REF = Pattern.compile(
+                "\\b(implementation|api|compileOnly|runtimeOnly|testImplementation"
+                        + "|androidTestImplementation|annotationProcessor|kapt|ksp"
+                        + "|debugImplementation|releaseImplementation)\\b"
+                        + "\\s*[(]?\\s*libs\\.([\\w.]+)\\b\\s*[)]?");
         private static final Pattern KW_VALUE_STR = Pattern.compile(
                 "\\b(applicationId|namespace|versionName)\\s*[=]?\\s*[\"']([^\"']+)[\"']");
         private static final Pattern KW_VALUE_INT = Pattern.compile(
@@ -158,11 +179,14 @@ public final class GradleScriptParser {
         private final String src;
         private final GradleProjectInfo info;
         private final ErrorListener listener;
+        private final VersionCatalog catalog;
 
-        Impl(String src, GradleProjectInfo info, ErrorListener listener) {
+        Impl(String src, GradleProjectInfo info, ErrorListener listener,
+             VersionCatalog catalog) {
             this.src = src;
             this.info = info;
             this.listener = listener;
+            this.catalog = catalog;
         }
 
         void parse() {
@@ -212,11 +236,19 @@ public final class GradleScriptParser {
                 addPlugin(m2.group(1));
             }
             // alias(libs.plugins.<path>) 形式 (Version Catalog)
-            // path 部分を「.」結合のままプラグイン参照として保持する。
-            // 例: libs.plugins.android.application → "android.application"
+            // catalog があれば実際の ID を引いて使う。無ければ既知エイリアスを id 化、
+            // それ以外はパス文字列のまま追加。
             Matcher m3 = PLUGIN_ALIAS.matcher(src1);
             while (m3.find()) {
-                addPlugin(aliasToPluginId(m3.group(1)));
+                String aliasPath = m3.group(1);
+                if (catalog != null) {
+                    VersionCatalog.Plugin p = catalog.findPlugin(aliasPath);
+                    if (p != null && p.id != null) {
+                        addPlugin(p.id);
+                        continue;
+                    }
+                }
+                addPlugin(aliasToPluginId(aliasPath));
             }
         }
 
@@ -287,14 +319,19 @@ public final class GradleScriptParser {
             while (i.find()) {
                 String key = i.group(1);
                 int val = Integer.parseInt(i.group(2));
-                if (key.startsWith("compileSdk") && info.getCompileSdk() == null) {
-                    info.setCompileSdk(val);
-                } else if (key.startsWith("minSdk") && info.getMinSdk() == null) {
-                    info.setMinSdk(val);
-                } else if (key.startsWith("targetSdk") && info.getTargetSdk() == null) {
-                    info.setTargetSdk(val);
-                } else if ("versionCode".equals(key) && info.getVersionCode() == null) {
-                    info.setVersionCode(val);
+                applySdkValue(key, val);
+            }
+            // Version Catalog 経由の SDK バージョン: libs.versions.X.get().toInt()
+            if (catalog != null) {
+                Matcher sc = SDK_CATALOG_REF.matcher(body);
+                while (sc.find()) {
+                    String key = sc.group(1);
+                    String aliasPath = trimAccessorSuffix(sc.group(2));
+                    String resolved = catalog.findVersion(aliasPath);
+                    Integer val = parseIntOrNull(resolved);
+                    if (val != null) {
+                        applySdkValue(key, val);
+                    }
                 }
             }
             // flavorDimensions
@@ -400,8 +437,6 @@ public final class GradleScriptParser {
                 info.getDependencies().add(new GradleDependency(scope,
                         "project('" + ref + "')"));
             }
-            // 既に project(...) として拾った領域は除去せず、通常パターンと別マッチで通常依存も
-            // 拾う。重複は notation 文字列で判定。
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (GradleDependency d : info.getDependencies()) {
                 seen.add(d.getScope() + " " + d.getNotation());
@@ -410,7 +445,6 @@ public final class GradleScriptParser {
             while (mn.find()) {
                 String scope = mn.group(1);
                 String notation = mn.group(2);
-                // project() の中身が誤マッチした場合は notation に ':' が含まれない
                 if (!notation.contains(":")) {
                     continue;
                 }
@@ -419,6 +453,74 @@ public final class GradleScriptParser {
                     info.getDependencies().add(new GradleDependency(scope, notation));
                 }
             }
+            // Version Catalog 経由: implementation(libs.X.Y) を解決
+            if (catalog != null) {
+                Matcher mc = DEP_CATALOG_REF.matcher(body);
+                while (mc.find()) {
+                    String scope = mc.group(1);
+                    String aliasPath = mc.group(2);
+                    VersionCatalog.Library lib = catalog.findLibrary(aliasPath);
+                    if (lib == null) {
+                        continue;
+                    }
+                    String notation = lib.toNotation();
+                    if (notation.isEmpty()) {
+                        continue;
+                    }
+                    String key = scope + " " + notation;
+                    if (seen.add(key)) {
+                        info.getDependencies().add(new GradleDependency(scope, notation));
+                    }
+                }
+            }
+        }
+
+        private void applySdkValue(String key, int val) {
+            if (key.startsWith("compileSdk") && info.getCompileSdk() == null) {
+                info.setCompileSdk(val);
+            } else if (key.startsWith("minSdk") && info.getMinSdk() == null) {
+                info.setMinSdk(val);
+            } else if (key.startsWith("targetSdk") && info.getTargetSdk() == null) {
+                info.setTargetSdk(val);
+            } else if ("versionCode".equals(key) && info.getVersionCode() == null) {
+                info.setVersionCode(val);
+            }
+        }
+
+        private static Integer parseIntOrNull(String s) {
+            if (s == null) {
+                return null;
+            }
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+        }
+
+        /**
+         * Version Catalog アクセサの末尾につく
+         * {@code .get} / {@code .asInt} / {@code .asProvider} / {@code .toInt}
+         * 等を削って、TOML キーに対応する素のパスに変換する。
+         */
+        private static String trimAccessorSuffix(String path) {
+            if (path == null) {
+                return null;
+            }
+            String p = path;
+            String[] suffixes = {".get", ".asInt", ".asProvider", ".asProvider.get",
+                                  ".toInt", ".intValueExact"};
+            boolean changed = true;
+            while (changed) {
+                changed = false;
+                for (String s : suffixes) {
+                    if (p.endsWith(s)) {
+                        p = p.substring(0, p.length() - s.length());
+                        changed = true;
+                    }
+                }
+            }
+            return p;
         }
 
         /** トップレベルのブロック {@code name { ... }} を取り出す。最初の 1 件のみ。 */

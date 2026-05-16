@@ -36,6 +36,9 @@ public final class AndroidProjectAnalyzer {
         opts.includeManifest = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
 
+        // 0. gradle/libs.versions.toml があれば先に読み込み、後段のパースで参照する
+        VersionCatalog catalog = loadVersionCatalog(projectRoot, l);
+
         // 1. settings.gradle (root) を先にパースしてサブプロジェクト構造を取得
         for (File f : files) {
             String lower = f.getName().toLowerCase();
@@ -44,7 +47,8 @@ public final class AndroidProjectAnalyzer {
                 if (content == null) {
                     continue;
                 }
-                GradleProjectInfo settings = GradleScriptParser.parse(content, f.getName(), l);
+                GradleProjectInfo settings = GradleScriptParser.parse(content,
+                        f.getName(), l, catalog);
                 settings.setModuleName(":root");
                 analysis.setRootSettings(settings);
             }
@@ -64,7 +68,7 @@ public final class AndroidProjectAnalyzer {
                 }
                 GradleProjectInfo info;
                 try {
-                    info = GradleScriptParser.parse(content, f.getName(), l);
+                    info = GradleScriptParser.parse(content, f.getName(), l, catalog);
                 } catch (RuntimeException ex) {
                     l.onError(f.getName(), -1, "gradle parse failed: " + ex.getMessage());
                     continue;
@@ -146,6 +150,27 @@ public final class AndroidProjectAnalyzer {
             l.onError(f.getName(), -1, "read failed: " + ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * プロジェクトルートの {@code gradle/libs.versions.toml} を読み込み、
+     * {@link VersionCatalog} に変換する。存在しなければ null。
+     */
+    static VersionCatalog loadVersionCatalog(File projectRoot, ErrorListener l) {
+        File toml = new File(projectRoot, "gradle/libs.versions.toml");
+        if (!toml.isFile()) {
+            return null;
+        }
+        String content = safeRead(toml, l);
+        if (content == null) {
+            return null;
+        }
+        VersionCatalog catalog = VersionCatalogParser.parse(content, l);
+        l.onError(null, -1,
+                "version catalog: " + catalog.getVersions().size() + " versions, "
+                        + catalog.getLibraries().size() + " libraries, "
+                        + catalog.getPlugins().size() + " plugins");
+        return catalog;
     }
 
     /**

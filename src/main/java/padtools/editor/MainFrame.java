@@ -17,6 +17,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
@@ -370,6 +371,87 @@ public class MainFrame extends JFrame {
         dialog.setVisible(true);
     }
 
+    private void doImportJavaFile() {
+        if (!releaseOK()) {
+            return;
+        }
+        String spd = new JavaImporter(this).chooseFileAndConvert();
+        if (spd != null) {
+            applyImportedText(spd);
+        }
+    }
+
+    private void doImportJavaProject() {
+        if (!releaseOK()) {
+            return;
+        }
+        String spd = new JavaImporter(this).chooseProjectAndConvert();
+        if (spd != null) {
+            applyImportedText(spd);
+        }
+    }
+
+    private void doGenerateClassDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateClassDiagram();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateSequenceDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateSequenceDiagram(null);
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateComponentDiagram() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateComponentDiagram();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateDependencyGraph() {
+        if (!releaseOK()) {
+            return;
+        }
+        String puml = new JavaImporter(this).chooseAndGenerateDependencyGraph();
+        if (puml != null) {
+            applyImportedText(puml);
+        }
+    }
+
+    private void doGenerateSummary() {
+        if (!releaseOK()) {
+            return;
+        }
+        String md = new JavaImporter(this).chooseAndGenerateSummary();
+        if (md != null) {
+            applyImportedText(md);
+        }
+    }
+
+    private void applyImportedText(String spd) {
+        editor.requestFocusInWindow();
+        editor.setText(spd);
+        editor.setEdited(true);
+        editor.setRequireSave(true);
+        fileManager.setCurrentFile(null);
+        applyLogic();
+        updateTitle();
+        updateStatusBar();
+    }
+
     // --- ツールバー / メニューバー ---
 
     private JToolBar createToolBar(Setting setting) {
@@ -432,6 +514,22 @@ public class MainFrame extends JFrame {
         fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.open"), iconOpen, actionOpen,
                 KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(fileMenu, Messages.get("menu.file.importJava"), null,
+                ae -> doImportJavaFile(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_J, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(fileMenu, Messages.get("menu.file.importJavaProject"), null,
+                ae -> doImportJavaProject(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.classDiagram"), null,
+                ae -> doGenerateClassDiagram(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagram"), null,
+                ae -> doGenerateSequenceDiagram(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.componentDiagram"), null,
+                ae -> doGenerateComponentDiagram(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK));
+        addMenuItem(fileMenu, Messages.get("menu.file.dependencyGraph"), null,
+                ae -> doGenerateDependencyGraph(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.summary"), null,
+                ae -> doGenerateSummary(), null);
         fileMenu.addSeparator();
 
         if (!setting.isDisableSaveMenu()) {

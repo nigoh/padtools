@@ -7,8 +7,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import javax.imageio.ImageIO;
-
 /**
  * 最小限のPDF生成ユーティリティ。
  * PNG画像を1ページのPDFに埋め込む。

@@ -130,6 +130,9 @@ public final class GradleScriptParser {
                 "\\bid\\s*[(]?\\s*([\"'])([^\"']+)\\1");
         private static final Pattern PLUGIN_APPLY = Pattern.compile(
                 "\\bapply\\s+plugin\\s*:\\s*[\"']([^\"']+)[\"']");
+        // alias(libs.plugins.android.application), alias(libs.plugins.kotlinAndroid)
+        private static final Pattern PLUGIN_ALIAS = Pattern.compile(
+                "\\balias\\s*[(]\\s*(?:libs|deps|catalog)\\.plugins\\.([\\w.]+)");
         private static final Pattern KW_VALUE_STR = Pattern.compile(
                 "\\b(applicationId|namespace|versionName)\\s*[=]?\\s*[\"']([^\"']+)[\"']");
         private static final Pattern KW_VALUE_INT = Pattern.compile(
@@ -201,19 +204,57 @@ public final class GradleScriptParser {
             String src1 = pluginsBlock != null ? pluginsBlock : src;
             Matcher m = PLUGIN_ID.matcher(src1);
             while (m.find()) {
-                String id = m.group(2);
-                if (!info.getPlugins().contains(id)) {
-                    info.getPlugins().add(id);
-                }
+                addPlugin(m.group(2));
             }
             // apply plugin: 'x' 形式
             Matcher m2 = PLUGIN_APPLY.matcher(src);
             while (m2.find()) {
-                String id = m2.group(1);
-                if (!info.getPlugins().contains(id)) {
-                    info.getPlugins().add(id);
-                }
+                addPlugin(m2.group(1));
             }
+            // alias(libs.plugins.<path>) 形式 (Version Catalog)
+            // path 部分を「.」結合のままプラグイン参照として保持する。
+            // 例: libs.plugins.android.application → "android.application"
+            Matcher m3 = PLUGIN_ALIAS.matcher(src1);
+            while (m3.find()) {
+                addPlugin(aliasToPluginId(m3.group(1)));
+            }
+        }
+
+        private void addPlugin(String id) {
+            if (id == null || id.isEmpty()) {
+                return;
+            }
+            if (!info.getPlugins().contains(id)) {
+                info.getPlugins().add(id);
+            }
+        }
+
+        /**
+         * Version catalog のプラグインエイリアスを、対応する正式 ID に best-effort で変換。
+         * よくあるエイリアス名 (android.application, kotlin.android 等) は標準 ID にマップし、
+         * それ以外はパス文字列のまま返す。
+         */
+        private static String aliasToPluginId(String alias) {
+            String a = alias.toLowerCase();
+            if (a.contains("android.application") || a.equals("androidapplication")) {
+                return "com.android.application";
+            }
+            if (a.contains("android.library") || a.equals("androidlibrary")) {
+                return "com.android.library";
+            }
+            if (a.contains("kotlin.android") || a.equals("kotlinandroid")) {
+                return "org.jetbrains.kotlin.android";
+            }
+            if (a.contains("kotlin.kapt") || a.equals("kotlinkapt")) {
+                return "kotlin-kapt";
+            }
+            if (a.contains("ksp")) {
+                return "com.google.devtools.ksp";
+            }
+            if (a.contains("hilt")) {
+                return "dagger.hilt.android.plugin";
+            }
+            return alias;
         }
 
         private void parseAndroidBlock(String body) {

@@ -4,6 +4,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.xml.sax.ErrorHandler;
+import org.xml.sax.SAXParseException;
 import padtools.util.ErrorListener;
 
 import javax.xml.XMLConstants;
@@ -39,6 +41,23 @@ public final class AndroidManifestParser {
         Document doc;
         try {
             DocumentBuilder builder = createSecureBuilder();
+            // DocumentBuilder の既定 ErrorHandler は System.err に直書きするため抑止する
+            builder.setErrorHandler(new ErrorHandler() {
+                @Override
+                public void warning(SAXParseException ex) {
+                    l.onError(null, ex.getLineNumber(), "warning: " + ex.getMessage());
+                }
+
+                @Override
+                public void error(SAXParseException ex) {
+                    l.onError(null, ex.getLineNumber(), "error: " + ex.getMessage());
+                }
+
+                @Override
+                public void fatalError(SAXParseException ex) throws SAXParseException {
+                    throw ex;
+                }
+            });
             doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception ex) {
             l.onError(null, -1, "manifest parse failed: " + ex.getMessage());

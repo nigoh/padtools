@@ -294,9 +294,10 @@ public final class GradleScriptParser {
                         bt.setDebuggable(v);
                     }
                 }
+                // 文字列リテラル値のみを抽出 (識別子参照の式は best-effort 扱いで無視)
                 Matcher ms = Pattern.compile(
                         "\\b(applicationIdSuffix|versionNameSuffix|signingConfig)\\s*[=]?\\s*"
-                                + "[\"']?([\\w.\\-]+)[\"']?").matcher(nb.body);
+                                + "[\"']([^\"']*)[\"']").matcher(nb.body);
                 while (ms.find()) {
                     String k = ms.group(1);
                     String v = ms.group(2);
@@ -428,15 +429,27 @@ public final class GradleScriptParser {
             return j;
         }
 
-        /** {@code name { ... }} 形式の名前付きサブブロックを順に列挙する。 */
+        /**
+         * {@code name { ... }} 形式の名前付きサブブロックを順に列挙する。
+         * Kotlin DSL の builder 関数 ({@code create("foo") { ... }} など) は、
+         * その先頭の文字列引数を block 名として採用する。
+         */
         private static List<NamedBlock> namedBlocks(String text) {
             List<NamedBlock> result = new ArrayList<>();
-            Pattern p = Pattern.compile("\\b(\\w+)\\s*(?:\\([^)]*\\)\\s*)?\\{");
+            // 名前 + 任意の引数 + { を 1 つのマッチで取り出す
+            Pattern p = Pattern.compile(
+                    "\\b(\\w+)\\s*(?:\\(([^)]*)\\)\\s*)?\\{");
             Matcher m = p.matcher(text);
             while (m.find()) {
                 String name = m.group(1);
+                String args = m.group(2);
                 if (isReservedKeyword(name)) {
-                    continue;
+                    // Kotlin DSL builder: 第 1 引数の文字列リテラルを名前として採用
+                    String fromArg = firstStringArg(args);
+                    if (fromArg == null) {
+                        continue;
+                    }
+                    name = fromArg;
                 }
                 int start = m.end();
                 int depth = 1;
@@ -464,11 +477,27 @@ public final class GradleScriptParser {
             return result;
         }
 
+        private static String firstStringArg(String args) {
+            if (args == null || args.isEmpty()) {
+                return null;
+            }
+            Matcher m = Pattern.compile("[\"']([^\"']+)[\"']").matcher(args);
+            return m.find() ? m.group(1) : null;
+        }
+
         private static boolean isReservedKeyword(String name) {
-            return "if".equals(name) || "while".equals(name) || "for".equals(name)
+            if ("if".equals(name) || "while".equals(name) || "for".equals(name)
                     || "do".equals(name) || "else".equals(name) || "try".equals(name)
                     || "catch".equals(name) || "finally".equals(name)
-                    || "return".equals(name);
+                    || "return".equals(name)) {
+                return true;
+            }
+            // Kotlin DSL ビルダー関数: getByName("release") {}, create("benchmark") {},
+            //   maybeCreate("debug") {}, register("foo", ...) {}
+            return "getByName".equals(name) || "create".equals(name)
+                    || "maybeCreate".equals(name) || "register".equals(name)
+                    || "named".equals(name) || "configure".equals(name)
+                    || "all".equals(name);
         }
 
         private static final class NamedBlock {

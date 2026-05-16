@@ -89,6 +89,11 @@ public final class AndroidProjectAnalyzer {
             }
         }
 
+        // モダンな AndroidManifest は package 属性を持たないことがある (build.gradle の
+        // namespace で代用される)。同モジュールの gradle.namespace を反映してコンポーネント
+        // FQN を再解決する。
+        backfillPackageFromGradle(analysis);
+
         int gradleCount = analysis.getGradleByModule().size();
         int manifestCount = analysis.allManifests().size();
         l.onError(null, -1,
@@ -96,6 +101,42 @@ public final class AndroidProjectAnalyzer {
                         + manifestCount + " manifest(s)");
 
         return analysis;
+    }
+
+    private static void backfillPackageFromGradle(AndroidProjectAnalysis analysis) {
+        for (java.util.Map.Entry<String, java.util.List<AndroidManifestInfo>> e
+                : analysis.getManifestsByModule().entrySet()) {
+            GradleProjectInfo gradle = analysis.getGradleByModule().get(e.getKey());
+            if (gradle == null || gradle.getNamespace() == null) {
+                continue;
+            }
+            String ns = gradle.getNamespace();
+            for (AndroidManifestInfo info : e.getValue()) {
+                if (info.getPackageName() == null || info.getPackageName().isEmpty()) {
+                    info.setPackageName(ns);
+                    // 既に保持しているコンポーネントの FQN を再解決
+                    rewriteFqn(info);
+                }
+            }
+        }
+    }
+
+    private static void rewriteFqn(AndroidManifestInfo info) {
+        if (info.getApplicationClass() != null
+                && info.getApplicationClass().startsWith(".")) {
+            info.setApplicationClass(info.getPackageName() + info.getApplicationClass());
+        }
+        for (AndroidComponentInfo c : info.allComponents()) {
+            String n = c.getName();
+            if (n == null) {
+                continue;
+            }
+            if (n.startsWith(".")) {
+                c.setName(info.getPackageName() + n);
+            } else if (!n.contains(".")) {
+                c.setName(info.getPackageName() + "." + n);
+            }
+        }
     }
 
     private static String safeRead(File f, ErrorListener l) {
@@ -110,7 +151,10 @@ public final class AndroidProjectAnalyzer {
     /**
      * ファイルのプロジェクトルートからの相対位置からモジュール名を推定する。
      * 例: {@code /root/app/build.gradle} → {@code app}、
-     * {@code /root/build.gradle} → {@code :root}。
+     * {@code /root/core/common/build.gradle} → {@code core:common}、
+     * {@code /root/build.gradle} → {@code :root}、
+     * {@code /root/app/src/main/AndroidManifest.xml} → {@code app}
+     * (src/main 以下はモジュール内のソースセットなのでモジュール名から除外)。
      */
     static String inferModuleName(File root, File f) {
         try {
@@ -121,11 +165,23 @@ public final class AndroidProjectAnalyzer {
                 if (rel.startsWith(File.separator)) {
                     rel = rel.substring(1);
                 }
-                int sep = rel.indexOf(File.separatorChar);
-                if (sep < 0) {
+                // ファイル名を除いた親ディレクトリのパスを取り出す
+                int lastSep = rel.lastIndexOf(File.separatorChar);
+                if (lastSep < 0) {
                     return ":root";
                 }
-                return rel.substring(0, sep);
+                String dir = rel.substring(0, lastSep);
+                // src/main, src/debug, src/<flavor> 以降を取り除く
+                int srcIdx = dir.indexOf(File.separator + "src" + File.separator);
+                if (srcIdx >= 0) {
+                    dir = dir.substring(0, srcIdx);
+                } else if (dir.equals("src") || dir.startsWith("src" + File.separator)) {
+                    dir = "";
+                }
+                if (dir.isEmpty()) {
+                    return ":root";
+                }
+                return dir.replace(File.separatorChar, ':');
             }
         } catch (IOException ignore) {
             // フォールバック

@@ -29,7 +29,7 @@ public class AndroidComponentInfo {
     }
 
     private final Kind kind;
-    private final String name;
+    private String name;
     private Boolean exported;
     private Boolean enabled;
     private String taskAffinity;
@@ -50,6 +50,11 @@ public class AndroidComponentInfo {
 
     public String getName() {
         return name;
+    }
+
+    /** FQN を後付けで補完するための setter。 */
+    public void setName(String name) {
+        this.name = name == null ? "" : name;
     }
 
     public Boolean getExported() {

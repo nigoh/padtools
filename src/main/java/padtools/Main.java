@@ -46,6 +46,22 @@ public class Main {
         SettingManager.getInstance().save();
     }
 
+    /** 指定パスが存在する/読める File を返す。問題があれば stderr に出して System.exit(1)。 */
+    private static File requireReadable(File f) {
+        if (f == null) {
+            return null;
+        }
+        if (!f.exists()) {
+            System.err.println("Input not found: " + f.getPath());
+            System.exit(1);
+        }
+        if (!f.canRead()) {
+            System.err.println("Cannot read: " + f.getPath());
+            System.exit(1);
+        }
+        return f;
+    }
+
     /**
      * エントリポイント
      * @param args 引数
@@ -95,7 +111,7 @@ public class Main {
         if (optParser.getArguments().isEmpty()) {
             file_in = null;
         } else {
-            file_in = new File(optParser.getArguments().getFirst());
+            file_in = requireReadable(new File(optParser.getArguments().getFirst()));
         }
 
         File file_out;

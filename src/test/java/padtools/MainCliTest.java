@@ -161,6 +161,36 @@ public class MainCliTest {
     }
 
     @Test
+    public void testVerboseFlagEmitsToStderr() throws Exception {
+        File pkg = new File(tmp.getRoot(), "vp/src/main/java/p");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "A.java"), "package p; class A { void f() {} }");
+        File outSpd = new File(tmp.getRoot(), "verbose.spd");
+        Main.main(new String[]{
+                "padtools", "-J", "-v", "-o", outSpd.getAbsolutePath(),
+                new File(tmp.getRoot(), "vp").getAbsolutePath()});
+        String err = stderrBuf.toString(StandardCharsets.UTF_8);
+        // verbose 時は "processed N java file(s)" のサマリが stderr に出る
+        assertTrue("expected processed summary in stderr: " + err,
+                err.contains("processed") && err.contains("file"));
+    }
+
+    @Test
+    public void testNonVerboseSuppressesLogs() throws Exception {
+        File pkg = new File(tmp.getRoot(), "np/src/main/java/p");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "A.java"), "package p; class A { void f() {} }");
+        File outSpd = new File(tmp.getRoot(), "quiet.spd");
+        Main.main(new String[]{
+                "padtools", "-J", "-o", outSpd.getAbsolutePath(),
+                new File(tmp.getRoot(), "np").getAbsolutePath()});
+        String err = stderrBuf.toString(StandardCharsets.UTF_8);
+        // -v 無しのときは "processed" サマリが出ない
+        assertFalse("did not expect summary without -v: " + err,
+                err.contains("processed"));
+    }
+
+    @Test
     public void testClassDiagramCliWithAidl() throws Exception {
         File aidlFile = tmp.newFile("ICar.aidl");
         writeFile(aidlFile, "package android.car; interface ICar { int getVersion(); }");

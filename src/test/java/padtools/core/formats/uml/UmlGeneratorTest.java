@@ -4,11 +4,13 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import padtools.core.formats.java.AndroidProjectScanner;
+import padtools.util.ErrorListener;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.*;
@@ -123,5 +125,31 @@ public class UmlGeneratorTest {
         assertFalse(o.includeAidl); // デフォルトでは false
         o.includeAidl = true;
         assertTrue(o.includeAidl);
+    }
+
+    @Test
+    public void testListenerReceivesSourceName() {
+        List<String> log = new ArrayList<>();
+        // 開きっぱなしのジェネリック宣言で skipBalanced が EOF 警告を出す
+        UmlGenerator.extractFromSource(
+                "class A <T",
+                "A.java",
+                ErrorListener.collecting(log));
+        boolean foundSource = false;
+        for (String s : log) {
+            if (s.startsWith("A.java")) {
+                foundSource = true;
+            }
+        }
+        assertTrue("expected listener entries prefixed with A.java: " + log, foundSource);
+    }
+
+    @Test
+    public void testListenerSilentDefault() {
+        // listener を渡さなければサイレント
+        List<JavaClassInfo> r = UmlGenerator.extractFromSource(
+                "class A <T", "A.java");
+        // 不完全でもクラスは抽出される (1 つ)
+        assertEquals(1, r.size());
     }
 }

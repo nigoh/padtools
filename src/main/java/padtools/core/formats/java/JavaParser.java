@@ -1,5 +1,7 @@
 package padtools.core.formats.java;
 
+import padtools.util.ErrorListener;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -23,21 +25,32 @@ final class JavaParser {
     private final List<JavaToken> tokens;
     private final String src;
     private final JavaSourceConverter.Options opts;
+    private final ErrorListener listener;
     private final StringBuilder out = new StringBuilder();
     private final List<String> classStack = new ArrayList<>();
     private int idx;
     private int methodCount;
 
     JavaParser(List<JavaToken> tokens, String src, JavaSourceConverter.Options opts) {
+        this(tokens, src, opts, ErrorListener.silent());
+    }
+
+    JavaParser(List<JavaToken> tokens, String src,
+               JavaSourceConverter.Options opts, ErrorListener listener) {
         this.tokens = tokens;
         this.src = src;
         this.opts = opts;
+        this.listener = listener != null ? listener : ErrorListener.silent();
         this.idx = 0;
         this.methodCount = 0;
     }
 
     String result() {
         return out.toString();
+    }
+
+    private void warn(int line, String msg) {
+        listener.onError(null, line, msg);
     }
 
     // --- トークン操作 ---
@@ -70,6 +83,7 @@ final class JavaParser {
         if (!peek().is(open)) {
             return;
         }
+        int startLine = peek().line;
         next();
         int depth = 1;
         boolean angle = "<".equals(open);
@@ -92,12 +106,14 @@ final class JavaParser {
             }
             next();
         }
+        warn(startLine, "EOF reached before matching '" + close + "'");
     }
 
     private String readBalancedRaw(String open, String close) {
         if (!peek().is(open)) {
             return "";
         }
+        int startLine = peek().line;
         next();
         int startPos = peek().start;
         int endPos = startPos;
@@ -116,6 +132,7 @@ final class JavaParser {
             endPos = t.end;
             next();
         }
+        warn(startLine, "EOF reached before matching '" + close + "'");
         return cleanSrcSlice(src, startPos, endPos);
     }
 

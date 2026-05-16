@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import padtools.core.formats.java.AndroidProjectScanner;
+import padtools.util.ErrorListener;
 
 import java.io.File;
 import java.io.IOException;
@@ -19,14 +20,22 @@ public final class UmlGenerator {
 
     /** 入力ファイル (.java または .aidl) 1 つから ClassInfo リストを抽出する。 */
     public static List<JavaClassInfo> extractFromSource(String source, String fileName) {
+        return extractFromSource(source, fileName, null);
+    }
+
+    /** エラーリスナー付き。 */
+    public static List<JavaClassInfo> extractFromSource(String source, String fileName,
+                                                         ErrorListener listener) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
+        ErrorListener wrapped = (listener == null) ? ErrorListener.silent()
+                : wrapWithSource(listener, fileName);
         List<JavaClassInfo> infos;
         if (fileName != null && fileName.toLowerCase().endsWith(".aidl")) {
-            infos = new ArrayList<>(AidlParser.parse(source));
+            infos = new ArrayList<>(AidlParser.parse(source, wrapped));
         } else {
-            infos = new ArrayList<>(JavaStructureExtractor.extract(source));
+            infos = new ArrayList<>(JavaStructureExtractor.extract(source, wrapped));
         }
         for (JavaClassInfo info : infos) {
             String cat = AaosPattern.categorize(info);
@@ -37,23 +46,39 @@ public final class UmlGenerator {
         return infos;
     }
 
+    private static ErrorListener wrapWithSource(ErrorListener inner, String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return inner;
+        }
+        return (source, line, message) ->
+                inner.onError(source != null && !source.isEmpty() ? source : fileName,
+                        line, message);
+    }
+
     /** Gradle プロジェクト全体を走査して全 ClassInfo を集める。 */
     public static List<JavaClassInfo> extractFromProject(File root) throws IOException {
-        AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
-        return extractFromProject(root, opts);
+        return extractFromProject(root, null, null);
     }
 
     /** オプション付きプロジェクトスキャン。 */
     public static List<JavaClassInfo> extractFromProject(File root,
                                                           AndroidProjectScanner.Options opts)
             throws IOException {
+        return extractFromProject(root, opts, null);
+    }
+
+    /** オプション + エラーリスナー付き。個別ファイルの読込失敗は listener に通知して継続する。 */
+    public static List<JavaClassInfo> extractFromProject(File root,
+                                                          AndroidProjectScanner.Options opts,
+                                                          ErrorListener listener)
+            throws IOException {
         if (root == null) {
             throw new IllegalArgumentException("root is null");
         }
         AndroidProjectScanner.Options scanOpts = (opts != null) ? opts
                 : new AndroidProjectScanner.Options();
-        // AIDL もスキャン対象に
         scanOpts.includeAidl = true;
+        ErrorListener l = listener != null ? listener : ErrorListener.silent();
         List<File> files = AndroidProjectScanner.scan(root, scanOpts);
         List<JavaClassInfo> all = new ArrayList<>();
         for (File f : files) {
@@ -61,8 +86,18 @@ public final class UmlGenerator {
             if (!name.endsWith(".java") && !name.endsWith(".aidl")) {
                 continue;
             }
-            String src = AndroidProjectScanner.readFile(f);
-            all.addAll(extractFromSource(src, f.getName()));
+            String src;
+            try {
+                src = AndroidProjectScanner.readFile(f);
+            } catch (IOException ex) {
+                l.onError(f.getName(), -1, "read failed: " + ex.getMessage());
+                continue;
+            }
+            try {
+                all.addAll(extractFromSource(src, f.getName(), l));
+            } catch (RuntimeException ex) {
+                l.onError(f.getName(), -1, "parse failed: " + ex.getMessage());
+            }
         }
         return all;
     }

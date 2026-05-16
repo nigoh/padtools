@@ -2,6 +2,7 @@ package padtools.core.formats.uml;
 
 import padtools.core.formats.java.JavaLexer;
 import padtools.core.formats.java.JavaToken;
+import padtools.util.ErrorListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,11 +19,17 @@ public final class AidlParser {
 
     /** AIDL ソースから ClassInfo のリストを抽出する。 */
     public static List<JavaClassInfo> parse(String source) {
+        return parse(source, null);
+    }
+
+    /** エラーリスナー付き。 */
+    public static List<JavaClassInfo> parse(String source, ErrorListener listener) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
         List<JavaToken> tokens = new JavaLexer(source).tokenize();
-        Impl impl = new Impl(tokens, source);
+        Impl impl = new Impl(tokens, source,
+                listener != null ? listener : ErrorListener.silent());
         impl.parseFile();
         return impl.results;
     }
@@ -33,13 +40,19 @@ public final class AidlParser {
     private static final class Impl {
         private final List<JavaToken> tokens;
         private final String src;
+        private final ErrorListener listener;
         private final List<JavaClassInfo> results = new ArrayList<>();
         private String packageName = "";
         private int idx;
 
-        Impl(List<JavaToken> tokens, String src) {
+        Impl(List<JavaToken> tokens, String src, ErrorListener listener) {
             this.tokens = tokens;
             this.src = src;
+            this.listener = listener;
+        }
+
+        private void warn(int line, String msg) {
+            listener.onError(null, line, msg);
         }
 
         private JavaToken peek() {
@@ -93,10 +106,13 @@ public final class AidlParser {
         }
 
         private void parseInterface(List<String> annotations) {
+            int startLine = peek().line;
             next(); // interface
             String name = "Anonymous";
             if (peek().type == JavaToken.Type.IDENT) {
                 name = next().text;
+            } else {
+                warn(startLine, "AIDL interface name missing");
             }
             JavaClassInfo info = new JavaClassInfo();
             info.setKind(JavaClassInfo.Kind.AIDL_INTERFACE);
@@ -107,6 +123,7 @@ public final class AidlParser {
                 next();
             }
             if (!peek().is("{")) {
+                warn(startLine, "AIDL interface '" + name + "' body '{' not found");
                 results.add(info);
                 return;
             }

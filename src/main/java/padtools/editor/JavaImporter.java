@@ -5,14 +5,20 @@ import padtools.core.formats.java.JavaSourceConverter;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.core.formats.uml.UmlGenerator;
+import padtools.util.ErrorListener;
 import padtools.util.Messages;
 
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Java ソース・Gradle プロジェクトから SPD テキストを生成するエディタ統合ヘルパ。
@@ -39,7 +45,11 @@ public class JavaImporter {
         File file = fc.getSelectedFile();
         try {
             String src = AndroidProjectScanner.readFile(file);
-            return JavaSourceConverter.convert(src);
+            List<String> warnings = new ArrayList<>();
+            String result = JavaSourceConverter.convert(src, null,
+                    ErrorListener.collecting(warnings));
+            showWarnings(warnings);
+            return result;
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;
@@ -59,7 +69,10 @@ public class JavaImporter {
         }
         File dir = fc.getSelectedFile();
         try {
-            String spd = AndroidProjectScanner.convertProject(dir, null, null);
+            List<String> warnings = new ArrayList<>();
+            String spd = AndroidProjectScanner.convertProject(dir, null, null,
+                    ErrorListener.collecting(warnings));
+            showWarnings(warnings);
             if (spd.isEmpty()) {
                 JOptionPane.showMessageDialog(parent,
                         Messages.get("dialog.importJava.noFiles"),
@@ -88,11 +101,19 @@ public class JavaImporter {
         }
         File f = fc.getSelectedFile();
         try {
+            List<String> warnings = new ArrayList<>();
+            ErrorListener l = ErrorListener.collecting(warnings);
+            String result;
             if (f.isDirectory()) {
-                return PlantUmlClassDiagram.generate(UmlGenerator.extractFromProject(f));
+                result = PlantUmlClassDiagram.generate(
+                        UmlGenerator.extractFromProject(f, null, l));
+            } else {
+                String src = AndroidProjectScanner.readFile(f);
+                result = PlantUmlClassDiagram.generate(
+                        UmlGenerator.extractFromSource(src, f.getName(), l));
             }
-            String src = AndroidProjectScanner.readFile(f);
-            return PlantUmlClassDiagram.generate(UmlGenerator.extractFromSource(src, f.getName()));
+            showWarnings(warnings);
+            return result;
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;
@@ -129,14 +150,18 @@ public class JavaImporter {
         String entryMethod = e.substring(dot + 1);
         File f = fc.getSelectedFile();
         try {
+            List<String> warnings = new ArrayList<>();
+            ErrorListener l = ErrorListener.collecting(warnings);
             java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
             if (f.isDirectory()) {
-                infos = UmlGenerator.extractFromProject(f);
+                infos = UmlGenerator.extractFromProject(f, null, l);
             } else {
                 String src = AndroidProjectScanner.readFile(f);
-                infos = UmlGenerator.extractFromSource(src, f.getName());
+                infos = UmlGenerator.extractFromSource(src, f.getName(), l);
             }
-            return PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
+            String result = PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
+            showWarnings(warnings);
+            return result;
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;
@@ -148,5 +173,23 @@ public class JavaImporter {
                 Messages.get("dialog.importJava.failed") + "\n" + detail,
                 Messages.get("dialog.openFailed"),
                 JOptionPane.ERROR_MESSAGE);
+    }
+
+    /** 警告/エラーがあれば 1 つのダイアログにまとめて表示する。 */
+    private void showWarnings(List<String> warnings) {
+        if (warnings == null || warnings.isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String w : warnings) {
+            sb.append(w).append('\n');
+        }
+        JTextArea area = new JTextArea(sb.toString(), 12, 60);
+        area.setEditable(false);
+        JScrollPane sp = new JScrollPane(area);
+        sp.setPreferredSize(new Dimension(560, 240));
+        JOptionPane.showMessageDialog(parent, sp,
+                Messages.get("dialog.importJava.warnings"),
+                JOptionPane.INFORMATION_MESSAGE);
     }
 }

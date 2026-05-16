@@ -1,5 +1,7 @@
 package padtools.core.formats.java;
 
+import padtools.util.ErrorListener;
+
 import java.util.List;
 import java.util.Set;
 
@@ -40,18 +42,27 @@ public final class JavaSourceConverter {
 
     /** デフォルト Options で変換。 */
     public static String convert(String javaSource) {
-        return convert(javaSource, null);
+        return convert(javaSource, null, null);
     }
 
     /** オプション付き変換。 */
     public static String convert(String javaSource, Options opts) {
+        return convert(javaSource, opts, null);
+    }
+
+    /**
+     * オプション + エラーリスナー付き変換。
+     * パース不能なトークンやスキップ箇所があれば {@code listener} に通知する。
+     */
+    public static String convert(String javaSource, Options opts, ErrorListener listener) {
         if (javaSource == null) {
             throw new IllegalArgumentException("javaSource is null");
         }
         Options o = (opts == null) ? new Options() : opts;
+        ErrorListener l = listener != null ? listener : ErrorListener.silent();
         JavaLexer lex = new JavaLexer(javaSource);
         List<JavaToken> tokens = lex.tokenize();
-        JavaParser p = new JavaParser(tokens, javaSource, o);
+        JavaParser p = new JavaParser(tokens, javaSource, o, l);
         p.parseFile();
         return p.result();
     }

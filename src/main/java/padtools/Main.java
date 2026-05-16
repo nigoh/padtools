@@ -5,6 +5,7 @@ import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.editor.Editor;
+import padtools.util.ErrorListener;
 import padtools.util.Option;
 import padtools.util.OptionParser;
 import padtools.util.Messages;
@@ -52,10 +53,11 @@ public class Main {
         final Option optJavaProject = new Option("J", "java-project", false);
         final Option optClassDiagram = new Option("c", "class-diagram", false);
         final Option optSequenceDiagram = new Option("q", "sequence-diagram", true);
+        final Option optVerbose = new Option("v", "verbose", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
-                optClassDiagram, optSequenceDiagram});
+                optClassDiagram, optSequenceDiagram, optVerbose});
 
         try {
             optParser.parse(args, 1);
@@ -96,15 +98,18 @@ public class Main {
             }
         }
 
+        ErrorListener listener = optVerbose.isSet()
+                ? ErrorListener.stderr() : ErrorListener.silent();
         if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
             handleUmlInput(file_in, file_out,
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
-                            ? optSequenceDiagram.getArguments().getLast() : null);
+                            ? optSequenceDiagram.getArguments().getLast() : null,
+                    listener);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
-            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet());
+            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet(), listener);
             return;
         }
 
@@ -121,9 +126,11 @@ public class Main {
      * @param fileOut 出力先 (.spd または .png/.svg/.pdf)。null なら標準出力に SPD を書く
      * @param scale 画像スケール
      * @param projectMode true ならプロジェクトディレクトリ走査モード
+     * @param listener エラーリスナー (verbose 時に stderr へ出す)
      */
-    private static void handleJavaInput(File fileIn, File fileOut,
-                                         Double scale, boolean projectMode) throws IOException {
+    private static void handleJavaInput(File fileIn, File fileOut, Double scale,
+                                         boolean projectMode,
+                                         ErrorListener listener) throws IOException {
         String spd;
         if (projectMode) {
             if (fileIn == null) {
@@ -131,7 +138,7 @@ public class Main {
                 System.exit(1);
                 return;
             }
-            spd = AndroidProjectScanner.convertProject(fileIn, null, null);
+            spd = AndroidProjectScanner.convertProject(fileIn, null, null, listener);
         } else {
             String src;
             if (fileIn == null) {
@@ -139,7 +146,7 @@ public class Main {
             } else {
                 src = AndroidProjectScanner.readFile(fileIn);
             }
-            spd = JavaSourceConverter.convert(src);
+            spd = JavaSourceConverter.convert(src, null, listener);
         }
 
         String outName = fileOut != null ? fileOut.getName().toLowerCase() : "";
@@ -191,7 +198,8 @@ public class Main {
      */
     private static void handleUmlInput(File fileIn, File fileOut,
                                         boolean classDiagram,
-                                        String sequenceEntry) throws IOException {
+                                        String sequenceEntry,
+                                        ErrorListener listener) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -200,10 +208,10 @@ public class Main {
         String spec = sequenceEntry == null ? "" : sequenceEntry.trim();
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
         if (fileIn.isDirectory()) {
-            infos = UmlGenerator.extractFromProject(fileIn);
+            infos = UmlGenerator.extractFromProject(fileIn, null, listener);
         } else {
             String src = AndroidProjectScanner.readFile(fileIn);
-            infos = UmlGenerator.extractFromSource(src, fileIn.getName());
+            infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
         }
 
         String output;
@@ -227,7 +235,7 @@ public class Main {
     }
 
     private static void printUsage() {
-        System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-h] [input]");
+        System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-v] [-h] [input]");
         System.err.println("  -o file: Save to file (spd/png/svg/pdf/puml).");
         System.err.println("  -s scale: Image scale (available when result is image).");
         System.err.println("  -h: Show this help.");
@@ -235,6 +243,7 @@ public class Main {
         System.err.println("  -J --java-project: Gradle/Android project directory.");
         System.err.println("  -c --class-diagram: Output PlantUML class diagram.");
         System.err.println("  -q --sequence-diagram Class.method: PlantUML sequence diagram.");
+        System.err.println("  -v --verbose: Emit per-file warnings and summary to stderr.");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q.");
     }
 }

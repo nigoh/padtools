@@ -2,6 +2,7 @@ package padtools.core.formats.uml;
 
 import padtools.core.formats.java.JavaLexer;
 import padtools.core.formats.java.JavaToken;
+import padtools.util.ErrorListener;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,11 +28,17 @@ public final class JavaStructureExtractor {
 
     /** Java ソースから ClassInfo のリストを返す。 */
     public static List<JavaClassInfo> extract(String source) {
+        return extract(source, null);
+    }
+
+    /** エラーリスナー付き。 */
+    public static List<JavaClassInfo> extract(String source, ErrorListener listener) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
         List<JavaToken> tokens = new JavaLexer(source).tokenize();
-        Extractor e = new Extractor(tokens, source);
+        Extractor e = new Extractor(tokens, source,
+                listener != null ? listener : ErrorListener.silent());
         e.parseFile();
         return Collections.unmodifiableList(e.results);
     }
@@ -43,14 +50,20 @@ public final class JavaStructureExtractor {
     private static final class Extractor {
         private final List<JavaToken> tokens;
         private final String src;
+        private final ErrorListener listener;
         private final List<JavaClassInfo> results = new ArrayList<>();
         private final List<JavaClassInfo> classStack = new ArrayList<>();
         private String packageName = "";
         private int idx;
 
-        Extractor(List<JavaToken> tokens, String src) {
+        Extractor(List<JavaToken> tokens, String src, ErrorListener listener) {
             this.tokens = tokens;
             this.src = src;
+            this.listener = listener;
+        }
+
+        private void warn(int line, String msg) {
+            listener.onError(null, line, msg);
         }
 
         private JavaToken peek() {
@@ -681,6 +694,7 @@ public final class JavaStructureExtractor {
             if (!peek().is(open)) {
                 return;
             }
+            int startLine = peek().line;
             next();
             int depth = 1;
             boolean angle = "<".equals(open);
@@ -703,6 +717,7 @@ public final class JavaStructureExtractor {
                 }
                 next();
             }
+            warn(startLine, "EOF reached before matching '" + close + "'");
         }
     }
 }

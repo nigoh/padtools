@@ -171,7 +171,7 @@ public final class AidlParser {
             if (atEnd()) {
                 return;
             }
-            String returnType = src.substring(startPos, lastIdentEnd).trim();
+            String returnType = stripAidlAnnotations(src.substring(startPos, lastIdentEnd).trim());
 
             JavaMethodInfo m = new JavaMethodInfo();
             m.setName(methodName);
@@ -266,6 +266,11 @@ public final class AidlParser {
         }
 
         // --- ヘルパ ---
+
+        private static String stripAidlAnnotations(String s) {
+            return s.replaceAll("@\\w+(\\.\\w+)*(\\([^)]*\\))?", " ")
+                    .replaceAll("\\s+", " ").trim();
+        }
 
         private List<String> readAnnotations() {
             List<String> result = new ArrayList<>();

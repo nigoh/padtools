@@ -56,10 +56,21 @@ public final class PlantUmlClassDiagram {
             out.append("title ").append(o.title).append('\n');
         }
         out.append("skinparam classAttributeIconSize 0\n");
+        // クラスごとに一意のエイリアスを発行する。PlantUML は "a.b.c" 形式の識別子を
+        // ネスト/名前空間として解釈してしまうため、引用符付き名 + as エイリアスで切り離す。
         Set<String> knownNames = new HashSet<>();
+        java.util.Map<String, String> aliasByQn = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> qnBySimple = new java.util.HashMap<>();
+        int aliasSeq = 0;
         for (JavaClassInfo c : classes) {
-            knownNames.add(c.getQualifiedName());
-            knownNames.add(c.getSimpleName());
+            String qn = c.getQualifiedName();
+            knownNames.add(qn);
+            aliasByQn.put(qn, "C" + (aliasSeq++));
+            qnBySimple.putIfAbsent(c.getSimpleName(), qn);
+            if (c.getEnclosingClass() != null && !c.getEnclosingClass().isEmpty()) {
+                qnBySimple.putIfAbsent(
+                        c.getEnclosingClass() + "." + c.getSimpleName(), qn);
+            }
         }
 
         if (o.groupByPackage) {
@@ -73,31 +84,31 @@ public final class PlantUmlClassDiagram {
                 String pkg = e.getKey();
                 if (pkg.isEmpty()) {
                     for (JavaClassInfo c : e.getValue()) {
-                        emitClass(out, c, o, "");
+                        emitClass(out, c, o, "", aliasByQn);
                     }
                 } else {
                     out.append("package \"").append(pkg).append("\" {\n");
                     for (JavaClassInfo c : e.getValue()) {
-                        emitClass(out, c, o, "  ");
+                        emitClass(out, c, o, "  ", aliasByQn);
                     }
                     out.append("}\n");
                 }
             }
         } else {
             for (JavaClassInfo c : classes) {
-                emitClass(out, c, o, "");
+                emitClass(out, c, o, "", aliasByQn);
             }
         }
 
         // 関係線
         if (o.showInheritance) {
             for (JavaClassInfo c : classes) {
-                emitInheritance(out, c);
+                emitInheritance(out, c, aliasByQn, qnBySimple);
             }
         }
         if (o.showUsageRelations) {
             for (JavaClassInfo c : classes) {
-                emitUsage(out, c, knownNames, o);
+                emitUsage(out, c, knownNames, aliasByQn, qnBySimple, o);
             }
         }
         out.append("@enduml\n");
@@ -105,11 +116,16 @@ public final class PlantUmlClassDiagram {
     }
 
     private static void emitClass(StringBuilder out, JavaClassInfo c,
-                                  Options o, String indent) {
+                                  Options o, String indent,
+                                  java.util.Map<String, String> aliasByQn) {
         String kw = classKeyword(c);
         String stereo = stereotype(c, o);
         out.append(indent).append(kw).append(' ');
         out.append(quoteId(displayId(c)));
+        String alias = aliasByQn.get(c.getQualifiedName());
+        if (alias != null) {
+            out.append(" as ").append(alias);
+        }
         if (!stereo.isEmpty()) {
             out.append(' ').append(stereo);
         }
@@ -221,21 +237,32 @@ public final class PlantUmlClassDiagram {
         out.append('\n');
     }
 
-    private static void emitInheritance(StringBuilder out, JavaClassInfo c) {
-        String me = quoteId(c.getQualifiedName());
+    private static void emitInheritance(StringBuilder out, JavaClassInfo c,
+                                         java.util.Map<String, String> aliasByQn,
+                                         java.util.Map<String, String> qnBySimple) {
+        String me = aliasByQn.get(c.getQualifiedName());
+        if (me == null) {
+            return;
+        }
         if (c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
-            String parent = simplifyTypeRef(c.getSuperClass());
-            out.append(quoteId(parent)).append(" <|-- ").append(me).append('\n');
+            String parent = relationId(simplifyTypeRef(c.getSuperClass()), aliasByQn, qnBySimple);
+            out.append(parent).append(" <|-- ").append(me).append('\n');
         }
         for (String iface : c.getInterfaces()) {
-            String parent = simplifyTypeRef(iface);
-            out.append(quoteId(parent)).append(" <|.. ").append(me).append('\n');
+            String parent = relationId(simplifyTypeRef(iface), aliasByQn, qnBySimple);
+            out.append(parent).append(" <|.. ").append(me).append('\n');
         }
     }
 
     private static void emitUsage(StringBuilder out, JavaClassInfo c,
-                                   Set<String> known, Options o) {
-        String me = quoteId(c.getQualifiedName());
+                                   Set<String> known,
+                                   java.util.Map<String, String> aliasByQn,
+                                   java.util.Map<String, String> qnBySimple,
+                                   Options o) {
+        String me = aliasByQn.get(c.getQualifiedName());
+        if (me == null) {
+            return;
+        }
         Set<String> emitted = new LinkedHashSet<>();
         int count = 0;
         for (JavaFieldInfo f : c.getFields()) {
@@ -247,11 +274,49 @@ public final class PlantUmlClassDiagram {
                     || target.equals(c.getSimpleName())) {
                 continue;
             }
-            if (emitted.add(target)) {
-                out.append(me).append(" --> ").append(quoteId(target)).append('\n');
+            String tid = relationId(target, aliasByQn, qnBySimple);
+            // 自己参照スキップ
+            if (tid.equals(me)) {
+                continue;
+            }
+            if (emitted.add(tid)) {
+                out.append(me).append(" --> ").append(tid).append('\n');
                 count++;
             }
         }
+    }
+
+    /**
+     * 関係性の片端の識別子を返す。
+     * - 完全修飾名で既知ならそのエイリアス
+     * - 単純名で既知なら対応する完全修飾名のエイリアス
+     * - 既知ではないなら引用符付き名 (PlantUML が暗黙生成)
+     */
+    private static String relationId(String typeRef,
+                                      java.util.Map<String, String> aliasByQn,
+                                      java.util.Map<String, String> qnBySimple) {
+        if (typeRef == null || typeRef.isEmpty()) {
+            return "\"?\"";
+        }
+        String alias = aliasByQn.get(typeRef);
+        if (alias != null) {
+            return alias;
+        }
+        String qn = qnBySimple.get(typeRef);
+        if (qn != null) {
+            String a = aliasByQn.get(qn);
+            if (a != null) {
+                return a;
+            }
+        }
+        // 未定義: PlantUML に暗黙作成させる。"a.b.C" 形式は namespace 扱いされうるため
+        // 末尾の単純名のみを使う。
+        String simple = typeRef;
+        int lastDot = simple.lastIndexOf('.');
+        if (lastDot >= 0) {
+            simple = simple.substring(lastDot + 1);
+        }
+        return quoteId(simple);
     }
 
     /** 型参照 (たとえば {@code Map<String, Foo>}) から、利用対象となるユーザ定義型を推定する。 */

@@ -343,7 +343,7 @@ public final class JavaStructureExtractor {
             // 末尾のカンマ区切り変数 (int a = 1, b = 2) は最初の宣言のみ取得して残りはスキップ
             JavaFieldInfo f = new JavaFieldInfo();
             f.setName(fieldName);
-            f.setType(normalizeType(type));
+            f.setType(normalizeType(stripAnnotations(type)));
             f.setVisibility(Visibility.fromModifiers(mods));
             f.setStatic(mods.contains("static"));
             f.setFinal(mods.contains("final"));
@@ -372,7 +372,7 @@ public final class JavaStructureExtractor {
             if (atEnd()) {
                 return;
             }
-            String returnType = src.substring(startPos, lastIdentEnd).trim();
+            String returnType = stripAnnotations(src.substring(startPos, lastIdentEnd).trim());
             boolean isConstructor = returnType.isEmpty()
                     || returnType.equals(methodName)
                     || cls.getSimpleName().equals(methodName);
@@ -632,7 +632,7 @@ public final class JavaStructureExtractor {
                 e = t.end;
                 next();
             }
-            return normalizeType(src.substring(s, e));
+            return normalizeType(stripAnnotations(src.substring(s, e)));
         }
 
         private List<String> readTypeList() {

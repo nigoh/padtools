@@ -1,6 +1,28 @@
 Change log
 =============
 
+1.5
+--------
+
+* Java / Android ソースを入力とした自動図生成機能を追加
+    * `-j` / `-J`: Java ソース / Gradle プロジェクトから PAD 図を生成
+    * `-c`: Java/AIDL から PlantUML クラス図を生成
+        * AAOS パターン (`<<CarManager>>` 等) 認識
+        * AndroidManifest.xml 自動マージ (`<<Activity>>` 等)
+    * `-q`: 指定メソッドから PlantUML シーケンス図を生成
+    * `-d`: AndroidManifest.xml から PlantUML コンポーネント図を生成
+    * `-G`: build.gradle / settings.gradle から PlantUML Gradle 依存グラフを生成
+    * `-g` / `-m` / `--summary`: Gradle / Manifest / プロジェクト全体の Markdown サマリー
+* Gradle Version Catalog (`gradle/libs.versions.toml`) 自動解析
+    * `alias(libs.plugins.X)` を正規プラグイン ID に解決
+    * `implementation(libs.X.Y)` を実 notation に解決
+    * `libs.versions.X.get().toInt()` を整数値に解決
+* AIDL ファイル (`.aidl`) パース対応
+* エディタにファイルメニュー追加
+    * Java からインポート、クラス図/シーケンス図/コンポーネント図/依存グラフ/サマリー生成
+* `-v` / `--verbose` でパーサ警告を stderr に出力
+* 凡例ブロック追加 (`-L` で PAD 図 ON、`--no-legend` で UML 図 OFF)
+
 1.4
 --------
 

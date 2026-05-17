@@ -203,6 +203,60 @@ public class JavaImporter {
         }
     }
 
+    /**
+     * プロジェクトディレクトリと出力先ディレクトリを選択し、5 種類の成果物を一括書き出す。
+     * 戻り値は書き出した先のパス (成功時) もしくは null。
+     */
+    public java.io.File chooseProjectAndGenerateAll() {
+        JFileChooser src = new JFileChooser(".");
+        src.setDialogTitle(Messages.get("dialog.allInOne.srcTitle"));
+        src.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (src.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        JFileChooser dst = new JFileChooser(".");
+        dst.setDialogTitle(Messages.get("dialog.allInOne.dstTitle"));
+        dst.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (dst.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        java.io.File srcDir = src.getSelectedFile();
+        java.io.File dstDir = dst.getSelectedFile();
+        if (!dstDir.exists() && !dstDir.mkdirs()) {
+            showError("Cannot create directory: " + dstDir);
+            return null;
+        }
+        List<String> warnings = new ArrayList<>();
+        ErrorListener l = ErrorListener.collecting(warnings);
+        try {
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(srcDir, l);
+            writeIfMissing(new java.io.File(dstDir, "summary.md"),
+                    padtools.core.formats.android.TextSummaryReport.toMarkdown(analysis));
+            writeIfMissing(new java.io.File(dstDir, "component-diagram.puml"),
+                    PlantUmlComponentDiagram.generate(analysis));
+            writeIfMissing(new java.io.File(dstDir, "dependency-graph.puml"),
+                    padtools.core.formats.android.PlantUmlGradleDependencyGraph.generate(analysis));
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
+                    UmlGenerator.extractFromProject(srcDir, null, l, true);
+            writeIfMissing(new java.io.File(dstDir, "class-diagram.puml"),
+                    PlantUmlClassDiagram.generate(infos));
+            String spd = AndroidProjectScanner.convertProject(srcDir, null, null, l);
+            writeIfMissing(new java.io.File(dstDir, "pad.spd"), spd);
+        } catch (IOException ex) {
+            showError(ex.getMessage());
+            return null;
+        }
+        showWarnings(warnings);
+        return dstDir;
+    }
+
+    private static void writeIfMissing(java.io.File f, String content) throws IOException {
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(f), java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write(content);
+        }
+    }
+
     private String chooseProjectAndGenerate(String titleKey, boolean component) {
         JFileChooser fc = new JFileChooser(".");
         fc.setDialogTitle(Messages.get(titleKey));

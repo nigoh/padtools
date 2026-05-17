@@ -441,6 +441,16 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void doGenerateAll() {
+        File out = new JavaImporter(this).chooseProjectAndGenerateAll();
+        if (out != null) {
+            JOptionPane.showMessageDialog(this,
+                    Messages.get("dialog.allInOne.done") + "\n" + out.getAbsolutePath(),
+                    Messages.get("menu.file.allInOne"),
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
     private void applyImportedText(String spd) {
         editor.requestFocusInWindow();
         editor.setText(spd);
@@ -530,6 +540,8 @@ public class MainFrame extends JFrame {
                 ae -> doGenerateDependencyGraph(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.summary"), null,
                 ae -> doGenerateSummary(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.allInOne"), null,
+                ae -> doGenerateAll(), null);
         fileMenu.addSeparator();
 
         if (!setting.isDisableSaveMenu()) {

@@ -86,6 +86,7 @@ public class Main {
         final Option optComponent = new Option("d", "component-diagram", false);
         final Option optDepGraph = new Option("G", "dependency-graph", false);
         final Option optSummary = new Option(null, "summary", false);
+        final Option optAll = new Option("A", "all", false);
         final Option optNoManifestMerge = new Option(null, "no-manifest-merge", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
@@ -93,7 +94,7 @@ public class Main {
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
                 optGradle, optManifest, optComponent, optDepGraph, optSummary,
-                optNoManifestMerge});
+                optAll, optNoManifestMerge});
 
         try {
             optParser.parse(args, 1);
@@ -144,6 +145,10 @@ public class Main {
             legendOverride = Boolean.FALSE;
         }
         boolean mergeManifest = !optNoManifestMerge.isSet();
+        if (optAll.isSet()) {
+            handleAll(file_in, file_out, listener, legendOverride, mergeManifest);
+            return;
+        }
         if (optGradle.isSet()) {
             handleGradleInput(file_in, file_out, listener);
             return;
@@ -402,6 +407,149 @@ public class Main {
         writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
     }
 
+    /**
+     * {@code --all}: プロジェクトディレクトリを入力に、5 種類の成果物を出力ディレクトリへ一括書き出し。
+     * <ul>
+     *   <li>{@code summary.md} - Markdown プロジェクトサマリー</li>
+     *   <li>{@code class-diagram.puml} - PlantUML クラス図 (manifest 自動マージ)</li>
+     *   <li>{@code component-diagram.puml} - PlantUML Android コンポーネント図</li>
+     *   <li>{@code dependency-graph.puml} - PlantUML Gradle 依存グラフ</li>
+     *   <li>{@code pad.spd} - Java→SPD (PAD) 統合出力</li>
+     * </ul>
+     * <p>シーケンス図は起点メソッド指定が必要なため {@code --all} には含めない (個別に {@code -q} を使う)。</p>
+     */
+    private static void handleAll(File fileIn, File fileOut,
+                                    ErrorListener listener,
+                                    Boolean legendOverride,
+                                    boolean mergeManifest) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--all requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        if (fileOut == null) {
+            System.err.println("--all requires an output directory via -o.");
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.exists() && !fileOut.mkdirs()) {
+            System.err.println("Failed to create output directory: " + fileOut);
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.isDirectory()) {
+            System.err.println("-o must point to a directory when --all is set: " + fileOut);
+            System.exit(1);
+            return;
+        }
+
+        // --all は時間がかかる複合処理なので、-v の有無に関わらず進捗ログを stderr に
+        // 出す。ユーザが渡したリスナー (verbose なら stderr / silent なら no-op) は
+        // パース警告等の付随情報として残しつつ、進捗ログは別経路で確実に表示する。
+        ProgressLogger progress = new ProgressLogger();
+        long startMs = System.currentTimeMillis();
+        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
+
+        // プロジェクト解析を 1 回だけ実行して再利用する
+        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+
+        // 1) Markdown サマリー
+        progress.step("[1/5] Generating summary.md");
+        File summaryFile = new File(fileOut, "summary.md");
+        writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
+        progress.wrote(summaryFile);
+        listener.onError(null, -1, "wrote " + summaryFile.getPath());
+
+        // 2) コンポーネント図
+        progress.step("[2/5] Generating component-diagram.puml");
+        PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            compOpts.includeLegend = false;
+        }
+        File compFile = new File(fileOut, "component-diagram.puml");
+        writeText(compFile, PlantUmlComponentDiagram.generate(analysis, compOpts));
+        progress.wrote(compFile);
+        listener.onError(null, -1, "wrote " + compFile.getPath());
+
+        // 3) 依存グラフ
+        progress.step("[3/5] Generating dependency-graph.puml");
+        PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            depOpts.includeLegend = false;
+        }
+        File depFile = new File(fileOut, "dependency-graph.puml");
+        writeText(depFile, PlantUmlGradleDependencyGraph.generate(analysis, depOpts));
+        progress.wrote(depFile);
+        listener.onError(null, -1, "wrote " + depFile.getPath());
+
+        // 4) クラス図 (UmlGenerator は内部で再走査するが、manifest 連携のため別経路)
+        progress.step("[4/5] Generating class-diagram.puml (scanning Java/AIDL)");
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
+                UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
+        padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
+                new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            clsOpts.includeLegend = false;
+        }
+        File clsFile = new File(fileOut, "class-diagram.puml");
+        writeText(clsFile, padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts));
+        progress.wrote(clsFile, "(" + infos.size() + " class(es))");
+        listener.onError(null, -1, "wrote " + clsFile.getPath());
+
+        // 5) Java→PAD
+        progress.step("[5/5] Generating pad.spd (Java to SPD conversion)");
+        JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
+        if (Boolean.TRUE.equals(legendOverride)) {
+            convOpts.includeLegend = true;
+        }
+        String spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
+        File spdFile = new File(fileOut, "pad.spd");
+        writeText(spdFile, spd);
+        progress.wrote(spdFile);
+        listener.onError(null, -1, "wrote " + spdFile.getPath());
+
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        progress.done(fileOut, elapsedMs);
+    }
+
+    /**
+     * {@code --all} 専用の進捗ロガー。{@code -v} の有無に関わらず常に stderr に出力する。
+     */
+    private static final class ProgressLogger {
+        void step(String msg) {
+            System.err.println("[padtools] " + msg);
+        }
+
+        void wrote(File f) {
+            wrote(f, null);
+        }
+
+        void wrote(File f, String suffix) {
+            long size = f.exists() ? f.length() : 0L;
+            StringBuilder sb = new StringBuilder("[padtools]     -> ");
+            sb.append(f.getName()).append(" (").append(formatBytes(size)).append(')');
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(' ').append(suffix);
+            }
+            System.err.println(sb.toString());
+        }
+
+        void done(File outDir, long elapsedMs) {
+            System.err.println("[padtools] Done in " + elapsedMs + " ms. "
+                    + "Output: " + outDir.getAbsolutePath());
+        }
+
+        private static String formatBytes(long n) {
+            if (n < 1024) {
+                return n + "B";
+            }
+            if (n < 1024 * 1024) {
+                return (n / 1024) + "KB";
+            }
+            return String.format("%.1fMB", n / 1024.0 / 1024.0);
+        }
+    }
+
     private static void printUsage() {
         System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-v] [-h] [input]");
         System.err.println("  -o file: Save to file (spd/png/svg/pdf/puml).");
@@ -419,7 +567,9 @@ public class Main {
         System.err.println("  -d --component-diagram: PlantUML Android component diagram.");
         System.err.println("  -G --dependency-graph: PlantUML Gradle dependency graph.");
         System.err.println("  --summary: Full project Markdown summary (dir).");
+        System.err.println("  -A --all: Output ALL artifacts (summary/component/deps/class/pad) "
+                + "to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
-        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary.");
+        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary/-A.");
     }
 }

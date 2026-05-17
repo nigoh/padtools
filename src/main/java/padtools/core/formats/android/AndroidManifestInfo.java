@@ -11,6 +11,7 @@ import java.util.Map;
 public class AndroidManifestInfo {
 
     private String packageName = "";
+    private String sourceSet = "main";
     private String applicationClass;
     private String applicationLabel;
     private String applicationTheme;
@@ -31,6 +32,19 @@ public class AndroidManifestInfo {
 
     public void setPackageName(String packageName) {
         this.packageName = packageName == null ? "" : packageName;
+    }
+
+    /**
+     * このマニフェストが属する Gradle ソースセット ({@code main} / {@code debug} /
+     * フレーバー名)。Analyzer がファイルパスから {@code src/<sourceSet>/AndroidManifest.xml}
+     * の {@code <sourceSet>} 部分を抽出して設定する。
+     */
+    public String getSourceSet() {
+        return sourceSet;
+    }
+
+    public void setSourceSet(String sourceSet) {
+        this.sourceSet = sourceSet == null || sourceSet.isEmpty() ? "main" : sourceSet;
     }
 
     public String getApplicationClass() {

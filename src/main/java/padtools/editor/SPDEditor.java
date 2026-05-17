@@ -448,21 +448,23 @@ class SPDEditor extends JTextPane {
         int lastLine = root.getElementIndex(Math.max(selStart, selEnd - 1));
 
         try {
-            int delta = 0;
+            // Swing の Element はミューテーション毎にオフセットを再計算してくれるので、
+            // 各反復で root.getElement(i).getStartOffset() を素直に参照する。
+            int totalDelta = 0;
             int firstLineDelta = 0;
             for (int i = firstLine; i <= lastLine; i++) {
-                int lineStart = root.getElement(i).getStartOffset() + delta;
+                int lineStart = root.getElement(i).getStartOffset();
                 if (indent) {
                     doc.insertString(lineStart, "\t", null);
-                    delta += 1;
+                    totalDelta += 1;
                     if (i == firstLine) {
                         firstLineDelta = 1;
                     }
                 } else {
-                    int lineEnd = root.getElement(i).getEndOffset() + delta;
+                    int lineEnd = root.getElement(i).getEndOffset();
                     if (lineEnd > lineStart && doc.getText(lineStart, 1).equals("\t")) {
                         doc.remove(lineStart, 1);
-                        delta -= 1;
+                        totalDelta -= 1;
                         if (i == firstLine) {
                             firstLineDelta = -1;
                         }
@@ -470,7 +472,7 @@ class SPDEditor extends JTextPane {
                 }
             }
             int newStart = Math.max(0, selStart + firstLineDelta);
-            int newEnd = Math.max(newStart, selEnd + delta);
+            int newEnd = Math.max(newStart, selEnd + totalDelta);
             setSelectionStart(newStart);
             setSelectionEnd(newEnd);
         } catch (BadLocationException ex) {

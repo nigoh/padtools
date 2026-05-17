@@ -170,4 +170,53 @@ public class AndroidProjectAnalyzerTest {
                 new File(root, "build.gradle"));
         assertEquals(":root", name);
     }
+
+    @Test
+    public void testMultipleManifestsPerModule() throws IOException {
+        // app モジュールに main + debug + 独自 flavor の 3 つの manifest を追加
+        File appDebug = new File(appDir, "src/debug");
+        assertTrue(appDebug.mkdirs());
+        write(new File(appDebug, "AndroidManifest.xml"),
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " package=\"com.example.app\">\n"
+                        + "  <application>\n"
+                        + "    <receiver android:name=\".DebugReceiver\"/>\n"
+                        + "  </application>\n"
+                        + "</manifest>\n");
+        File appProd = new File(appDir, "src/prod");
+        assertTrue(appProd.mkdirs());
+        write(new File(appProd, "AndroidManifest.xml"),
+                "<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " package=\"com.example.app\">\n"
+                        + "  <application>\n"
+                        + "    <service android:name=\".ProdService\"/>\n"
+                        + "  </application>\n"
+                        + "</manifest>\n");
+
+        AndroidProjectAnalysis a = AndroidProjectAnalyzer.analyze(root);
+        List<AndroidManifestInfo> mans = a.getManifestsByModule().get("app");
+        assertNotNull(mans);
+        assertEquals(3, mans.size());
+
+        java.util.Set<String> sourceSets = new java.util.HashSet<>();
+        for (AndroidManifestInfo m : mans) {
+            sourceSets.add(m.getSourceSet());
+        }
+        assertTrue("main", sourceSets.contains("main"));
+        assertTrue("debug", sourceSets.contains("debug"));
+        assertTrue("prod", sourceSets.contains("prod"));
+    }
+
+    @Test
+    public void testInferSourceSet() {
+        File main = new File("/proj/app/src/main/AndroidManifest.xml");
+        assertEquals("main", AndroidProjectAnalyzer.inferSourceSet(main));
+        File debug = new File("/proj/app/src/debug/AndroidManifest.xml");
+        assertEquals("debug", AndroidProjectAnalyzer.inferSourceSet(debug));
+        File flavor = new File("/proj/app/src/prod/AndroidManifest.xml");
+        assertEquals("prod", AndroidProjectAnalyzer.inferSourceSet(flavor));
+        // src/ 配下でないファイルは "main" にフォールバック
+        File stray = new File("/somewhere/else/AndroidManifest.xml");
+        assertEquals("main", AndroidProjectAnalyzer.inferSourceSet(stray));
+    }
 }

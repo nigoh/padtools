@@ -117,4 +117,51 @@ public class PlantUmlComponentDiagramTest {
         String puml = PlantUmlComponentDiagram.generate(buildAnalysis(), o);
         assertFalse(puml, puml.contains("legend right"));
     }
+
+    @Test
+    public void testDeduplicatesAcrossManifests() {
+        // 同モジュールの main と debug に同じ FQN の Activity がある場合、
+        // component 宣言は 1 回だけにする (PlantUML のエラー回避)
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        AndroidManifestInfo mainM = new AndroidManifestInfo();
+        mainM.setPackageName("com.x");
+        mainM.setSourceSet("main");
+        mainM.getActivities().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.ACTIVITY, "com.x.MainActivity"));
+        AndroidManifestInfo debugM = new AndroidManifestInfo();
+        debugM.setPackageName("com.x");
+        debugM.setSourceSet("debug");
+        debugM.getActivities().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.ACTIVITY, "com.x.MainActivity"));
+        debugM.getReceivers().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.RECEIVER, "com.x.DebugReceiver"));
+        java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
+        list.add(mainM);
+        list.add(debugM);
+        a.getManifestsByModule().put("app", list);
+
+        String puml = PlantUmlComponentDiagram.generate(a);
+        // MainActivity の component 宣言は 1 つだけ
+        int count = puml.split("component \"com.x.MainActivity\"").length - 1;
+        assertEquals("MainActivity should be declared once", 1, count);
+        // DebugReceiver は debug sourceSet ステレオタイプ付き
+        assertTrue(puml, puml.contains("com.x.DebugReceiver"));
+        assertTrue(puml, puml.contains("<<src:debug>>"));
+    }
+
+    @Test
+    public void testMainSourceSetHasNoStereotype() {
+        // main の sourceSet は <<src:main>> を付けない (ノイズ削減)
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        AndroidManifestInfo m = new AndroidManifestInfo();
+        m.setPackageName("p");
+        m.setSourceSet("main");
+        m.getActivities().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.ACTIVITY, "p.A"));
+        java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
+        list.add(m);
+        a.getManifestsByModule().put("app", list);
+        String puml = PlantUmlComponentDiagram.generate(a);
+        assertFalse(puml, puml.contains("<<src:main>>"));
+    }
 }

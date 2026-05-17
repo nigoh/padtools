@@ -87,6 +87,7 @@ public final class AndroidProjectAnalyzer {
                     l.onError(f.getName(), -1, "manifest parse failed: " + ex.getMessage());
                     continue;
                 }
+                info.setSourceSet(inferSourceSet(f));
                 analysis.getManifestsByModule()
                         .computeIfAbsent(moduleName, k -> new ArrayList<>())
                         .add(info);
@@ -171,6 +172,23 @@ public final class AndroidProjectAnalyzer {
                         + catalog.getLibraries().size() + " libraries, "
                         + catalog.getPlugins().size() + " plugins");
         return catalog;
+    }
+
+    /**
+     * AndroidManifest.xml のパスから所属する Gradle ソースセット名を推定する。
+     * {@code src/<name>/AndroidManifest.xml} の {@code <name>} (main/debug/release/flavor)。
+     * 該当しなければ {@code "main"}。
+     */
+    static String inferSourceSet(File manifestFile) {
+        File parent = manifestFile.getParentFile();
+        if (parent == null) {
+            return "main";
+        }
+        File grand = parent.getParentFile();
+        if (grand != null && "src".equals(grand.getName())) {
+            return parent.getName();
+        }
+        return "main";
     }
 
     /**

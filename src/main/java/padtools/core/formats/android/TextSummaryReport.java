@@ -125,8 +125,14 @@ public final class TextSummaryReport {
                                                   AndroidProjectAnalysis analysis) {
         for (Map.Entry<String, List<AndroidManifestInfo>> e
                 : analysis.getManifestsByModule().entrySet()) {
-            sb.append("### Module `").append(e.getKey()).append("`\n\n");
-            for (AndroidManifestInfo m : e.getValue()) {
+            List<AndroidManifestInfo> manifests = e.getValue();
+            sb.append("### Module `").append(e.getKey()).append("`");
+            if (manifests.size() > 1) {
+                sb.append(" — ").append(manifests.size()).append(" manifests");
+            }
+            sb.append("\n\n");
+            for (AndroidManifestInfo m : manifests) {
+                sb.append("#### sourceSet `").append(m.getSourceSet()).append("`\n\n");
                 sb.append("- Package: `").append(m.getPackageName()).append("`\n");
                 if (m.getApplicationClass() != null) {
                     sb.append("- Application class: `")
@@ -136,8 +142,8 @@ public final class TextSummaryReport {
                 appendComponentList(sb, "Services", m.getServices());
                 appendComponentList(sb, "Receivers", m.getReceivers());
                 appendComponentList(sb, "Providers", m.getProviders());
+                sb.append('\n');
             }
-            sb.append('\n');
         }
     }
 

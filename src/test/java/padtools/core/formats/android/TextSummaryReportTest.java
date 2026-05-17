@@ -128,4 +128,31 @@ public class TextSummaryReportTest {
         assertTrue(md, md.contains("## Features"));
         assertTrue(md, md.contains("android.hardware.camera"));
     }
+
+    @Test
+    public void testMultipleManifestsLabelled() {
+        // 同モジュールに main + debug の 2 manifest があるケース
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        AndroidManifestInfo main = new AndroidManifestInfo();
+        main.setPackageName("p");
+        main.setSourceSet("main");
+        main.getActivities().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.ACTIVITY, "p.MainActivity"));
+        AndroidManifestInfo debug = new AndroidManifestInfo();
+        debug.setPackageName("p");
+        debug.setSourceSet("debug");
+        debug.getReceivers().add(new AndroidComponentInfo(
+                AndroidComponentInfo.Kind.RECEIVER, "p.DebugReceiver"));
+        java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
+        list.add(main);
+        list.add(debug);
+        a.getManifestsByModule().put("app", list);
+
+        String md = TextSummaryReport.toMarkdown(a);
+        // モジュールヘッダに manifest 数が出る
+        assertTrue(md, md.contains("Module `app` — 2 manifests"));
+        // 各 manifest が sourceSet 名でラベル付け
+        assertTrue(md, md.contains("#### sourceSet `main`"));
+        assertTrue(md, md.contains("#### sourceSet `debug`"));
+    }
 }

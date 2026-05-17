@@ -51,15 +51,29 @@ public final class PlantUmlComponentDiagram {
             if (o.groupByModule) {
                 out.append("package \"").append(moduleName).append("\" {\n");
             }
+            // 同一モジュール内に複数 manifest (main + debug + flavor) があると同じ
+            // コンポーネントが複数回宣言されることがあるため FQN で重複排除する。
+            // 別 sourceSet からの差分は <<overlay>> ステレオタイプで付加する。
+            java.util.Set<String> emittedFqn = new java.util.HashSet<>();
             for (AndroidManifestInfo m : manifests) {
                 for (AndroidComponentInfo c : m.allComponents()) {
+                    if (c.getName() == null || c.getName().isEmpty()) {
+                        continue;
+                    }
+                    String fqn = c.getName();
+                    if (!emittedFqn.add(fqn)) {
+                        continue;
+                    }
                     String alias = "K" + (seq++);
-                    aliasByFqn.put(c.getName(), alias);
+                    aliasByFqn.put(fqn, alias);
                     String stereo = "<<" + c.getKind().label() + ">>";
                     String indent = o.groupByModule ? "  " : "";
-                    out.append(indent).append("component \"").append(c.getName())
+                    out.append(indent).append("component \"").append(fqn)
                             .append("\" as ").append(alias).append(' ')
                             .append(stereo);
+                    if (!"main".equals(m.getSourceSet())) {
+                        out.append(" <<src:").append(m.getSourceSet()).append(">>");
+                    }
                     if (Boolean.TRUE.equals(c.getExported())) {
                         out.append(" #LightYellow");
                     }

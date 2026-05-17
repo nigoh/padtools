@@ -149,6 +149,25 @@ java -jar PadTools.jar --summary -o report.md ~/AndroidStudioProjects/MyApp
 - AndroidManifest コンポーネント (Activity / Service / Receiver / Provider と intent-filter)
 - uses-permission / uses-feature
 
+### 一括出力 (All-in-one)
+
+```sh
+# プロジェクトを指定して 5 種類すべてを出力ディレクトリに書き出す
+java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
+```
+
+出力ディレクトリ (`-o` で指定、無ければ自動作成) には以下が生成されます:
+
+| ファイル | 内容 |
+|---|---|
+| `summary.md` | Markdown プロジェクトサマリー |
+| `class-diagram.puml` | PlantUML クラス図 (manifest 自動マージ) |
+| `component-diagram.puml` | PlantUML Android コンポーネント図 |
+| `dependency-graph.puml` | PlantUML Gradle 依存グラフ |
+| `pad.spd` | Java → SPD (PAD) 統合 |
+
+シーケンス図は起点メソッドの指定が必要なため `--all` には含まれません (`-q Class.method` で個別生成してください)。
+
 ### Gradle / Manifest 単体解析
 
 ```sh
@@ -170,6 +189,7 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 * **Android コンポーネント図を生成** (Ctrl+D) — Android プロジェクトから
 * **Gradle 依存グラフを生成** — Android プロジェクトから
 * **プロジェクトサマリーを生成** — Markdown レポート
+* **プロジェクト全体を一括出力 (All-in-one)** — プロジェクトと出力先を選択して 5 種類の成果物を書き出す
 
 ### CLI オプション一覧
 
@@ -186,6 +206,7 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 | `-g` / `--gradle` | Gradle ファイル単体を Markdown サマリー化 |
 | `-m` / `--manifest` | AndroidManifest.xml 単体を Markdown サマリー化 |
 | `--summary` | プロジェクト全体を Markdown サマリー化 |
+| `-A` / `--all` | 5 種類すべての成果物を `-o` で指定したディレクトリへ一括出力 |
 | `--no-manifest-merge` | `-c -J` 時の manifest 自動マージを無効化 |
 | `-L` / `--legend` | 凡例を強制 ON (PAD 図は既定 OFF) |
 | `--no-legend` | 凡例を強制 OFF (UML 図は既定 ON) |

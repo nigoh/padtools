@@ -3,10 +3,17 @@ package padtools.editor;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DropTarget;
+import java.awt.dnd.DropTargetDropEvent;
+import java.awt.dnd.DropTargetAdapter;
 import java.awt.event.ActionListener;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -20,6 +27,7 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 
 import javax.imageio.ImageIO;
@@ -63,6 +71,17 @@ import say.swing.JFontChooser;
  * @author monaou
  */
 public class MainFrame extends JFrame {
+
+    //プラットフォームのメニュー修飾キー (Win/Linux=Ctrl, macOS=Cmd)
+    private static final int MENU_MASK = computeMenuShortcutMask();
+
+    private static int computeMenuShortcutMask() {
+        try {
+            return Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        } catch (java.awt.HeadlessException ex) {
+            return InputEvent.CTRL_DOWN_MASK;
+        }
+    }
 
     //モデル変換
     private final Model2View model2View = new Model2View();
@@ -151,8 +170,10 @@ public class MainFrame extends JFrame {
 
         //表示の調整
         mainPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
-        messageList.setBackground(new Color(0.9f, 0.9f, 0.9f));
-        messageList.setBorder(new LineBorder(Color.gray));
+        messageList.setBackground(new Color(0xF8, 0xF8, 0xFA));
+        messageList.setSelectionBackground(new Color(0xFF, 0xE5, 0xE5));
+        messageList.setSelectionForeground(Color.BLACK);
+        messageList.setBorder(new LineBorder(new Color(0xCC, 0xCC, 0xCC)));
         leftSplit.setResizeWeight(0.8);
         mainSplit.setResizeWeight(0.3);
         mainSplit.setBorder(null);
@@ -189,7 +210,40 @@ public class MainFrame extends JFrame {
             }
         });
 
+        // ズーム変更通知でステータスバーを更新
+        previewPanel.setZoomChangeListener(this::updateZoomStatus);
+
+        // ドラッグ&ドロップでファイルを開けるようにする
+        setupDragAndDrop(mainPanel);
+
         updateTitle();
+    }
+
+    private void setupDragAndDrop(JComponent target) {
+        new DropTarget(target, DnDConstants.ACTION_COPY, new DropTargetAdapter() {
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    @SuppressWarnings("unchecked")
+                    List<File> files = (List<File>) dtde.getTransferable()
+                            .getTransferData(DataFlavor.javaFileListFlavor);
+                    if (files == null || files.isEmpty()) {
+                        dtde.dropComplete(false);
+                        return;
+                    }
+                    File f = files.get(0);
+                    if (f.isFile()) {
+                        if (releaseOK()) {
+                            open(f);
+                        }
+                    }
+                    dtde.dropComplete(true);
+                } catch (Exception ex) {
+                    dtde.dropComplete(false);
+                }
+            }
+        }, true);
     }
 
     // --- ステータスバー ---
@@ -204,11 +258,22 @@ public class MainFrame extends JFrame {
         statusBar.add(new JLabel(Messages.get("status.column") + ":"));
         statusBar.add(statusColumn);
         statusBar.add(new JLabel("|"));
+        statusFile.setToolTipText(Messages.get("tooltip.statusFile"));
         statusBar.add(statusFile);
         statusBar.add(new JLabel("|"));
         statusBar.add(statusParse);
         statusBar.add(new JLabel("|"));
         statusBar.add(new JLabel(Messages.get("status.zoom") + ":"));
+
+        // クリックでズーム 100% にリセット
+        statusZoom.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        statusZoom.setToolTipText(Messages.get("tooltip.statusZoom"));
+        statusZoom.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                doZoomReset();
+            }
+        });
         statusBar.add(statusZoom);
 
         return statusBar;
@@ -470,32 +535,47 @@ public class MainFrame extends JFrame {
         toolBar.setFloatable(false);
         toolBar.setFocusCycleRoot(false);
 
-        addToolButton(toolBar, Messages.get("toolbar.new"), iconNew, actionNew);
-        addToolButton(toolBar, Messages.get("toolbar.open"), iconOpen, actionOpen);
+        String menuKey = MENU_MASK == InputEvent.META_DOWN_MASK ? "⌘" : "Ctrl";
+
+        addToolButton(toolBar, Messages.get("toolbar.new"), iconNew, actionNew,
+                Messages.get("toolbar.new") + " (" + menuKey + "+N)");
+        addToolButton(toolBar, Messages.get("toolbar.open"), iconOpen, actionOpen,
+                Messages.get("toolbar.open") + " (" + menuKey + "+O)");
 
         if (!setting.isDisableSaveMenu()) {
-            addToolButton(toolBar, Messages.get("toolbar.save"), iconSave, actionSave);
+            addToolButton(toolBar, Messages.get("toolbar.save"), iconSave, actionSave,
+                    Messages.get("toolbar.save") + " (" + menuKey + "+S)");
         }
 
         toolBar.addSeparator();
-        addToolButton(toolBar, Messages.get("toolbar.refresh"), iconRefresh, actionRefresh);
+        addToolButton(toolBar, Messages.get("toolbar.refresh"), iconRefresh, actionRefresh,
+                Messages.get("toolbar.refresh") + " (F5)");
         toolBar.addSeparator();
-        addToolButton(toolBar, Messages.get("toolbar.exportPng"), iconSavePad, actionSavePadImageAsPng);
-        addToolButton(toolBar, Messages.get("toolbar.exportSvg"), iconSavePad, actionSavePadImageAsSvg);
-        addToolButton(toolBar, Messages.get("toolbar.exportPdf"), iconSavePad, ae -> doExportPdf());
+        addToolButton(toolBar, Messages.get("toolbar.exportPng"), iconSavePad, actionSavePadImageAsPng,
+                Messages.get("toolbar.exportPng") + " (" + menuKey + "+E)");
+        addToolButton(toolBar, Messages.get("toolbar.exportSvg"), iconSavePad, actionSavePadImageAsSvg,
+                Messages.get("toolbar.exportSvg"));
+        addToolButton(toolBar, Messages.get("toolbar.exportPdf"), iconSavePad, ae -> doExportPdf(),
+                Messages.get("toolbar.exportPdf"));
         toolBar.addSeparator();
-        addToolButton(toolBar, Messages.get("toolbar.copyDiagram"), null, ae -> doCopyDiagram());
+        addToolButton(toolBar, Messages.get("toolbar.copyDiagram"), null, ae -> doCopyDiagram(),
+                Messages.get("toolbar.copyDiagram") + " (" + menuKey + "+Shift+C)");
         toolBar.add(Box.createGlue());
         toolBar.addSeparator();
-        addToolButton(toolBar, Messages.get("toolbar.about"), iconHelp, actionVersion);
+        addToolButton(toolBar, Messages.get("toolbar.about"), iconHelp, actionVersion,
+                Messages.get("toolbar.about"));
 
         return toolBar;
     }
 
-    private void addToolButton(JToolBar toolBar, String text, ImageIcon icon, ActionListener action) {
+    private void addToolButton(JToolBar toolBar, String text, ImageIcon icon, ActionListener action, String tooltip) {
         JButton button = new JButton(text, icon);
         button.setBorderPainted(false);
+        button.setFocusable(false);
         button.addActionListener(action);
+        if (tooltip != null) {
+            button.setToolTipText(tooltip);
+        }
         toolBar.add(button);
     }
 
@@ -507,7 +587,7 @@ public class MainFrame extends JFrame {
         menuBar.add(fileMenu);
 
         addMenuItem(fileMenu, Messages.get("menu.file.new"), iconNew, actionNew,
-                KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_N, MENU_MASK));
 
         // テンプレートサブメニュー
         JMenu templateMenu = new JMenu(Messages.get("menu.file.newFromTemplate"));
@@ -523,10 +603,10 @@ public class MainFrame extends JFrame {
 
         fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.open"), iconOpen, actionOpen,
-                KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_O, MENU_MASK));
         addMenuItem(fileMenu, Messages.get("menu.file.importJava"), null,
                 ae -> doImportJavaFile(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_J, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_J, MENU_MASK));
         addMenuItem(fileMenu, Messages.get("menu.file.importJavaProject"), null,
                 ae -> doImportJavaProject(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.classDiagram"), null,
@@ -534,8 +614,7 @@ public class MainFrame extends JFrame {
         addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagram"), null,
                 ae -> doGenerateSequenceDiagram(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.componentDiagram"), null,
-                ae -> doGenerateComponentDiagram(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK));
+                ae -> doGenerateComponentDiagram(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.dependencyGraph"), null,
                 ae -> doGenerateDependencyGraph(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.summary"), null,
@@ -546,28 +625,33 @@ public class MainFrame extends JFrame {
 
         if (!setting.isDisableSaveMenu()) {
             addMenuItem(fileMenu, Messages.get("menu.file.save"), iconSave, actionSave,
-                    KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK));
+                    KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK));
         }
 
         addMenuItem(fileMenu, Messages.get("menu.file.saveAs"), null, actionSaveAs,
-                KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK | InputEvent.SHIFT_DOWN_MASK));
         fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.print"), null, ae -> doPrint(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_P, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_P, MENU_MASK));
         fileMenu.addSeparator();
         addMenuItem(fileMenu, Messages.get("menu.file.close"), null, actionClose, null);
 
         // 編集メニュー
         JMenu editMenu = new JMenu(Messages.get("menu.edit"));
         menuBar.add(editMenu);
+        addMenuItem(editMenu, Messages.get("menu.edit.find"), null, ae -> editor.showFindDialog(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_F, MENU_MASK));
+        addMenuItem(editMenu, Messages.get("menu.edit.findNext"), null, ae -> editor.findNext(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_G, MENU_MASK));
+        editMenu.addSeparator();
         addMenuItem(editMenu, Messages.get("menu.edit.copyDiagram"), null, ae -> doCopyDiagram(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_C, MENU_MASK | InputEvent.SHIFT_DOWN_MASK));
 
         // 出力メニュー
         JMenu outputMenu = new JMenu(Messages.get("menu.output"));
         menuBar.add(outputMenu);
         addMenuItem(outputMenu, Messages.get("menu.output.png"), iconSavePad, actionSavePadImageAsPng,
-                KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_E, MENU_MASK));
         addMenuItem(outputMenu, Messages.get("menu.output.svg"), iconSavePad, actionSavePadImageAsSvg, null);
         addMenuItem(outputMenu, Messages.get("menu.output.pdf"), iconSavePad, ae -> doExportPdf(), null);
 
@@ -578,13 +662,13 @@ public class MainFrame extends JFrame {
                 KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
         viewMenu.addSeparator();
         addMenuItem(viewMenu, Messages.get("menu.view.zoomIn"), null, ae -> doZoom(0.25),
-                KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, MENU_MASK));
         addMenuItem(viewMenu, Messages.get("menu.view.zoomOut"), null, ae -> doZoom(-0.25),
-                KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, MENU_MASK));
         addMenuItem(viewMenu, Messages.get("menu.view.zoomFit"), null, ae -> doZoomFit(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_9, MENU_MASK));
         addMenuItem(viewMenu, Messages.get("menu.view.zoomReset"), null, ae -> doZoomReset(),
-                KeyStroke.getKeyStroke(KeyEvent.VK_1, InputEvent.CTRL_DOWN_MASK));
+                KeyStroke.getKeyStroke(KeyEvent.VK_0, MENU_MASK));
         viewMenu.addSeparator();
         addMenuItem(viewMenu, Messages.get("menu.view.editorFont"), null, actionEditorFont, null);
         addMenuItem(viewMenu, Messages.get("menu.view.padFont"), null, actionViewFont, null);
@@ -617,30 +701,23 @@ public class MainFrame extends JFrame {
             public void keyReleased(KeyEvent ke) {
                 refreshTimer.restart();
                 updateTitle();
-                updateStatusBar();
             }
         });
+        // フォーカス遷移時に未反映の編集があれば即時反映 (ペースト等キー入力を伴わない編集対策)
         editor.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent fe) {
                 if (editor.isEdited()) {
+                    refreshTimer.stop();
                     applyLogic();
                 }
             }
             @Override
             public void focusLost(FocusEvent fe) {
                 if (editor.isEdited()) {
+                    refreshTimer.stop();
                     applyLogic();
                 }
-            }
-        });
-        editor.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent me) {
-                if (editor.isEdited()) {
-                    applyLogic();
-                }
-                updateStatusBar();
             }
         });
         editor.addCaretListener(new CaretListener() {
@@ -652,29 +729,49 @@ public class MainFrame extends JFrame {
     }
 
     private void initErrorListEvent() {
+        messageList.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        messageList.setToolTipText(Messages.get("tooltip.errorList"));
         messageList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 int index = messageList.locationToIndex(e.getPoint());
-                if (index < 0) return;
-                String errorMsg = messageList.getModel().getElementAt(index);
-                // "line N, ..." 形式のメッセージから行番号を抽出
-                if (errorMsg.startsWith("line ")) {
-                    try {
-                        String numStr = errorMsg.substring(5, errorMsg.indexOf(','));
-                        int lineNo = Integer.parseInt(numStr.trim()) - 1;
-                        Element root = editor.getDocument().getDefaultRootElement();
-                        if (lineNo >= 0 && lineNo < root.getElementCount()) {
-                            int offset = root.getElement(lineNo).getStartOffset();
-                            editor.setCaretPosition(offset);
-                            editor.requestFocusInWindow();
-                        }
-                    } catch (NumberFormatException | IndexOutOfBoundsException ex) {
-                        // ignore
-                    }
+                if (index >= 0) {
+                    jumpToErrorLine(messageList.getModel().getElementAt(index));
                 }
             }
         });
+        // Enter キーでもエラー行へジャンプ
+        messageList.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "jumpToError");
+        messageList.getActionMap().put("jumpToError", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                String sel = messageList.getSelectedValue();
+                if (sel != null) {
+                    jumpToErrorLine(sel);
+                }
+            }
+        });
+    }
+
+    private void jumpToErrorLine(String errorMsg) {
+        if (errorMsg == null || !errorMsg.startsWith("line ")) {
+            return;
+        }
+        int comma = errorMsg.indexOf(',');
+        if (comma <= 5) {
+            return;
+        }
+        try {
+            int lineNo = Integer.parseInt(errorMsg.substring(5, comma).trim()) - 1;
+            Element root = editor.getDocument().getDefaultRootElement();
+            if (lineNo >= 0 && lineNo < root.getElementCount()) {
+                int offset = root.getElement(lineNo).getStartOffset();
+                editor.setCaretPosition(offset);
+                editor.requestFocusInWindow();
+            }
+        } catch (NumberFormatException ex) {
+            // ignore
+        }
     }
 
     // --- 内部ロジック ---

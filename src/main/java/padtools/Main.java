@@ -443,33 +443,47 @@ public class Main {
             return;
         }
 
+        // --all は時間がかかる複合処理なので、-v の有無に関わらず進捗ログを stderr に
+        // 出す。ユーザが渡したリスナー (verbose なら stderr / silent なら no-op) は
+        // パース警告等の付随情報として残しつつ、進捗ログは別経路で確実に表示する。
+        ProgressLogger progress = new ProgressLogger();
+        long startMs = System.currentTimeMillis();
+        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
+
         // プロジェクト解析を 1 回だけ実行して再利用する
         AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
 
         // 1) Markdown サマリー
+        progress.step("[1/5] Generating summary.md");
         File summaryFile = new File(fileOut, "summary.md");
         writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
+        progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
         // 2) コンポーネント図
+        progress.step("[2/5] Generating component-diagram.puml");
         PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             compOpts.includeLegend = false;
         }
         File compFile = new File(fileOut, "component-diagram.puml");
         writeText(compFile, PlantUmlComponentDiagram.generate(analysis, compOpts));
+        progress.wrote(compFile);
         listener.onError(null, -1, "wrote " + compFile.getPath());
 
         // 3) 依存グラフ
+        progress.step("[3/5] Generating dependency-graph.puml");
         PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             depOpts.includeLegend = false;
         }
         File depFile = new File(fileOut, "dependency-graph.puml");
         writeText(depFile, PlantUmlGradleDependencyGraph.generate(analysis, depOpts));
+        progress.wrote(depFile);
         listener.onError(null, -1, "wrote " + depFile.getPath());
 
         // 4) クラス図 (UmlGenerator は内部で再走査するが、manifest 連携のため別経路)
+        progress.step("[4/5] Generating class-diagram.puml (scanning Java/AIDL)");
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
@@ -479,9 +493,11 @@ public class Main {
         }
         File clsFile = new File(fileOut, "class-diagram.puml");
         writeText(clsFile, padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts));
+        progress.wrote(clsFile, "(" + infos.size() + " class(es))");
         listener.onError(null, -1, "wrote " + clsFile.getPath());
 
         // 5) Java→PAD
+        progress.step("[5/5] Generating pad.spd (Java to SPD conversion)");
         JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
         if (Boolean.TRUE.equals(legendOverride)) {
             convOpts.includeLegend = true;
@@ -489,7 +505,49 @@ public class Main {
         String spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
         File spdFile = new File(fileOut, "pad.spd");
         writeText(spdFile, spd);
+        progress.wrote(spdFile);
         listener.onError(null, -1, "wrote " + spdFile.getPath());
+
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        progress.done(fileOut, elapsedMs);
+    }
+
+    /**
+     * {@code --all} 専用の進捗ロガー。{@code -v} の有無に関わらず常に stderr に出力する。
+     */
+    private static final class ProgressLogger {
+        void step(String msg) {
+            System.err.println("[padtools] " + msg);
+        }
+
+        void wrote(File f) {
+            wrote(f, null);
+        }
+
+        void wrote(File f, String suffix) {
+            long size = f.exists() ? f.length() : 0L;
+            StringBuilder sb = new StringBuilder("[padtools]     -> ");
+            sb.append(f.getName()).append(" (").append(formatBytes(size)).append(')');
+            if (suffix != null && !suffix.isEmpty()) {
+                sb.append(' ').append(suffix);
+            }
+            System.err.println(sb.toString());
+        }
+
+        void done(File outDir, long elapsedMs) {
+            System.err.println("[padtools] Done in " + elapsedMs + " ms. "
+                    + "Output: " + outDir.getAbsolutePath());
+        }
+
+        private static String formatBytes(long n) {
+            if (n < 1024) {
+                return n + "B";
+            }
+            if (n < 1024 * 1024) {
+                return (n / 1024) + "KB";
+            }
+            return String.format("%.1fMB", n / 1024.0 / 1024.0);
+        }
     }
 
     private static void printUsage() {

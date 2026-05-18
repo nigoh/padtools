@@ -56,6 +56,11 @@ public final class PlantUmlManifestDiagram {
         out.append("  BackgroundColor<<application>> #E0EEFF\n");
         out.append("  BorderColor<<application>> #4A6FB7\n");
         out.append("}\n");
+        // FOREGROUND_SERVICE_* permission を強調するための専用色 (Android 14+ で必須化)
+        out.append("skinparam component {\n");
+        out.append("  BackgroundColor<<fgs>> #FDEBD0\n");
+        out.append("  BorderColor<<fgs>>     #B9770E\n");
+        out.append("}\n");
 
         boolean any = false;
         int seq = 0;
@@ -130,6 +135,48 @@ public final class PlantUmlManifestDiagram {
         if (m.getTargetSdkVersion() != null) {
             header.append("\\ntargetSdk: ").append(m.getTargetSdkVersion());
         }
+        // Android 12+/13+/14+ で重要なセキュリティ・UX 属性は宣言があるものだけ追記。
+        if (m.getApplicationUsesCleartextTraffic() != null) {
+            header.append("\\nusesCleartextTraffic: ")
+                    .append(m.getApplicationUsesCleartextTraffic());
+        }
+        if (m.getApplicationNetworkSecurityConfig() != null) {
+            header.append("\\nnetworkSecurityConfig: ")
+                    .append(escape(m.getApplicationNetworkSecurityConfig()));
+        }
+        if (m.getApplicationEnableOnBackInvokedCallback() != null) {
+            header.append("\\nenableOnBackInvokedCallback: ")
+                    .append(m.getApplicationEnableOnBackInvokedCallback());
+        }
+        if (m.getApplicationLocaleConfig() != null) {
+            header.append("\\nlocaleConfig: ")
+                    .append(escape(m.getApplicationLocaleConfig()));
+        }
+        if (m.getApplicationDataExtractionRules() != null) {
+            header.append("\\ndataExtractionRules: ")
+                    .append(escape(m.getApplicationDataExtractionRules()));
+        }
+        if (m.getApplicationHardwareAccelerated() != null) {
+            header.append("\\nhardwareAccelerated: ")
+                    .append(m.getApplicationHardwareAccelerated());
+        }
+        if (m.getApplicationLargeHeap() != null) {
+            header.append("\\nlargeHeap: ").append(m.getApplicationLargeHeap());
+        }
+        if (m.getApplicationAppCategory() != null) {
+            header.append("\\nappCategory: ").append(escape(m.getApplicationAppCategory()));
+        }
+        if (o.showMetaData && !m.getApplicationProperties().isEmpty()) {
+            // <property> は Android 12+ の正式 API メタデータ。meta-data と分けて表示する。
+            header.append("\\n--properties--");
+            for (AndroidPropertyInfo p : m.getApplicationProperties()) {
+                String v = p.effectiveValue();
+                header.append("\\n").append(escape(p.getName()));
+                if (v != null) {
+                    header.append(" = ").append(escape(v));
+                }
+            }
+        }
         if (o.showMetaData && !m.getApplicationMetaData().isEmpty()) {
             header.append("\\n--meta-data--");
             for (Map.Entry<String, String> me : m.getApplicationMetaData().entrySet()) {
@@ -180,7 +227,12 @@ public final class PlantUmlManifestDiagram {
                 labelBuf.append("\\n→ ").append(escape(shortName(c.getTargetActivity())));
             }
             if (c.getForegroundServiceType() != null) {
+                int api = ForegroundServiceTypeCatalog.minApiLevelFor(
+                        c.getForegroundServiceType());
                 labelBuf.append("\\nfgType: ").append(escape(c.getForegroundServiceType()));
+                if (api > 0) {
+                    labelBuf.append(" (API ").append(api).append("+)");
+                }
             }
             out.append(inner).append("component \"").append(labelBuf)
                     .append("\" as ").append(alias).append(' ').append(stereo);
@@ -220,7 +272,11 @@ public final class PlantUmlManifestDiagram {
         for (String p : perms) {
             int dot = p.lastIndexOf('.');
             String shortP = dot >= 0 ? p.substring(dot + 1) : p;
-            out.append("  [").append(shortP).append("] <<permission>>\n");
+            // FOREGROUND_SERVICE_* は Android 14+ で service の fgType と対になる
+            // 必須宣言なので、別ステレオタイプで識別できるようにする。
+            String stereo = ForegroundServiceTypeCatalog.isForegroundServicePermission(p)
+                    ? " <<permission>> <<fgs>>" : " <<permission>>";
+            out.append("  [").append(shortP).append("]").append(stereo).append('\n');
         }
         out.append("}\n");
     }
@@ -277,6 +333,8 @@ public final class PlantUmlManifestDiagram {
         out.append("<<src:flavor>>                  main 以外の sourceSet (debug 等)\n");
         if (o.showPermissions) {
             out.append("[X] <<permission>>              uses-permission\n");
+            out.append("[X] <<fgs>>                     "
+                    + "FOREGROUND_SERVICE_* permission (Android 14+)\n");
         }
         if (o.showFeatures) {
             out.append("usecase <<feature>>             uses-feature\n");

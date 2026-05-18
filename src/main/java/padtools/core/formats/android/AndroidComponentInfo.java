@@ -40,6 +40,7 @@ public class AndroidComponentInfo {
     private String foregroundServiceType;
     private final List<AndroidIntentFilter> intentFilters = new ArrayList<>();
     private final Map<String, String> metaData = new LinkedHashMap<>();
+    private final List<AndroidPropertyInfo> properties = new ArrayList<>();
 
     public AndroidComponentInfo(Kind kind, String name) {
         this.kind = kind;
@@ -143,6 +144,19 @@ public class AndroidComponentInfo {
 
     public Map<String, String> getMetaData() {
         return metaData;
+    }
+
+    /** コンポーネント直下の {@code <property>} 宣言。 */
+    public List<AndroidPropertyInfo> getProperties() {
+        return properties;
+    }
+
+    /**
+     * {@code foregroundServiceType} 文字列に含まれる種別を要求 API レベルの大きい順に分解する。
+     * 例: {@code "shortService|dataSync"} → {@code [shortService(34), dataSync(29)]}。
+     */
+    public List<String> getForegroundServiceTypeList() {
+        return ForegroundServiceTypeCatalog.split(foregroundServiceType);
     }
 
     /** ランチャー Activity か判定 (Activity 限定)。 */

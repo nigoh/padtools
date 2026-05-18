@@ -20,6 +20,15 @@ public class AndroidManifestInfo {
     private Integer minSdkVersion;
     private Integer targetSdkVersion;
     private Integer maxSdkVersion;
+    // Android 10+ / 13+ / 14+ で追加された Application 属性。値は宣言があるものだけ非 null。
+    private Boolean applicationUsesCleartextTraffic;
+    private String applicationNetworkSecurityConfig;
+    private Boolean applicationEnableOnBackInvokedCallback;
+    private String applicationLocaleConfig;
+    private String applicationDataExtractionRules;
+    private Boolean applicationHardwareAccelerated;
+    private Boolean applicationLargeHeap;
+    private String applicationAppCategory;
 
     private final List<AndroidComponentInfo> activities = new ArrayList<>();
     private final List<AndroidComponentInfo> services = new ArrayList<>();
@@ -29,6 +38,7 @@ public class AndroidManifestInfo {
     private final List<AndroidCustomPermission> customPermissions = new ArrayList<>();
     private final List<String> features = new ArrayList<>();
     private final Map<String, String> applicationMetaData = new LinkedHashMap<>();
+    private final List<AndroidPropertyInfo> applicationProperties = new ArrayList<>();
 
     public String getPackageName() {
         return packageName;
@@ -149,6 +159,80 @@ public class AndroidManifestInfo {
 
     public Map<String, String> getApplicationMetaData() {
         return applicationMetaData;
+    }
+
+    /** Application 直下の {@code <property>} 宣言。 */
+    public List<AndroidPropertyInfo> getApplicationProperties() {
+        return applicationProperties;
+    }
+
+    public Boolean getApplicationUsesCleartextTraffic() {
+        return applicationUsesCleartextTraffic;
+    }
+
+    public void setApplicationUsesCleartextTraffic(Boolean v) {
+        this.applicationUsesCleartextTraffic = v;
+    }
+
+    /** {@code @xml/network_security_config} のようなリソース参照。 */
+    public String getApplicationNetworkSecurityConfig() {
+        return applicationNetworkSecurityConfig;
+    }
+
+    public void setApplicationNetworkSecurityConfig(String v) {
+        this.applicationNetworkSecurityConfig = v;
+    }
+
+    /** Android 13+: Predictive Back Gesture を有効化したか。 */
+    public Boolean getApplicationEnableOnBackInvokedCallback() {
+        return applicationEnableOnBackInvokedCallback;
+    }
+
+    public void setApplicationEnableOnBackInvokedCallback(Boolean v) {
+        this.applicationEnableOnBackInvokedCallback = v;
+    }
+
+    /** Android 13+: 対応ロケール宣言 ({@code @xml/locale_config})。 */
+    public String getApplicationLocaleConfig() {
+        return applicationLocaleConfig;
+    }
+
+    public void setApplicationLocaleConfig(String v) {
+        this.applicationLocaleConfig = v;
+    }
+
+    /** Android 12+: D2D/B&R で吸い出される範囲の宣言 ({@code @xml/data_extraction_rules})。 */
+    public String getApplicationDataExtractionRules() {
+        return applicationDataExtractionRules;
+    }
+
+    public void setApplicationDataExtractionRules(String v) {
+        this.applicationDataExtractionRules = v;
+    }
+
+    public Boolean getApplicationHardwareAccelerated() {
+        return applicationHardwareAccelerated;
+    }
+
+    public void setApplicationHardwareAccelerated(Boolean v) {
+        this.applicationHardwareAccelerated = v;
+    }
+
+    public Boolean getApplicationLargeHeap() {
+        return applicationLargeHeap;
+    }
+
+    public void setApplicationLargeHeap(Boolean v) {
+        this.applicationLargeHeap = v;
+    }
+
+    /** Android 12+: {@code "social" / "productivity" / "game" / ...} 等のアプリ分類ヒント。 */
+    public String getApplicationAppCategory() {
+        return applicationAppCategory;
+    }
+
+    public void setApplicationAppCategory(String v) {
+        this.applicationAppCategory = v;
     }
 
     /** 全コンポーネントを 1 つのリストに集約。 */

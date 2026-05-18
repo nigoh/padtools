@@ -262,6 +262,90 @@ public class AndroidManifestParserTest {
     }
 
     @Test
+    public void testApplicationModernAttributes() {
+        // Android 12+/13+/14+ で重要になった application 属性を抽出する。
+        String xml =
+                "<manifest " + NS + " package=\"p\">\n"
+                        + "  <application"
+                        + " android:usesCleartextTraffic=\"false\""
+                        + " android:networkSecurityConfig=\"@xml/nsc\""
+                        + " android:enableOnBackInvokedCallback=\"true\""
+                        + " android:localeConfig=\"@xml/locales_config\""
+                        + " android:dataExtractionRules=\"@xml/data_extraction_rules\""
+                        + " android:hardwareAccelerated=\"true\""
+                        + " android:largeHeap=\"false\""
+                        + " android:appCategory=\"productivity\"/>\n"
+                        + "</manifest>\n";
+        AndroidManifestInfo info = AndroidManifestParser.parse(xml);
+        assertEquals(Boolean.FALSE, info.getApplicationUsesCleartextTraffic());
+        assertEquals("@xml/nsc", info.getApplicationNetworkSecurityConfig());
+        assertEquals(Boolean.TRUE, info.getApplicationEnableOnBackInvokedCallback());
+        assertEquals("@xml/locales_config", info.getApplicationLocaleConfig());
+        assertEquals("@xml/data_extraction_rules", info.getApplicationDataExtractionRules());
+        assertEquals(Boolean.TRUE, info.getApplicationHardwareAccelerated());
+        assertEquals(Boolean.FALSE, info.getApplicationLargeHeap());
+        assertEquals("productivity", info.getApplicationAppCategory());
+    }
+
+    @Test
+    public void testPropertyElement() {
+        // Android 12+ の <property> を application と service の配下で読む。
+        String xml =
+                "<manifest " + NS + " package=\"com.x\">\n"
+                        + "  <application>\n"
+                        + "    <property android:name=\"com.x.LEVEL\" android:value=\"PRO\"/>\n"
+                        + "    <property android:name=\"com.x.CONFIG\""
+                        + " android:resource=\"@xml/cfg\"/>\n"
+                        + "    <service android:name=\".SpecialSvc\""
+                        + " android:foregroundServiceType=\"specialUse\">\n"
+                        + "      <property"
+                        + " android:name=\"android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE\""
+                        + " android:value=\"my-subtype\"/>\n"
+                        + "    </service>\n"
+                        + "  </application>\n"
+                        + "</manifest>\n";
+        AndroidManifestInfo info = AndroidManifestParser.parse(xml);
+        assertEquals(2, info.getApplicationProperties().size());
+        AndroidPropertyInfo p0 = info.getApplicationProperties().get(0);
+        assertEquals("com.x.LEVEL", p0.getName());
+        assertEquals("PRO", p0.getValue());
+        assertEquals("PRO", p0.effectiveValue());
+        AndroidPropertyInfo p1 = info.getApplicationProperties().get(1);
+        assertEquals("@xml/cfg", p1.getResource());
+        assertEquals("@xml/cfg", p1.effectiveValue());
+        AndroidComponentInfo svc = info.getServices().get(0);
+        assertEquals(1, svc.getProperties().size());
+        assertEquals("android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
+                svc.getProperties().get(0).getName());
+        assertEquals("my-subtype", svc.getProperties().get(0).getValue());
+    }
+
+    @Test
+    public void testForegroundServiceTypeCatalog() {
+        // Android 14 / 15 で追加された種別を含めて API レベルが正しく分かること。
+        assertEquals(34, ForegroundServiceTypeCatalog.get("shortService").getMinApiLevel());
+        assertEquals(34, ForegroundServiceTypeCatalog.get("specialUse").getMinApiLevel());
+        assertEquals(34, ForegroundServiceTypeCatalog.get("health").getMinApiLevel());
+        assertEquals(35, ForegroundServiceTypeCatalog.get("mediaProcessing").getMinApiLevel());
+        // 連結値は構成種別の最大 API を採用する。
+        assertEquals(34, ForegroundServiceTypeCatalog.minApiLevelFor("dataSync|shortService"));
+        assertEquals(35,
+                ForegroundServiceTypeCatalog.minApiLevelFor("dataSync|mediaProcessing"));
+        // permission → type の逆引き
+        assertEquals("specialUse",
+                ForegroundServiceTypeCatalog.typeForPermission(
+                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE"));
+        assertEquals("mediaProcessing",
+                ForegroundServiceTypeCatalog.typeForPermission(
+                        "android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING"));
+        // 通常 permission は false
+        assertFalse(ForegroundServiceTypeCatalog.isForegroundServicePermission(
+                "android.permission.INTERNET"));
+        assertTrue(ForegroundServiceTypeCatalog.isForegroundServicePermission(
+                "android.permission.FOREGROUND_SERVICE_HEALTH"));
+    }
+
+    @Test
     public void testIntentFilterDeepLink() {
         String xml =
                 "<manifest " + NS + " package=\"com.x\">\n"

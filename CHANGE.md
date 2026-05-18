@@ -4,6 +4,14 @@ Change log
 Unreleased
 --------
 
+* **Android 14 / 15 manifest 属性への対応** (`AndroidPropertyInfo` / `ForegroundServiceTypeCatalog` / `AndroidManifestInfo` 拡張)
+    * **`<property>` 要素のパース** (Android 12+): application / activity / service / receiver / provider 配下の `<property android:name=... value=.../resource=.../>` を `AndroidPropertyInfo` で保持。`android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 等の Android 14 必須 property を見逃さない
+    * **`foregroundServiceType` カタログ化** (`ForegroundServiceTypeCatalog`): Android 10 (`dataSync` / `mediaPlayback` / `phoneCall` / `location` / `connectedDevice` / `mediaProjection`), Android 11 (`camera` / `microphone`), Android 14 (`health` / `remoteMessaging` / `shortService` / `specialUse` / `systemExempted`), Android 15 (`mediaProcessing`) の全 14 種を最小 API レベル + 対応 `FOREGROUND_SERVICE_*` permission とともに保持
+    * **`|` 連結値の分解と API レベル算出**: `"dataSync|shortService"` のような連結値を分解し、構成種別の最大 API レベルを返す
+    * **FOREGROUND_SERVICE permission の整合チェック**: Markdown サマリーに `Foreground Service Types` 表を追加し、各 service の foregroundServiceType に必要な permission が `<uses-permission>` 宣言されているかを yes / **MISSING** で表示
+    * **Application 新属性の抽出**: `usesCleartextTraffic` / `networkSecurityConfig` / `enableOnBackInvokedCallback` (Android 13+ Predictive Back) / `localeConfig` (Android 13+) / `dataExtractionRules` (Android 12+) / `hardwareAccelerated` / `largeHeap` / `appCategory` を `AndroidManifestInfo` で保持
+    * **Manifest 図への反映**: Application ノードに上記新属性を行追加。Service ノードの `fgType` 表示に `(API 35+)` のような Android 要求レベルラベルを付与。`FOREGROUND_SERVICE_*` permission は別ステレオタイプ `<<fgs>>` で橙色枠に強調
+    * **Markdown サマリーへの反映**: `Application attributes (Android 12+/13+/14+)` / `Application properties` / `Foreground Service Types (Android 14+/15+)` の 3 セクションを追加
 * **AndroidManifest 解析の濃厚化 (uses-sdk / 独自 permission / activity-alias / foregroundServiceType / Deep Link)**
     * **`<uses-sdk>` のパース**: `AndroidManifestInfo.minSdkVersion / targetSdkVersion / maxSdkVersion` を新設し、`AndroidManifestParser.parseUsesSdk` が読み込む。Manifest 図の Application ノードと Markdown サマリーにも反映
     * **独自 `<permission>` 宣言の保持** (`AndroidCustomPermission`)

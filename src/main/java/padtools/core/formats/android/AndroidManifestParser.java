@@ -161,12 +161,29 @@ public final class AndroidManifestParser {
         info.setApplicationTheme(attr(app, "theme", null));
         info.setApplicationDebuggable(parseBool(attr(app, "debuggable", null)));
         info.setApplicationAllowBackup(parseBool(attr(app, "allowBackup", null)));
+        // Android 10+ / 12+ / 13+ で重要になった application 属性。
+        info.setApplicationUsesCleartextTraffic(parseBool(attr(app, "usesCleartextTraffic", null)));
+        info.setApplicationNetworkSecurityConfig(attr(app, "networkSecurityConfig", null));
+        info.setApplicationEnableOnBackInvokedCallback(
+                parseBool(attr(app, "enableOnBackInvokedCallback", null)));
+        info.setApplicationLocaleConfig(attr(app, "localeConfig", null));
+        info.setApplicationDataExtractionRules(attr(app, "dataExtractionRules", null));
+        info.setApplicationHardwareAccelerated(parseBool(attr(app, "hardwareAccelerated", null)));
+        info.setApplicationLargeHeap(parseBool(attr(app, "largeHeap", null)));
+        info.setApplicationAppCategory(attr(app, "appCategory", null));
         // application 直下の meta-data
         for (Element md : childElements(app, "meta-data")) {
             String name = attr(md, "name", "");
             String value = attr(md, "value", attr(md, "resource", ""));
             if (!name.isEmpty()) {
                 info.getApplicationMetaData().put(name, value);
+            }
+        }
+        // application 直下の <property> (Android 12+)
+        for (Element prop : childElements(app, "property")) {
+            AndroidPropertyInfo p = buildProperty(prop);
+            if (p != null) {
+                info.getApplicationProperties().add(p);
             }
         }
         // 各コンポーネント
@@ -218,7 +235,25 @@ public final class AndroidManifestParser {
                 c.getMetaData().put(name, value);
             }
         }
+        // コンポーネント直下の <property> (Android 12+)
+        for (Element prop : childElements(e, "property")) {
+            AndroidPropertyInfo p = buildProperty(prop);
+            if (p != null) {
+                c.getProperties().add(p);
+            }
+        }
         return c;
+    }
+
+    private static AndroidPropertyInfo buildProperty(Element e) {
+        String name = attr(e, "name", "");
+        if (name.isEmpty()) {
+            return null;
+        }
+        AndroidPropertyInfo p = new AndroidPropertyInfo(name);
+        p.setValue(emptyToNull(attr(e, "value", "")));
+        p.setResource(emptyToNull(attr(e, "resource", "")));
+        return p;
     }
 
     private static AndroidIntentFilter buildIntentFilter(Element e) {

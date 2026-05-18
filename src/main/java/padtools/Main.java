@@ -1,6 +1,6 @@
 package padtools;
 
-import padtools.converter.Converter;
+import padtools.app.uml.UmlApp;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.AndroidProjectAnalyzer;
 import padtools.core.formats.android.AndroidManifestInfo;
@@ -11,15 +11,12 @@ import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
-import padtools.core.formats.java.JavaSourceConverter;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
-import padtools.editor.Editor;
 import padtools.util.ErrorListener;
 import padtools.util.Option;
 import padtools.util.OptionParser;
-import padtools.util.Messages;
 import padtools.util.UnknownOptionException;
 
 import java.io.File;
@@ -75,9 +72,6 @@ public class Main {
         //オプション定義
         final Option optHelp = new Option("h", "help", false);
         final Option optOut = new Option("o", "output", true);
-        final Option optScale = new Option("s", "scale", true);
-        final Option optJava = new Option("j", "java", false);
-        final Option optJavaProject = new Option("J", "java-project", false);
         final Option optClassDiagram = new Option("c", "class-diagram", false);
         final Option optSequenceDiagram = new Option("q", "sequence-diagram", true);
         final Option optVerbose = new Option("v", "verbose", false);
@@ -98,11 +92,9 @@ public class Main {
         final Option optListMethods = new Option(null, "list-methods", false);
         final Option optSeqDepth = new Option(null, "seq-depth", true);
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
-        // UML 専用 GUI へ切り替える隠しフラグ (PR5 で既定化予定)。
-        final Option optUiUml = new Option(null, "ui", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
-                optHelp, optOut, optScale, optJava, optJavaProject,
+                optHelp, optOut,
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
                 optGradle, optManifest, optComponent, optDepGraph, optSummary,
@@ -110,8 +102,7 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams,
-                optUiUml});
+                optSequenceDiagrams});
 
         try {
             optParser.parse(args, 1);
@@ -139,22 +130,9 @@ public class Main {
             file_out = new File(optOut.getArguments().getLast());
         }
 
-        Double scale;
-        if (optScale.getArguments().isEmpty()) {
-            scale = null;
-        } else {
-            try {
-                scale = Double.parseDouble(optScale.getArguments().getLast());
-            } catch (NumberFormatException ex) {
-                System.err.println(Messages.get("error.invalidScale"));
-                System.exit(1);
-                return;
-            }
-        }
-
         ErrorListener listener = optVerbose.isSet()
                 ? ErrorListener.stderr() : ErrorListener.silent();
-        // UML はデフォルトで凡例 ON、PAD は OFF。明示的な --legend / --no-legend で上書き可。
+        // UML 凡例は既定 ON。明示的な --legend / --no-legend で上書き可。
         Boolean legendOverride = null;
         if (optLegend.isSet()) {
             legendOverride = Boolean.TRUE;
@@ -210,86 +188,15 @@ public class Main {
                     listener, legendOverride, mergeManifest, umlOverrides);
             return;
         }
-        if (optJava.isSet() || optJavaProject.isSet()) {
-            handleJavaInput(file_in, file_out, scale, optJavaProject.isSet(),
-                    listener, legendOverride);
+
+        if (file_out != null) {
+            System.err.println("-o requires one of: -c / -q / -d / -G / -g / -m"
+                    + " / --summary / -A / -Q / --list-methods");
+            System.exit(1);
             return;
         }
-
-        if (file_out == null) {
-            // --ui=uml で UML 専用 GUI を起動 (PR5 で既定化予定)
-            String uiArg = optUiUml.getArguments().isEmpty()
-                    ? null : optUiUml.getArguments().getLast();
-            if (uiArg != null && uiArg.equalsIgnoreCase("uml")) {
-                padtools.app.uml.UmlApp.launch(file_in);
-                return;
-            }
-            Editor.openEditor(file_in);
-        } else {
-            Converter.convert(file_in, file_out, scale);
-        }
-    }
-
-    /**
-     * Java ソースを入力とした PAD 生成処理。
-     * @param fileIn 入力ファイル (.java) またはプロジェクトディレクトリ。null の場合は標準入力
-     * @param fileOut 出力先 (.spd または .png/.svg/.pdf)。null なら標準出力に SPD を書く
-     * @param scale 画像スケール
-     * @param projectMode true ならプロジェクトディレクトリ走査モード
-     * @param listener エラーリスナー (verbose 時に stderr へ出す)
-     */
-    private static void handleJavaInput(File fileIn, File fileOut, Double scale,
-                                         boolean projectMode,
-                                         ErrorListener listener,
-                                         Boolean legendOverride) throws IOException {
-        JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
-        if (Boolean.TRUE.equals(legendOverride)) {
-            convOpts.includeLegend = true;
-        }
-        String spd;
-        if (projectMode) {
-            if (fileIn == null) {
-                System.err.println("Project mode requires a directory argument.");
-                System.exit(1);
-                return;
-            }
-            spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
-        } else {
-            String src;
-            if (fileIn == null) {
-                src = readAll(System.in);
-            } else {
-                src = AndroidProjectScanner.readFile(fileIn);
-            }
-            spd = JavaSourceConverter.convert(src, convOpts, listener);
-        }
-
-        String outName = fileOut != null ? fileOut.getName().toLowerCase() : "";
-        if (fileOut == null || outName.endsWith(".spd") || outName.endsWith(".txt")) {
-            writeText(fileOut, spd);
-            return;
-        }
-
-        // 画像出力の場合は SPD をいったん一時ファイルへ書き、Converter で変換する
-        File tmp = File.createTempFile("padtools-java-", ".spd");
-        try {
-            writeText(tmp, spd);
-            Converter.convert(tmp, fileOut, scale);
-        } finally {
-            if (!tmp.delete()) {
-                tmp.deleteOnExit();
-            }
-        }
-    }
-
-    private static String readAll(java.io.InputStream in) throws IOException {
-        StringBuilder sb = new StringBuilder();
-        byte[] buf = new byte[4096];
-        int n;
-        while ((n = in.read(buf)) > 0) {
-            sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
-        }
-        return sb.toString();
+        // 既定: UML 専用 GUI を起動。引数があれば初期プロジェクトとして渡す。
+        UmlApp.launch(file_in);
     }
 
     private static void writeText(File f, String content) throws IOException {
@@ -548,7 +455,6 @@ public class Main {
      *   <li>{@code class-diagram.svg} - PlantUML クラス図 (manifest 自動マージ)</li>
      *   <li>{@code component-diagram.svg} - PlantUML Android コンポーネント図</li>
      *   <li>{@code dependency-graph.svg} - PlantUML Gradle 依存グラフ</li>
-     *   <li>{@code pad.svg} - Java→PAD 図 (Apache Batik で SVG 化)</li>
      *   <li>{@code methods.txt} - シーケンス図の起点候補一覧 ({@code Class.method}) </li>
      *   <li>{@code sequence-diagrams/}{@code <Class.method>.svg} - Android ライフサイクル
      *       (Activity/Service の {@code onCreate} 等) を起点に自動生成したシーケンス図</li>
@@ -594,14 +500,14 @@ public class Main {
         AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
 
         // 1) Markdown サマリー
-        progress.step("[1/7] Generating summary.md");
+        progress.step("[1/6] Generating summary.md");
         File summaryFile = new File(fileOut, "summary.md");
         writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
         progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
         // 2) コンポーネント図 (SVG)
-        progress.step("[2/7] Generating component-diagram.svg");
+        progress.step("[2/6] Generating component-diagram.svg");
         PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             compOpts.includeLegend = false;
@@ -612,7 +518,7 @@ public class Main {
         listener.onError(null, -1, "wrote " + compFile.getPath());
 
         // 3) 依存グラフ (SVG)
-        progress.step("[3/7] Generating dependency-graph.svg");
+        progress.step("[3/6] Generating dependency-graph.svg");
         PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             depOpts.includeLegend = false;
@@ -624,7 +530,7 @@ public class Main {
         listener.onError(null, -1, "wrote " + depFile.getPath());
 
         // 4) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
-        progress.step("[4/7] Generating class-diagram.svg (scanning Java/AIDL)");
+        progress.step("[4/6] Generating class-diagram.svg (scanning Java/AIDL)");
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
@@ -641,31 +547,8 @@ public class Main {
         progress.wrote(clsFile, "(" + infos.size() + " class(es))");
         listener.onError(null, -1, "wrote " + clsFile.getPath());
 
-        // 5) PAD (Java→SPD→SVG)。中間 SPD は temp ファイルに置き Converter.convert で SVG 化する。
-        progress.step("[5/7] Generating pad.svg (Java to PAD)");
-        JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
-        if (Boolean.TRUE.equals(legendOverride)) {
-            convOpts.includeLegend = true;
-        }
-        String spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
-        File padSvg = new File(fileOut, "pad.svg");
-        File tmpSpd = File.createTempFile("padtools-all-", ".spd");
-        try {
-            try (Writer w = new OutputStreamWriter(
-                    new FileOutputStream(tmpSpd), StandardCharsets.UTF_8)) {
-                w.write(spd);
-            }
-            Converter.convert(tmpSpd, padSvg, 1.0);
-        } finally {
-            if (!tmpSpd.delete()) {
-                tmpSpd.deleteOnExit();
-            }
-        }
-        progress.wrote(padSvg);
-        listener.onError(null, -1, "wrote " + padSvg.getPath());
-
-        // 6) シーケンス図の起点候補一覧
-        progress.step("[6/7] Generating methods.txt (sequence diagram entry candidates)");
+        // 5) シーケンス図の起点候補一覧
+        progress.step("[5/6] Generating methods.txt (sequence diagram entry candidates)");
         java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
                 padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
         StringBuilder methodsBuf = new StringBuilder();
@@ -680,8 +563,8 @@ public class Main {
         progress.wrote(methodsFile, "(" + candidates.size() + " method(s))");
         listener.onError(null, -1, "wrote " + methodsFile.getPath());
 
-        // 7) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
-        progress.step("[7/7] Generating sequence-diagrams/ (Android lifecycle entry points)");
+        // 6) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
+        progress.step("[6/6] Generating sequence-diagrams/ (Android lifecycle entry points)");
         File seqDir = new File(fileOut, "sequence-diagrams");
         if (!seqDir.exists() && !seqDir.mkdirs()) {
             System.err.println("[padtools]     Skipping sequence-diagrams (cannot create dir)");
@@ -762,25 +645,23 @@ public class Main {
     }
 
     private static void printUsage() {
-        System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-v] [-h] [input]");
-        System.err.println("  -o file: Save to file "
-                + "(spd/png/svg/pdf for PAD, puml/svg for UML, md for summary).");
-        System.err.println("  -s scale: Image scale (available when result is image).");
+        System.err.println(
+                "Arguments: [-o file] [-c|-q M|-d|-G|-g|-m|-Q|-A|--summary] [-v] [-h] [input]");
+        System.err.println("  No arguments / [input dir]: Launch UML GUI for the project.");
+        System.err.println("  -o file: Save diagram (puml/svg) or report (md) to file.");
         System.err.println("  -h: Show this help.");
-        System.err.println("  -j --java: Treat input as a Java source file.");
-        System.err.println("  -J --java-project: Gradle/Android project directory.");
         System.err.println("  -c --class-diagram: Output PlantUML class diagram.");
         System.err.println("  -q --sequence-diagram Class.method: PlantUML sequence diagram.");
         System.err.println("  -v --verbose: Emit per-file warnings and summary to stderr.");
-        System.err.println("  -L --legend: Force include legend (PAD: opt-in).");
-        System.err.println("  --no-legend: Force exclude legend (UML: opt-out).");
+        System.err.println("  -L --legend: Force include legend (default on for UML).");
+        System.err.println("  --no-legend: Force exclude legend.");
         System.err.println("  -g --gradle: Output Markdown summary from build.gradle.");
         System.err.println("  -m --manifest: Output Markdown summary from AndroidManifest.xml.");
         System.err.println("  -d --component-diagram: PlantUML Android component diagram.");
         System.err.println("  -G --dependency-graph: PlantUML Gradle dependency graph.");
         System.err.println("  --summary: Full project Markdown summary (dir).");
         System.err.println("  -A --all: Output ALL artifacts as SVG "
-                + "(summary.md + 4 svg files) to the directory specified by -o.");
+                + "(summary.md + svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
         System.err.println("  --no-comments: Disable JavaDoc/comment rendering in class diagram.");
         System.err.println("  --comment-style inline|note: "
@@ -792,6 +673,6 @@ public class Main {
         System.err.println("  --seq-depth N: Sequence trace depth limit (default 5, 0=unlimited).");
         System.err.println("  -Q --sequence-diagrams: Output PlantUML sequence diagrams"
                 + " (.puml + .svg) for Android lifecycle entry points to the directory specified by -o.");
-        System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-d/-G/-g/-m/-Q/-A/--summary.");
+        System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

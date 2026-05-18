@@ -1,6 +1,34 @@
 Change log
 =============
 
+2.0 (UML-only pivot)
+--------
+
+* **PadTools を「Java + Android + Gradle 特化の UML ツール」へ完全転換**
+    * 旧 PAD (Problem Analysis Diagram) GUI / SPD パーサ / Java→PAD 変換器を全削除 (約 9.7k LoC 減)
+    * 新規 UML 専用 Swing GUI を導入 (`padtools.app.uml.*`)
+        * メニュー: File (Open Project / Save Diagram As... / Exit) / Diagram (5 図種ラジオ + シーケンス図起点選択) / View (Zoom In/Out/Reset/Fit) / Help
+        * 左ペイン: プロジェクトのモジュール / パッケージ / クラス ツリー (`ProjectTreePanel`)
+        * 右ペイン: タブ式の Preview (ズーム/パン付き `SvgPreviewPanel`) と PlantUML Source (`PumlSourcePanel`)
+        * ステータスバーにズーム倍率と解析サマリを表示
+    * 起動: 引数なし `java -jar PadTools.jar` で UML GUI が直接起動
+        * プロジェクトディレクトリを引数で渡せば初期解析
+        * 旧 `-j` / `-J` / `-s` (Java→PAD) は廃止
+* **新規 UML 図種: パッケージ図** (`PlantUmlPackageDiagram`)
+    * パッケージごとのクラス数をボックスで表示し、継承 / 実装 / フィールド型を経由したパッケージ間の参照矢印を集約
+* **シーケンス図起点選択ダイアログ**
+    * 候補メソッド一覧 + サブストリング絞り込みフィールド
+    * Diagram → Choose Sequence Entry... から呼び出し
+* **PNG 直接プレビュー**
+    * 同梱 PlantUML の PNG 出力経由で `BufferedImage` 化 (Apache Batik を経由しない)
+    * SVG エクスポート時のみ `PlantUmlRenderer.renderSvg` を呼ぶ
+* **エクスポート機能** (`UmlExporter`)
+    * SVG / PNG / PUML の各形式に対応した一元的な保存 API
+    * File → Save Diagram As... から拡張子フィルタで切替
+* **CLI 整理**
+    * 残オプション: `-c -q -d -G -g -m -A -Q --summary --list-methods --seq-depth` ほか UML 系すべて
+    * `--all` の `pad.svg` ステップを廃止し 7 → 6 ステップに
+
 1.7
 --------
 

@@ -1,7 +1,5 @@
 package padtools.core.formats.java;
 
-import padtools.util.ErrorListener;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -24,11 +22,9 @@ import java.util.Set;
  * <p>主な利用方法:</p>
  * <pre>{@code
  *   List<File> javaFiles = AndroidProjectScanner.scan(new File("/path/to/MyApp"));
- *   StringBuilder sb = new StringBuilder();
  *   for (File f : javaFiles) {
  *       String src = AndroidProjectScanner.readFile(f);
- *       sb.append(JavaSourceConverter.convert(src));
- *       sb.append("\n");
+ *       // ... UML 抽出など、ソース文字列を使った処理 ...
  *   }
  * }</pre>
  */
@@ -162,73 +158,6 @@ public final class AndroidProjectScanner {
             }
         }
         return sb.toString();
-    }
-
-    /**
-     * プロジェクトディレクトリをスキャンし、全 Java ソースを SPD 形式に変換した文字列を返す。
-     * @param projectRoot プロジェクトルート (もしくは単一の .java ファイル)
-     * @param scanOpts スキャンオプション (null 可)
-     * @param convOpts 変換オプション (null 可)
-     * @return SPD 文字列
-     * @throws IOException ファイル読込エラー
-     */
-    public static String convertProject(File projectRoot,
-                                        Options scanOpts,
-                                        JavaSourceConverter.Options convOpts) throws IOException {
-        return convertProject(projectRoot, scanOpts, convOpts, null);
-    }
-
-    /**
-     * リスナー付きプロジェクト変換。個別ファイルの読込失敗は {@code listener} へ通知して継続する。
-     */
-    public static String convertProject(File projectRoot,
-                                        Options scanOpts,
-                                        JavaSourceConverter.Options convOpts,
-                                        ErrorListener listener) throws IOException {
-        ErrorListener l = listener != null ? listener : ErrorListener.silent();
-        List<File> files = scan(projectRoot, scanOpts);
-        StringBuilder out = new StringBuilder();
-        int converted = 0;
-        for (File f : files) {
-            if (!f.getName().toLowerCase().endsWith(".java")) {
-                continue;
-            }
-            String src;
-            try {
-                src = readFile(f);
-            } catch (IOException ex) {
-                l.onError(f.getName(), -1, "read failed: " + ex.getMessage());
-                continue;
-            }
-            String spd;
-            try {
-                spd = JavaSourceConverter.convert(src, convOpts,
-                        wrapWithFile(l, f.getName()));
-            } catch (RuntimeException ex) {
-                l.onError(f.getName(), -1, "convert failed: " + ex.getMessage());
-                continue;
-            }
-            if (spd.isEmpty()) {
-                continue;
-            }
-            if (out.length() > 0) {
-                out.append('\n');
-            }
-            out.append("# === ").append(f.getName()).append(" ===\n");
-            out.append(spd);
-            converted++;
-        }
-        l.onError(null, -1, "processed " + converted + " java file(s)");
-        return out.toString();
-    }
-
-    private static ErrorListener wrapWithFile(ErrorListener inner, String fileName) {
-        if (fileName == null || fileName.isEmpty()) {
-            return inner;
-        }
-        return (source, line, message) ->
-                inner.onError(source != null && !source.isEmpty() ? source : fileName,
-                        line, message);
     }
 
     private AndroidProjectScanner() {

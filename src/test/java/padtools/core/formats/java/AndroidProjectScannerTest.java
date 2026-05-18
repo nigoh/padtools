@@ -5,7 +5,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import padtools.util.ErrorListener;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -13,7 +12,6 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
@@ -231,36 +229,6 @@ public class AndroidProjectScannerTest {
         assertTrue(content.contains("日本語コメント"));
     }
 
-    // --- プロジェクト一括変換 ---
-
-    @Test
-    public void testConvertProject() throws IOException {
-        String spd = AndroidProjectScanner.convertProject(root, null, null);
-        assertTrue(spd, spd.contains("MainActivity.onCreate()"));
-        assertTrue(spd, spd.contains("Util.x()"));
-        // 各ファイルが見出しコメント付きで出力されること
-        assertTrue(spd, spd.contains("# === MainActivity.java ==="));
-        assertTrue(spd, spd.contains("# === Util.java ==="));
-        // テストは除外
-        assertFalse(spd, spd.contains("MainActivityTest"));
-    }
-
-    @Test
-    public void testConvertProjectIncludingTests() throws IOException {
-        AndroidProjectScanner.Options s = new AndroidProjectScanner.Options();
-        s.includeTests = true;
-        String spd = AndroidProjectScanner.convertProject(root, s, null);
-        assertTrue(spd, spd.contains("MainActivityTest"));
-        assertTrue(spd, spd.contains("UiTest"));
-    }
-
-    @Test
-    public void testConvertProjectSingleFile() throws IOException {
-        File mainJava = new File(root, "app/src/main/java/com/example/app/MainActivity.java");
-        String spd = AndroidProjectScanner.convertProject(mainJava, null, null);
-        assertTrue(spd, spd.contains("MainActivity.onCreate()"));
-    }
-
     @Test
     public void testFilesAreSorted() {
         List<File> files = AndroidProjectScanner.scan(root);
@@ -268,21 +236,6 @@ public class AndroidProjectScannerTest {
             assertTrue("files not sorted: " + files.get(i - 1) + " vs " + files.get(i),
                     files.get(i - 1).compareTo(files.get(i)) <= 0);
         }
-    }
-
-    @Test
-    public void testConvertProjectReportsSummary() throws IOException {
-        List<String> log = new ArrayList<>();
-        AndroidProjectScanner.convertProject(root, null, null,
-                ErrorListener.collecting(log));
-        // 末尾に "processed N java file(s)" が含まれる
-        boolean foundSummary = false;
-        for (String s : log) {
-            if (s.contains("processed") && s.contains("file")) {
-                foundSummary = true;
-            }
-        }
-        assertTrue("expected processed summary in log: " + log, foundSummary);
     }
 
     @Test
@@ -321,21 +274,4 @@ public class AndroidProjectScannerTest {
         }
     }
 
-    @Test
-    public void testConvertProjectContinuesOnFailures() throws IOException {
-        // 既存の有効ソースを変換しつつログにサマリが出ることを確認。
-        // readFile の個別失敗は IO の挙動依存のため別途検証する。
-        List<String> log = new ArrayList<>();
-        String spd = AndroidProjectScanner.convertProject(root, null, null,
-                ErrorListener.collecting(log));
-        assertNotNull(spd);
-        assertFalse("expected non-empty spd", spd.isEmpty());
-        boolean foundSummary = false;
-        for (String s : log) {
-            if (s.contains("processed") && s.contains("file")) {
-                foundSummary = true;
-            }
-        }
-        assertTrue(foundSummary);
-    }
 }

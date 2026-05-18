@@ -2,6 +2,8 @@ package padtools.app.uml;
 
 import padtools.Main;
 import padtools.Setting;
+import padtools.core.formats.uml.DiagramStyle;
+import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.ErrorListener;
 
 import javax.swing.BorderFactory;
@@ -69,6 +71,9 @@ public class UmlMainFrame extends JFrame {
     private final ButtonGroup diagramGroup = new ButtonGroup();
     private final java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems
             = new java.util.EnumMap<>(DiagramKind.class);
+    private final ButtonGroup themeGroup = new ButtonGroup();
+    private final java.util.Map<String, JRadioButtonMenuItem> themeItems
+            = new java.util.LinkedHashMap<>();
 
     private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
 
@@ -127,6 +132,7 @@ public class UmlMainFrame extends JFrame {
         bar.add(buildFileMenu());
         bar.add(buildDiagramMenu());
         bar.add(buildViewMenu());
+        bar.add(buildStyleMenu());
         bar.add(buildHelpMenu());
         return bar;
     }
@@ -200,6 +206,65 @@ public class UmlMainFrame extends JFrame {
         m.add(zoomReset);
         m.add(zoomFit);
         return m;
+    }
+
+    private JMenu buildStyleMenu() {
+        JMenu m = new JMenu("Style");
+        m.setMnemonic(KeyEvent.VK_S);
+        DiagramStyle current = PlantUmlRenderer.getStyle();
+        for (String theme : StyleSettingsDialog.THEMES) {
+            String label = theme.isEmpty() ? "(None)" : theme;
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(label);
+            if (theme.equals(current.getTheme() == null ? "" : current.getTheme())) {
+                item.setSelected(true);
+            }
+            item.addActionListener(e -> applyTheme(theme));
+            themeGroup.add(item);
+            themeItems.put(theme, item);
+            m.add(item);
+        }
+        m.addSeparator();
+        JMenuItem advanced = new JMenuItem("Style Settings...");
+        advanced.addActionListener(e -> openStyleSettings());
+        m.add(advanced);
+        return m;
+    }
+
+    private void applyTheme(String theme) {
+        DiagramStyle next = PlantUmlRenderer.getStyle().copy();
+        next.setTheme(theme);
+        applyStyle(next);
+    }
+
+    private void openStyleSettings() {
+        DiagramStyle edited = StyleSettingsDialog.showDialog(this, PlantUmlRenderer.getStyle());
+        if (edited != null) {
+            applyStyle(edited);
+        }
+    }
+
+    /** スタイル変更を全方位 (レンダラ / 永続化 / メニュー UI / 再描画) に反映する。 */
+    private void applyStyle(DiagramStyle style) {
+        PlantUmlRenderer.setStyle(style);
+        try {
+            Main.getSetting().setStyle(style);
+            Main.saveSetting();
+        } catch (RuntimeException ignored) {
+            // 設定保存はベストエフォート
+        }
+        syncThemeMenuSelection(style);
+        refreshDiagram();
+    }
+
+    private void syncThemeMenuSelection(DiagramStyle style) {
+        String theme = style.getTheme() == null ? "" : style.getTheme();
+        JRadioButtonMenuItem item = themeItems.get(theme);
+        if (item != null) {
+            item.setSelected(true);
+        } else {
+            // カスタムテーマ名: ラジオ選択を外す
+            themeGroup.clearSelection();
+        }
     }
 
     private JMenu buildHelpMenu() {

@@ -203,11 +203,7 @@ public final class JavaStructureExtractor {
             results.add(info);
         }
 
-        /**
-         * enum 定数列を ; or } まで読み取り、定数名を {@link JavaClassInfo#getEnumConstants()}
-         * に追加する。{@code A(args)} の引数や {@code A { body }} の無名サブクラスは内容を
-         * 解析せずスキップする。
-         */
+        /** enum 定数を ; or } まで読み取り、引数/無名サブクラス body は名前のみ拾って中身はスキップ。 */
         private void parseEnumConstants(JavaClassInfo cls) {
             while (!atEnd()) {
                 if (peek().is("}")) {

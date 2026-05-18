@@ -96,6 +96,7 @@ public class Main {
         final Option optSeqDepth = new Option(null, "seq-depth", true);
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
         final Option optJetpack = new Option(null, "jetpack", false);
+        final Option optPerFolder = new Option("P", "per-folder", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -107,7 +108,7 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams, optJetpack});
+                optSequenceDiagrams, optJetpack, optPerFolder});
 
         try {
             optParser.parse(args, 1);
@@ -187,6 +188,11 @@ public class Main {
         }
         if (optSummary.isSet()) {
             handleSummary(file_in, file_out, listener);
+            return;
+        }
+        if (optClassDiagram.isSet() && optPerFolder.isSet()) {
+            handleClassDiagramsPerFolder(file_in, file_out, listener,
+                    legendOverride, mergeManifest, umlOverrides);
             return;
         }
         if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
@@ -366,6 +372,58 @@ public class Main {
         int count = generateLifecycleSequenceDiagrams(infos, fileOut, legendOverride,
                 seqDepth, progress, listener);
         progress.wrote(fileOut, "(" + count + " diagram(s))");
+        progress.done(fileOut, System.currentTimeMillis() - startMs);
+    }
+
+    /**
+     * {@code -c --per-folder}: プロジェクトを再帰スキャンし、ソースファイルを直接含む
+     * 各フォルダごとに 1 枚ずつ PlantUML クラス図 ({@code classes.puml} + {@code classes.svg})
+     * を {@code -o} で指定されたディレクトリ配下にサブフォルダ構造を維持して出力する。
+     */
+    private static void handleClassDiagramsPerFolder(File fileIn, File fileOut,
+                                                       ErrorListener listener,
+                                                       Boolean legendOverride,
+                                                       boolean mergeManifest,
+                                                       UmlOverrides overrides) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--per-folder requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        if (fileOut == null) {
+            System.err.println("--per-folder requires an output directory via -o.");
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.exists() && !fileOut.mkdirs()) {
+            System.err.println("Failed to create output directory: " + fileOut);
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.isDirectory()) {
+            System.err.println("-o must point to a directory for --per-folder: " + fileOut);
+            System.exit(1);
+            return;
+        }
+        padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
+                new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            clsOpts.includeLegend = false;
+        }
+        if (overrides != null) {
+            overrides.applyTo(clsOpts);
+        }
+
+        ProgressLogger progress = new ProgressLogger();
+        long startMs = System.currentTimeMillis();
+        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
+        progress.step("Generating per-folder class diagrams (.puml + .svg)");
+        padtools.core.formats.uml.PerFolderClassDiagrams.Result result =
+                padtools.core.formats.uml.PerFolderClassDiagrams.generate(
+                        fileIn, fileOut, null, clsOpts, mergeManifest, null, listener);
+        progress.wrote(fileOut,
+                "(" + result.getFolderCount() + " folder(s), "
+                        + result.getClassCount() + " class(es))");
         progress.done(fileOut, System.currentTimeMillis() - startMs);
     }
 
@@ -729,6 +787,8 @@ public class Main {
                 + " (.puml + .svg) for Android lifecycle entry points to the directory specified by -o.");
         System.err.println("  --jetpack: Enable Jetpack stereotypes (Fragment / ViewModel /"
                 + " Hilt etc.) on class diagram (-c / -A).");
+        System.err.println("  -P --per-folder: With -c: write one class diagram (.puml + .svg)"
+                + " per source folder into the -o directory (preserves subfolder layout).");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

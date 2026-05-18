@@ -4,6 +4,12 @@ Change log
 Unreleased
 --------
 
+* **フォルダ単位のクラス図一括出力** (`PerFolderClassDiagrams`)
+    * プロジェクトを再帰スキャンし、ソースファイルを直接含む各フォルダごとに 1 枚ずつクラス図 (`classes.puml` + `classes.svg`) を生成。出力ディレクトリ配下に元の相対パス階層を維持して書き出す
+    * 大規模プロジェクトで「全クラス 1 枚絵」が読めない/レンダリングが重い問題を緩和。`ClassIndex.source(qn)` でクラスをソース配置フォルダごとに分割する
+    * CLI: `-P` / `--per-folder` を `-c` と併用し、`-o <output_dir>` でルート出力先を指定 (例: `java -jar PadTools.jar -- -c --per-folder -o ./out ~/AndroidStudioProjects/MyApp`)
+    * GUI: File メニューに「Export Class Diagrams Per Folder…」を追加。ロード済みプロジェクトに対して出力先を選ぶだけで実行でき、進捗バーと完了ダイアログを表示
+    * `--no-legend` / `--no-comments` / `--jetpack` 等の既存表示オーバーライドはそのまま尊重 (`UmlOverrides.applyTo` 経由)
 * **新規 UML 図種: Manifest 図** (`PlantUmlManifestDiagram`)
     * AndroidManifest.xml の `<application>` 属性 (package / class / theme / debuggable / allowBackup / meta-data) を中央の `<<application>>` ノードに据え、配下に Activity / Service / Receiver / Provider を種別ごとにグループ化して所属関係 (`*--`) を描く
     * 周辺に `uses-permission` / `uses-feature` を別パッケージで配置し、launcher Activity と `exported=true` は視覚的に強調 (色 / ステレオタイプ)

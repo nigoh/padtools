@@ -476,6 +476,16 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private void doGenerateSequenceDiagramAll() {
+        File out = new JavaImporter(this).chooseProjectAndGenerateSequenceDiagrams();
+        if (out != null) {
+            JOptionPane.showMessageDialog(this,
+                    Messages.get("dialog.sequenceDiagramAll.done") + "\n" + out.getAbsolutePath(),
+                    Messages.get("menu.file.sequenceDiagramAll"),
+                    JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
     private void doGenerateComponentDiagram() {
         if (!releaseOK()) {
             return;
@@ -613,6 +623,8 @@ public class MainFrame extends JFrame {
                 ae -> doGenerateClassDiagram(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagram"), null,
                 ae -> doGenerateSequenceDiagram(), null);
+        addMenuItem(fileMenu, Messages.get("menu.file.sequenceDiagramAll"), null,
+                ae -> doGenerateSequenceDiagramAll(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.componentDiagram"), null,
                 ae -> doGenerateComponentDiagram(), null);
         addMenuItem(fileMenu, Messages.get("menu.file.dependencyGraph"), null,

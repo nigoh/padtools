@@ -14,6 +14,7 @@ final class UmlOverrides {
     boolean showAnnotations = true;
     boolean showEnumConstants = true;
     boolean showFinal = true;
+    boolean jetpack = false;
     padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle commentStyle =
             padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
     Integer seqDepth;
@@ -24,6 +25,9 @@ final class UmlOverrides {
         o.showEnumConstants = showEnumConstants;
         o.showFinal = showFinal;
         o.commentStyle = commentStyle;
+        if (o.jetpack != null) {
+            o.jetpack.enabled = jetpack;
+        }
     }
 
     /**
@@ -32,12 +36,14 @@ final class UmlOverrides {
      */
     static UmlOverrides build(Option optNoComments, Option optNoAnnotations,
                                Option optNoEnumConstants, Option optNoFinal,
-                               Option optCommentStyle, Option optSeqDepth) {
+                               Option optCommentStyle, Option optSeqDepth,
+                               Option optJetpack) {
         UmlOverrides o = new UmlOverrides();
         o.showComments = !optNoComments.isSet();
         o.showAnnotations = !optNoAnnotations.isSet();
         o.showEnumConstants = !optNoEnumConstants.isSet();
         o.showFinal = !optNoFinal.isSet();
+        o.jetpack = optJetpack != null && optJetpack.isSet();
         if (!optCommentStyle.getArguments().isEmpty()) {
             String style = optCommentStyle.getArguments().getLast().toLowerCase();
             if ("note".equals(style)) {

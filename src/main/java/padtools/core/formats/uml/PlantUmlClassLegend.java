@@ -18,6 +18,7 @@ final class PlantUmlClassLegend {
     static final class Stats {
         Set<String> stereos = new LinkedHashSet<>();
         Set<String> androidStereos = new LinkedHashSet<>();
+        Set<String> jetpackStereos = new LinkedHashSet<>();
         boolean hasAbstractClass;
         boolean hasInterface;
         boolean hasEnum;
@@ -89,6 +90,9 @@ final class PlantUmlClassLegend {
         }
         if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
             s.stereos.add("aidl");
+        }
+        if (o.jetpack != null && o.jetpack.enabled) {
+            s.jetpackStereos.addAll(c.getJetpackStereotypes());
         }
     }
 
@@ -214,6 +218,13 @@ final class PlantUmlClassLegend {
             for (String x : s.androidStereos) {
                 out.append("<<").append(x).append(">> ")
                         .append(PlantUmlClassDiagram.androidStereoDesc(x)).append('\n');
+            }
+        }
+        if (!s.jetpackStereos.isEmpty()) {
+            out.append("== Jetpack ステレオタイプ ==\n");
+            for (String x : s.jetpackStereos) {
+                out.append("<<").append(x).append(">> ")
+                        .append(PlantUmlClassDiagram.jetpackStereoDesc(x)).append('\n');
             }
         }
     }

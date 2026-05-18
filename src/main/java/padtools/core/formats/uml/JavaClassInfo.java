@@ -24,6 +24,7 @@ public class JavaClassInfo {
     private String enclosingClass;
     private String aaosCategory;
     private String androidComponentType;
+    private final List<String> jetpackStereotypes = new ArrayList<>();
     private String comment;
     private boolean detailed = true;
 
@@ -123,6 +124,14 @@ public class JavaClassInfo {
 
     public void setAndroidComponentType(String androidComponentType) {
         this.androidComponentType = androidComponentType;
+    }
+
+    /**
+     * {@link JetpackPattern} 由来のステレオタイプ名リスト (例: {@code Fragment}, {@code ViewModel},
+     * {@code AndroidEntryPoint})。Jetpack 解析が無効なら空のまま。
+     */
+    public List<String> getJetpackStereotypes() {
+        return jetpackStereotypes;
     }
 
     /** enum 定数名のリスト (kind が ENUM の場合のみ意味を持つ)。 */

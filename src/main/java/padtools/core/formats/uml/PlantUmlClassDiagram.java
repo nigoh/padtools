@@ -67,6 +67,8 @@ public final class PlantUmlClassDiagram {
         public int maxClasses = 0;
         /** 図末尾に出す警告メッセージ (PlantUML の {@code footer} 行)。null/空で出力しない。 */
         public String footerWarning;
+        /** Jetpack (Fragment / ViewModel / Hilt 等) ステレオタイプ・装飾の設定。既定で無効。 */
+        public JetpackOptions jetpack = new JetpackOptions();
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -213,6 +215,24 @@ public final class PlantUmlClassDiagram {
             case "Service": return "AndroidManifest.xml の <service>";
             case "BroadcastReceiver": return "AndroidManifest.xml の <receiver>";
             case "ContentProvider": return "AndroidManifest.xml の <provider>";
+            default: return stereo;
+        }
+    }
+
+    static String jetpackStereoDesc(String stereo) {
+        switch (stereo) {
+            case "Fragment": return "androidx.fragment.app.Fragment 派生";
+            case "DialogFragment": return "DialogFragment 派生";
+            case "BottomSheetDialogFragment": return "Material BottomSheetDialogFragment 派生";
+            case "NavHostFragment": return "Navigation Component の NavHostFragment 派生";
+            case "ViewModel": return "androidx.lifecycle.ViewModel 派生";
+            case "AndroidViewModel": return "androidx.lifecycle.AndroidViewModel 派生";
+            case "AndroidEntryPoint": return "@AndroidEntryPoint 注入対象 (Hilt)";
+            case "HiltViewModel": return "@HiltViewModel (Hilt 注入の ViewModel)";
+            case "HiltAndroidApp": return "@HiltAndroidApp (Hilt のアプリ起点)";
+            case "HiltModule": return "@Module + @InstallIn (Hilt モジュール)";
+            case "DaggerModule": return "@Module (Dagger モジュール)";
+            case "Injectable": return "@Inject コンストラクタを持つクラス";
             default: return stereo;
         }
     }
@@ -383,6 +403,13 @@ public final class PlantUmlClassDiagram {
         }
         if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
             parts.add("aidl");
+        }
+        if (o.jetpack != null && o.jetpack.enabled) {
+            for (String j : c.getJetpackStereotypes()) {
+                if (!parts.contains(j)) {
+                    parts.add(j);
+                }
+            }
         }
         if (parts.isEmpty()) {
             return "";

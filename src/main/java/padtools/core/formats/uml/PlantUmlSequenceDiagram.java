@@ -32,6 +32,19 @@ public final class PlantUmlSequenceDiagram {
          * 0 以下なら制限なし (ただしサイクル検出で停止する)。デフォルト 5。
          */
         public int maxDepth = 5;
+        /**
+         * プロジェクト内で解析済みのクラス (= 入力 {@code classes} に含まれるクラス)
+         * に該当する participant を色付けする。外部ライブラリやシステムクラス
+         * との視認性を高めるために使用する。デフォルト true。
+         */
+        public boolean highlightProjectClasses = true;
+        /**
+         * プロジェクト内クラスの participant 背景色 (PlantUML 形式)。
+         * 例: {@code "#LightSkyBlue"}, {@code "#FFE4B5"}, {@code "#ADD8E6"}。
+         * {@link #highlightProjectClasses} が true のときのみ使用される。
+         * null または空文字を指定すると色付けを行わない。
+         */
+        public String projectClassColor = "#LightSkyBlue";
     }
 
     /** クラス・メソッドを指定して 1 本のシーケンス図を生成する。 */
@@ -80,13 +93,20 @@ public final class PlantUmlSequenceDiagram {
 
         body.append("deactivate ").append(cls.getSimpleName()).append('\n');
 
-        // participant 宣言を先に書く
+        // participant 宣言を先に書く。プロジェクト内で解析済みのクラスは色付けする。
+        boolean colorize = o.highlightProjectClasses
+                && o.projectClassColor != null
+                && !o.projectClassColor.isEmpty();
         for (String p : participants) {
-            out.append("participant ").append(quote(p)).append('\n');
+            out.append("participant ").append(quote(p));
+            if (colorize && findClass(classes, p) != null) {
+                out.append(' ').append(o.projectClassColor);
+            }
+            out.append('\n');
         }
         out.append(body);
         if (o.includeLegend) {
-            emitLegend(out, participants.size());
+            emitLegend(out, participants.size(), colorize, o.projectClassColor);
         }
         out.append("@enduml\n");
         return out.toString();
@@ -443,7 +463,8 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("end\n");
     }
 
-    private static void emitLegend(StringBuilder out, int participantCount) {
+    private static void emitLegend(StringBuilder out, int participantCount,
+                                    boolean colorize, String projectClassColor) {
         out.append("legend right\n");
         out.append("== シーケンス図 ==\n");
         out.append("participant     関与クラス/オブジェクト\n");
@@ -452,6 +473,10 @@ public final class PlantUmlSequenceDiagram {
         out.append("deactivate B    B のアクティベーション終了\n");
         out.append("alt/opt/loop    if-else / 単一分岐 / ループ (while/for/do)\n");
         out.append("group/critical  try-catch-finally / synchronized\n");
+        if (colorize) {
+            out.append("<back:").append(projectClassColor).append(">  </back>")
+                    .append("          プロジェクト内で解析済みのクラス (独自クラス)\n");
+        }
         if (participantCount > 0) {
             out.append("Caller          仮想の呼び出し元 (オプションで変更可)\n");
         }

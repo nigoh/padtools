@@ -4,6 +4,10 @@ Change log
 Unreleased
 --------
 
+* **シーケンス図のプロジェクト内クラス色付け** (`PlantUmlSequenceDiagram`)
+    * 入力 `classes` に含まれる解析済みクラス (= プロジェクト内の独自クラス) の participant を `#LightSkyBlue` で背景塗りつぶしし、外部ライブラリやシステムクラスと視覚的に区別できるようにした
+    * `Options.highlightProjectClasses` で機能の ON/OFF、`Options.projectClassColor` で色を変更できる (空文字を指定すれば従来通り色なし)
+    * 凡例ブロックにも独自クラスを示す色サンプル行を追加し、図の読み手が一目で判別できるようにした
 * **クラス図コメントの色付け** (`PlantUmlClassDiagram`)
     * インラインコメント (`.. text ..`) を `<color:#008800>...</color>` で囲み、クラス本体のメンバーと視覚的に区別できるようにした
     * NOTE スタイルでは `skinparam noteBorderColor` / `skinparam noteFontColor` を自動付与し、注釈ブロックの枠線と文字色を同色に揃える

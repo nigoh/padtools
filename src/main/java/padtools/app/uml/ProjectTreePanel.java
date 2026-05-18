@@ -2,6 +2,8 @@ package padtools.app.uml;
 
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.uml.JavaClassInfo;
+import padtools.core.formats.uml.JavaMethodInfo;
+import padtools.core.formats.uml.Visibility;
 
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -16,17 +18,20 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * プロジェクトのモジュール/パッケージ/クラス階層を表示する {@link JTree}。
+ * プロジェクトのモジュール/パッケージ/クラス/メソッド階層を表示する {@link JTree}。
  *
  * <p>{@link ProjectAnalysisCache} の解析結果から
  * <code>(プロジェクトルート)</code> → <code>module</code> →
- * <code>package</code> → <code>class</code> のノードツリーを構築する。
- * モジュール情報は {@link AndroidProjectAnalysis#getGradleByModule()} を起点とし、
- * Gradle 解析で見つからなかったクラスは <em>(other)</em> モジュール下に集約する。</p>
+ * <code>package</code> → <code>class</code> → <code>method</code>
+ * のノードツリーを構築する。モジュール情報は
+ * {@link AndroidProjectAnalysis#getGradleByModule()} を起点とし、Gradle 解析で
+ * 見つからなかったクラスは <em>(other)</em> モジュール下に集約する。
+ * メソッドノードは抽象メソッドを除いた、シーケンス図起点として使えるものだけを並べる。</p>
  *
- * <p>選択イベントは {@link #setOnClassSelected(java.util.function.Consumer)} で受け取れる。
- * 現状はクラス選択時に Class の完全修飾名を通知するだけで、クラス図の
- * 絞り込み等への利用は呼び出し側で実装する。</p>
+ * <p>選択イベントは {@link #setOnClassSelected(java.util.function.Consumer)} と
+ * {@link #setOnMethodSelected(java.util.function.Consumer)} で受け取れる。
+ * クラス選択時はクラス情報のみ、メソッド選択時は {@link MethodSelection}
+ * (クラス + メソッド) を通知し、呼び出し側でシーケンス図の起点切り替えに利用する。</p>
  */
 public class ProjectTreePanel extends JPanel {
 
@@ -34,6 +39,7 @@ public class ProjectTreePanel extends JPanel {
     private final DefaultTreeModel model;
     private final DefaultMutableTreeNode root;
     private java.util.function.Consumer<JavaClassInfo> onClassSelected;
+    private java.util.function.Consumer<MethodSelection> onMethodSelected;
 
     public ProjectTreePanel() {
         super(new BorderLayout());
@@ -51,6 +57,10 @@ public class ProjectTreePanel extends JPanel {
         this.onClassSelected = listener;
     }
 
+    public void setOnMethodSelected(java.util.function.Consumer<MethodSelection> listener) {
+        this.onMethodSelected = listener;
+    }
+
     /** 解析結果からツリーを再構築する。 */
     public void populate(AndroidProjectAnalysis analysis, List<JavaClassInfo> classes,
                           String projectName) {
@@ -65,7 +75,10 @@ public class ProjectTreePanel extends JPanel {
                 DefaultMutableTreeNode pkgNode = new DefaultMutableTreeNode(
                         new PackageEntry(pe.getKey(), pe.getValue().size()));
                 for (JavaClassInfo c : pe.getValue()) {
-                    pkgNode.add(new DefaultMutableTreeNode(new ClassEntry(c)));
+                    DefaultMutableTreeNode classNode = new DefaultMutableTreeNode(
+                            new ClassEntry(c));
+                    addMethodNodes(classNode, c);
+                    pkgNode.add(classNode);
                 }
                 moduleNode.add(pkgNode);
             }
@@ -86,18 +99,39 @@ public class ProjectTreePanel extends JPanel {
     }
 
     private void notifySelection() {
-        if (onClassSelected == null) {
-            return;
-        }
         Object last = tree.getLastSelectedPathComponent();
         if (last instanceof DefaultMutableTreeNode) {
             Object u = ((DefaultMutableTreeNode) last).getUserObject();
+            if (u instanceof MethodEntry) {
+                MethodEntry me = (MethodEntry) u;
+                if (onMethodSelected != null) {
+                    onMethodSelected.accept(new MethodSelection(me.owner, me.method));
+                }
+                if (onClassSelected != null) {
+                    onClassSelected.accept(me.owner);
+                }
+                return;
+            }
             if (u instanceof ClassEntry) {
-                onClassSelected.accept(((ClassEntry) u).info);
+                if (onClassSelected != null) {
+                    onClassSelected.accept(((ClassEntry) u).info);
+                }
                 return;
             }
         }
-        onClassSelected.accept(null);
+        if (onClassSelected != null) {
+            onClassSelected.accept(null);
+        }
+    }
+
+    private static void addMethodNodes(DefaultMutableTreeNode classNode, JavaClassInfo c) {
+        for (JavaMethodInfo m : c.getMethods()) {
+            // 抽象メソッドはシーケンス図起点にならないので除外
+            if (m.isAbstract()) {
+                continue;
+            }
+            classNode.add(new DefaultMutableTreeNode(new MethodEntry(c, m)));
+        }
     }
 
     private static Map<String, Map<String, List<JavaClassInfo>>> groupByModule(
@@ -172,6 +206,51 @@ public class ProjectTreePanel extends JPanel {
                 default: kind = "C"; break;
             }
             return "[" + kind + "] " + info.getSimpleName();
+        }
+    }
+
+    /** メソッド情報を保持するノード値。シーケンス図起点として使える。 */
+    private static final class MethodEntry {
+        final JavaClassInfo owner;
+        final JavaMethodInfo method;
+
+        MethodEntry(JavaClassInfo owner, JavaMethodInfo method) {
+            this.owner = owner;
+            this.method = method;
+        }
+
+        @Override
+        public String toString() {
+            Visibility v = method.getVisibility();
+            String mark = v == null ? "~" : v.mark();
+            return mark + " " + method.getName() + "()";
+        }
+    }
+
+    /**
+     * メソッドノード選択時のコールバックに渡される値。
+     * シーケンス図起点として {@code owner.getSimpleName() + "." + method.getName()} を組み立てれば良い。
+     */
+    public static final class MethodSelection {
+        private final JavaClassInfo owner;
+        private final JavaMethodInfo method;
+
+        public MethodSelection(JavaClassInfo owner, JavaMethodInfo method) {
+            this.owner = owner;
+            this.method = method;
+        }
+
+        public JavaClassInfo getOwner() {
+            return owner;
+        }
+
+        public JavaMethodInfo getMethod() {
+            return method;
+        }
+
+        /** {@code "Class.method"} 形式のシーケンス図起点文字列。 */
+        public String getEntry() {
+            return owner.getSimpleName() + "." + method.getName();
         }
     }
 }

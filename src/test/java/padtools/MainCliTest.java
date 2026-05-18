@@ -300,8 +300,8 @@ public class MainCliTest {
                 root.getAbsolutePath()});
         assertTrue("output dir created", outDir.isDirectory());
         for (String name : new String[]{
-                "summary.md", "class-diagram.puml", "component-diagram.puml",
-                "dependency-graph.puml", "pad.spd"}) {
+                "summary.md", "class-diagram.svg", "component-diagram.svg",
+                "dependency-graph.svg", "pad.svg"}) {
             File f = new File(outDir, name);
             assertTrue("expected " + name, f.isFile());
             assertTrue("expected " + name + " non-empty", f.length() > 0);
@@ -310,10 +310,11 @@ public class MainCliTest {
                 StandardCharsets.UTF_8);
         assertTrue(md, md.contains("# Android Project Summary"));
         assertTrue(md, md.contains("com.x"));
-        String cls = new String(Files.readAllBytes(new File(outDir, "class-diagram.puml").toPath()),
+        // SVG は XML テキストなのでクラス名が描画テキストとして含まれることを確認。
+        String cls = new String(Files.readAllBytes(new File(outDir, "class-diagram.svg").toPath()),
                 StandardCharsets.UTF_8);
-        // manifest 自動マージで MainActivity に <<Activity>>
-        assertTrue(cls, cls.contains("<<Activity>>"));
+        assertTrue(cls, cls.contains("<svg"));
+        assertTrue(cls, cls.contains("MainActivity"));
     }
 
     @Test

@@ -4,6 +4,16 @@ Change log
 1.6
 --------
 
+* UML 系 (クラス図 / シーケンス図 / コンポーネント図 / Gradle 依存グラフ) を
+  SVG として直接書き出せるようにした
+    * PlantUML (`net.sourceforge.plantuml:plantuml`) を同梱
+    * `-o foo.svg` を指定するとツール単体で SVG を出力
+    * `--all` の既定成果物を `.svg` に変更
+      (`class-diagram.svg` / `component-diagram.svg` / `dependency-graph.svg` /
+       `pad.svg` + `summary.md`)
+    * Graphviz/dot を必要としないよう Smetana レイアウトを自動指定
+      (`!pragma layout smetana` を `@startuml` 直後に自動挿入)
+    * 従来の `.puml` テキスト出力は互換維持 (拡張子で切替)
 * 動作対象 Java を 17 以上に引き上げ
     * `sourceCompatibility` / `targetCompatibility` を 17 に変更
     * Apache Batik を 1.14 → 1.17 へ更新 (Java 17 互換性問題 BATIK-1260 解消)

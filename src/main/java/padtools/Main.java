@@ -830,6 +830,10 @@ public class Main {
                 + " Hilt etc.) on class diagram (-c / -A).");
         System.err.println("  -P --per-folder: With -c: write one class diagram (.puml + .svg)"
                 + " per source folder into the -o directory (preserves subfolder layout).");
+        System.err.println("  --aosp: Enable AOSP mode for -G (parse Android.bp, color by"
+                + " partition: system/vendor/product/odm/system_ext; also exclude prebuilts/out-soong/.repo).");
+        System.err.println("  --multiuser-report: Emit AAOS MultiUser role-separation report"
+                + " (Markdown) combining manifest car-permissions and SELinux .te allow rules.");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

@@ -1,6 +1,19 @@
 Change log
 =============
 
+1.6
+--------
+
+* 動作対象 Java を 17 以上に引き上げ
+    * `sourceCompatibility` / `targetCompatibility` を 17 に変更
+    * Apache Batik を 1.14 → 1.17 へ更新 (Java 17 互換性問題 BATIK-1260 解消)
+    * Checkstyle を 10.12.5 → 10.21.1 へ更新
+    * 未使用依存 (`org.jfree:jfreesvg`) を除去
+* ビルドシステムを Gradle 8.x / 9.x 両対応に
+    * `plugins {}` ブロック + `java {}` ブロック方式へ書き換え
+    * Task の lazy registration (`tasks.register`) へ移行
+    * Gradle Wrapper (9.4.1) をリポジトリ同梱
+
 1.5
 --------
 

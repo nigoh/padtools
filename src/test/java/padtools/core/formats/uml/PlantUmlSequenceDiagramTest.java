@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import org.junit.Test;
+import padtools.core.formats.android.VehiclePropertyIndex;
 
 import java.util.List;
 
@@ -66,7 +67,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { IAudio mAudio; void run() { mAudio.setVolume(5); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> IAudio: setVolume()"));
+        assertTrue(puml, puml.contains("A -> IAudio: setVolume(5)"));
         assertTrue(puml, puml.contains("participant \"IAudio\""));
     }
 
@@ -76,7 +77,7 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { java.util.List<String> items; void run() { items.add(\"x\"); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         // List 型へのフィールド参照は List で participant 化
-        assertTrue(puml, puml.contains("A -> List: add()"));
+        assertTrue(puml, puml.contains("A -> List: add(\"x\")"));
     }
 
     @Test
@@ -385,5 +386,56 @@ public class PlantUmlSequenceDiagramTest {
         // abstract メソッド (interface 内) は除外
         assertEquals(1, list.size());
         assertEquals("C.run", list.get(0).getEntry());
+    }
+
+    @Test
+    public void testCallArgumentsAreShown() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { Service s; void run() { s.go(1, \"a\"); } }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue(puml, puml.contains("go(1, \"a\")"));
+    }
+
+    @Test
+    public void testCallArgumentsCanBeDisabled() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { Service s; void run() { s.go(1, \"a\"); } }");
+        PlantUmlSequenceDiagram.Options opts = new PlantUmlSequenceDiagram.Options();
+        opts.showCallArguments = false;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", opts);
+        assertTrue(puml, puml.contains("go()"));
+        assertFalse(puml, puml.contains("go(1"));
+    }
+
+    @Test
+    public void testCallArgumentsAreTruncatedWhenTooLong() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { Service s; void run() { s.go(aaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccc); } }");
+        PlantUmlSequenceDiagram.Options opts = new PlantUmlSequenceDiagram.Options();
+        opts.maxArgLength = 20;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", opts);
+        assertTrue(puml, puml.contains("..."));
+    }
+
+    @Test
+    public void testVehiclePropertyIndexAnnotatesNumericLiteral() {
+        // VehiclePropertyIds と CarPropertyManager の両方を含むコードで
+        // シーケンス図に property 名コメントが挿入されることを確認する
+        String src =
+                "package android.car;\n"
+                        + "public final class VehiclePropertyIds {\n"
+                        + "    public static final int PERF_VEHICLE_SPEED = 291504647;\n"
+                        + "}\n"
+                        + "class CarPropertyManager {\n"
+                        + "    Service mService;\n"
+                        + "    void fetchSpeed() { mService.getProperty(291504647); }\n"
+                        + "}\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options opts = new PlantUmlSequenceDiagram.Options();
+        opts.vehiclePropertyIndex = VehiclePropertyIndex.build(infos);
+        String puml = PlantUmlSequenceDiagram.generate(
+                infos, "CarPropertyManager", "fetchSpeed", opts);
+        assertTrue(puml,
+                puml.contains("getProperty(291504647 /* PERF_VEHICLE_SPEED */)"));
     }
 }

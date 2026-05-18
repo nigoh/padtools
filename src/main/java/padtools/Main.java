@@ -285,6 +285,8 @@ public class Main {
             if (overrides != null && overrides.seqDepth != null) {
                 sqOpts.maxDepth = overrides.seqDepth;
             }
+            sqOpts.vehiclePropertyIndex =
+                    padtools.core.formats.android.VehiclePropertyIndex.build(infos);
             output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
                     infos, entryClass, entryMethod, sqOpts);
         } else {
@@ -707,6 +709,8 @@ public class Main {
         if (seqDepth != null) {
             sqOpts.maxDepth = seqDepth;
         }
+        sqOpts.vehiclePropertyIndex =
+                padtools.core.formats.android.VehiclePropertyIndex.build(infos);
         java.util.List<LifecycleSequenceDiagrams.Entry> entries =
                 LifecycleSequenceDiagrams.generateAll(infos, sqOpts);
         for (LifecycleSequenceDiagrams.Entry e : entries) {

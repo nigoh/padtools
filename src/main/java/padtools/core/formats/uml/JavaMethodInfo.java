@@ -21,10 +21,16 @@ public class JavaMethodInfo {
     public static class Call implements Statement {
         private final String receiver;
         private final String methodName;
+        private final String arguments;
 
         public Call(String receiver, String methodName) {
+            this(receiver, methodName, "");
+        }
+
+        public Call(String receiver, String methodName, String arguments) {
             this.receiver = receiver;
             this.methodName = methodName;
+            this.arguments = arguments == null ? "" : arguments;
         }
 
         public String getReceiver() {
@@ -33,6 +39,15 @@ public class JavaMethodInfo {
 
         public String getMethodName() {
             return methodName;
+        }
+
+        /**
+         * {@code receiver.method(<args>)} の {@code <args>} 部分を原文のまま保持する。
+         * 文字列リテラルやネストした呼び出しは展開せず、宣言行の文字列をそのまま返す。
+         * 引数が無い、もしくは抽出できなかった場合は空文字。
+         */
+        public String getArguments() {
+            return arguments;
         }
     }
 

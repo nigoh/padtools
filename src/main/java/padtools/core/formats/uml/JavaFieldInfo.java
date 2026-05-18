@@ -15,6 +15,7 @@ public class JavaFieldInfo {
     private boolean isFinal;
     private final List<String> annotations = new ArrayList<>();
     private String comment;
+    private String initializer;
 
     public String getName() {
         return name;
@@ -67,5 +68,19 @@ public class JavaFieldInfo {
 
     public void setComment(String comment) {
         this.comment = comment;
+    }
+
+    /**
+     * フィールド宣言の {@code = <expr>} の右辺を原文文字列で保持する。
+     * 末尾の {@code ;} は含まない。代入式が無いフィールド (宣言のみ) では null。
+     * VehiclePropertyIds 等の整数定数 {@code public static final int PERF_VEHICLE_SPEED = 291504647;}
+     * を後段で解決するのに使う。
+     */
+    public String getInitializer() {
+        return initializer;
+    }
+
+    public void setInitializer(String initializer) {
+        this.initializer = initializer;
     }
 }

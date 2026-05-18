@@ -143,6 +143,11 @@ public final class AidlParser {
                     continue;
                 }
                 List<String> annotations = readAnnotations();
+                if (peek().isKw("const")) {
+                    next();
+                    parseAidlConst(info, annotations);
+                    continue;
+                }
                 boolean oneway = false;
                 if (peek().isKw("oneway")) {
                     next();
@@ -150,6 +155,50 @@ public final class AidlParser {
                 }
                 parseAidlMethod(info, annotations, oneway);
             }
+        }
+
+        /**
+         * AIDL の {@code const <type> <name> = <expr>;} を取り出し、
+         * {@link JavaFieldInfo} としてクラスに登録する。
+         * VehiclePropertyIds の AIDL 版 (VehicleProperty.aidl) で
+         * Property ID 定数を抽出するために使う。
+         */
+        private void parseAidlConst(JavaClassInfo cls, List<String> annotations) {
+            int typeStart = peek().start;
+            int lastIdentEnd = typeStart;
+            String constName = "";
+            while (!atEnd() && !peek().is("=") && !peek().is(";")) {
+                JavaToken t = peek();
+                if (t.type == JavaToken.Type.IDENT) {
+                    constName = t.text;
+                    lastIdentEnd = t.start;
+                }
+                next();
+            }
+            String type = stripAidlAnnotations(src.substring(typeStart, lastIdentEnd).trim());
+            JavaFieldInfo f = new JavaFieldInfo();
+            f.setName(constName);
+            f.setType(type);
+            f.setVisibility(Visibility.PUBLIC);
+            f.setStatic(true);
+            f.setFinal(true);
+            f.getAnnotations().addAll(annotations);
+            if (!atEnd() && peek().is("=")) {
+                int eqEnd = peek().end;
+                next();
+                int semi = eqEnd;
+                while (!atEnd() && !peek().is(";")) {
+                    semi = peek().end;
+                    next();
+                }
+                if (semi > eqEnd) {
+                    f.setInitializer(src.substring(eqEnd, semi).trim());
+                }
+            }
+            if (peek().is(";")) {
+                next();
+            }
+            cls.getFields().add(f);
         }
 
         private void parseAidlMethod(JavaClassInfo cls, List<String> annotations,

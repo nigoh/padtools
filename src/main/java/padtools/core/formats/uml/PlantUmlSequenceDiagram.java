@@ -1,5 +1,7 @@
 package padtools.core.formats.uml;
 
+import padtools.core.formats.android.VehiclePropertyIndex;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -45,6 +47,24 @@ public final class PlantUmlSequenceDiagram {
          * null または空文字を指定すると色付けを行わない。
          */
         public String projectClassColor = "#LightSkyBlue";
+        /**
+         * AAOS の Vehicle Property ID を定数名に解決するインデックス。
+         * 設定されていれば、メソッド呼び出しの引数文字列中の整数リテラルを
+         * 名前付きコメント (例: {@code 291504647 /* PERF_VEHICLE_SPEED *&#47;})
+         * に置換した上で PlantUML に出力する。
+         * null の場合は単に原文の引数を表示する (互換動作)。
+         */
+        public VehiclePropertyIndex vehiclePropertyIndex;
+        /**
+         * メソッド呼び出しの引数を PlantUML 出力に含めるか。デフォルト true。
+         * 引数文字列が長すぎる場合は {@link #maxArgLength} で省略される。
+         */
+        public boolean showCallArguments = true;
+        /**
+         * 引数文字列の最大長 (PlantUML ラベルの可読性確保)。これを超える部分は
+         * {@code ...} で省略される。0 以下なら省略しない。デフォルト 60。
+         */
+        public int maxArgLength = 60;
     }
 
     /** クラス・メソッドを指定して 1 本のシーケンス図を生成する。 */
@@ -236,7 +256,8 @@ public final class PlantUmlSequenceDiagram {
         participants.add(target);
         body.append(indent).append(currentClass.getSimpleName())
                 .append(" -> ").append(target)
-                .append(": ").append(call.getMethodName()).append("()\n");
+                .append(": ").append(call.getMethodName())
+                .append(formatCallArgs(call, opts)).append('\n');
 
         // 再帰展開: 呼び出し先メソッドが解析済みクラスにあれば深掘りする
         boolean canRecurse = opts.maxDepth <= 0 || depth < opts.maxDepth;
@@ -535,6 +556,29 @@ public final class PlantUmlSequenceDiagram {
 
     private static String quote(String s) {
         return "\"" + s.replace("\"", "\\\"") + "\"";
+    }
+
+    /**
+     * 呼び出しの引数を PlantUML メッセージラベル用に整形する。
+     * VehiclePropertyIndex があれば整数リテラルを名前で注釈付け、
+     * 長さが maxArgLength を超える場合は省略する。
+     */
+    private static String formatCallArgs(JavaMethodInfo.Call call, Options opts) {
+        if (!opts.showCallArguments) {
+            return "()";
+        }
+        String args = call.getArguments();
+        if (args == null || args.isEmpty()) {
+            return "()";
+        }
+        if (opts.vehiclePropertyIndex != null && !opts.vehiclePropertyIndex.isEmpty()) {
+            args = opts.vehiclePropertyIndex.formatArg(args);
+        }
+        args = args.replaceAll("\\s+", " ").trim();
+        if (opts.maxArgLength > 0 && args.length() > opts.maxArgLength) {
+            args = args.substring(0, Math.max(0, opts.maxArgLength - 3)) + "...";
+        }
+        return "(" + args + ")";
     }
 
     /** PlantUML の制御行で安全に書ける形に整形する (改行や 80 文字超を畳む)。 */

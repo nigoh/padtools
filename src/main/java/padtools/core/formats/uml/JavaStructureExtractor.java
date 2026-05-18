@@ -406,9 +406,104 @@ public final class JavaStructureExtractor {
             f.setFinal(mods.contains("final"));
             f.getAnnotations().addAll(annotations);
             f.setComment(comment);
+            // initializer 取得: '=' に到達していれば、その直後から ; までを原文で保持
+            if (!atEnd() && peek().is("=")) {
+                int eqEnd = peek().end;
+                int initEnd = findFieldInitializerEnd(eqEnd);
+                if (initEnd > eqEnd) {
+                    f.setInitializer(src.substring(eqEnd, initEnd).trim());
+                }
+            }
             cls.getFields().add(f);
             // ; までスキップ
             skipUntilSemicolonRespectingBlocks();
+        }
+
+        /**
+         * フィールド代入式 {@code = <expr>;} の終端 (セミコロン位置) を src 上で探す。
+         * カンマ区切りの複数宣言は最初の代入で打ち切るため、外側の {@code ,} も終端扱い。
+         * 角括弧・丸括弧・波括弧 (配列初期化) の中の {@code ;,} は無視する。
+         */
+        private int findFieldInitializerEnd(int from) {
+            int paren = 0, brack = 0, brace = 0;
+            int i = from;
+            int n = src.length();
+            while (i < n) {
+                char c = src.charAt(i);
+                if (c == '(') {
+                    paren++;
+                } else if (c == ')') {
+                    if (paren > 0) paren--;
+                } else if (c == '[') {
+                    brack++;
+                } else if (c == ']') {
+                    if (brack > 0) brack--;
+                } else if (c == '{') {
+                    brace++;
+                } else if (c == '}') {
+                    if (brace > 0) brace--;
+                } else if (c == '"' || c == '\'') {
+                    i = skipStringLiteral(i, c);
+                    continue;
+                } else if (c == '/' && i + 1 < n && src.charAt(i + 1) == '/') {
+                    while (i < n && src.charAt(i) != '\n') i++;
+                    continue;
+                } else if (c == '/' && i + 1 < n && src.charAt(i + 1) == '*') {
+                    i += 2;
+                    while (i + 1 < n && !(src.charAt(i) == '*' && src.charAt(i + 1) == '/')) i++;
+                    i = Math.min(n, i + 2);
+                    continue;
+                } else if (paren == 0 && brack == 0 && brace == 0 && (c == ';' || c == ',')) {
+                    return i;
+                }
+                i++;
+            }
+            return n;
+        }
+
+        private int skipStringLiteral(int start, char quote) {
+            int n = src.length();
+            int i = start + 1;
+            while (i < n) {
+                char c = src.charAt(i);
+                if (c == '\\' && i + 1 < n) {
+                    i += 2;
+                    continue;
+                }
+                if (c == quote) {
+                    return i + 1;
+                }
+                i++;
+            }
+            return n;
+        }
+
+        /**
+         * {@code IDENT (} 形式の呼び出しに遭遇した時点で、対応する {@code )} までを
+         * 走査して引数文字列を返す。位置は idx に依存し、tokens を消費しない。
+         * インデックス idx は「IDENT」を指している前提 (呼び出し名トークン)。
+         */
+        private String captureCallArguments() {
+            int j = idx + 1;
+            if (j >= tokens.size() || !tokens.get(j).is("(")) {
+                return "";
+            }
+            int openEnd = tokens.get(j).end;
+            int depth = 1;
+            j++;
+            while (j < tokens.size() && depth > 0) {
+                JavaToken t = tokens.get(j);
+                if (t.is("(")) {
+                    depth++;
+                } else if (t.is(")")) {
+                    depth--;
+                    if (depth == 0) {
+                        return src.substring(openEnd, t.start).trim();
+                    }
+                }
+                j++;
+            }
+            return "";
         }
 
         private void parseMethodDecl(JavaClassInfo cls, List<String> mods,
@@ -789,7 +884,8 @@ public final class JavaStructureExtractor {
                             && tokens.get(idx - 1).isKw("new");
                     if (!isControlKeyword(name) && !afterNew) {
                         String receiver = findReceiver();
-                        out.add(new JavaMethodInfo.Call(receiver, name));
+                        String args = captureCallArguments();
+                        out.add(new JavaMethodInfo.Call(receiver, name, args));
                     }
                 }
                 next();
@@ -832,7 +928,8 @@ public final class JavaStructureExtractor {
                             && tokens.get(idx - 1).isKw("new");
                     if (!isControlKeyword(name) && !afterNew) {
                         String receiver = findReceiver();
-                        out.add(new JavaMethodInfo.Call(receiver, name));
+                        String args = captureCallArguments();
+                        out.add(new JavaMethodInfo.Call(receiver, name, args));
                     }
                 }
                 next();

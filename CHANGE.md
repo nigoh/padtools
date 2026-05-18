@@ -4,6 +4,29 @@ Change log
 Unreleased
 --------
 
+* **AndroidManifest 解析の濃厚化 (uses-sdk / 独自 permission / activity-alias / foregroundServiceType / Deep Link)**
+    * **`<uses-sdk>` のパース**: `AndroidManifestInfo.minSdkVersion / targetSdkVersion / maxSdkVersion` を新設し、`AndroidManifestParser.parseUsesSdk` が読み込む。Manifest 図の Application ノードと Markdown サマリーにも反映
+    * **独自 `<permission>` 宣言の保持** (`AndroidCustomPermission`)
+        * アプリ自身が宣言する `<permission>` を `name / protectionLevel / permissionGroup / label / description` で保持
+        * `AndroidManifestInfo.getCustomPermissions()` で取得可能。相対名は package を前置して FQN 解決
+        * Markdown サマリーに `Custom Permissions (declared by app)` セクションを追加
+    * **`<activity-alias>` の `targetActivity` 解決**
+        * `AndroidComponentInfo.targetActivity` フィールドを追加。alias は通常 Activity と同じリストに入りつつ、`isActivityAlias()` で区別可能
+        * Manifest 図のコンポーネントノードに `→ TargetActivity` の補助表示と `<<alias>>` ステレオタイプを付与
+        * Markdown サマリーに `*(alias → ...)*` 表記
+    * **`<service>` の `foregroundServiceType` 抽出**
+        * Android 14 以降の foreground service で必須化された属性を `AndroidComponentInfo.foregroundServiceType` で保持
+        * Manifest 図のコンポーネントノードに `fgType: dataSync|...` を補助表示。Markdown サマリーにも `*(foregroundServiceType: ...)*` 表記
+    * **`<intent-filter>` の Deep Link 属性拡張** (`AndroidDataSpec`)
+        * `<data>` 要素を 1 つずつ `AndroidDataSpec` に保持 (`scheme / host / port / path / pathPrefix / pathPattern / pathSuffix / pathAdvancedPattern / mimeType`)
+        * `AndroidIntentFilter` に `autoVerify` / `order` / `dataSpecs` / `isViewDeepLink()` を追加
+        * 既存の `dataSchemes` / `dataMimeTypes` は互換のため並行で埋める
+        * `AndroidDataSpec.toDeepLinkUri()` が `scheme://host[:port]/path` 形式の URI を組み立て
+* **新規 UML 図種: Deep Link 図** (`PlantUmlDeepLinkDiagram`)
+    * `action.VIEW + category.BROWSABLE` を持つ Activity の URI 入口を 1 枚に可視化
+    * scheme でグルーピング: `Web (http/https) — App Links` / `Custom scheme: <scheme>://` / `MIME-only`
+    * `autoVerify="true"` の intent-filter は `<<autoVerify>>` ステレオタイプと矢印ラベルで強調 (App Links 候補)
+    * CLI: `-D` / `--deeplink-diagram` で生成可能。`--all` の出力に `deeplink-diagram.svg` を追加 (出力数 7 → 8)
 * **クラス図プレビューの右クリックからシーケンス図へ** (`PlantUmlClassDiagram.Options.interactiveLinks` / `PlantUmlSvgRenderer.LinkArea` / `SvgPreviewPanel.setOnLinkPopup`)
     * GUI でクラス図を表示中、クラスの枠を右クリックすると、そのクラスのメソッド一覧が `JPopupMenu` で開く。メソッドを選ぶと既存の `sequenceEntry` 経路でシーケンス図に置き換わる
     * 仕組み: クラス図生成時に各クラスへ `[[padtools://class/<FQN>]]` を埋め込み、PlantUML が SVG に出力する `<a xlink:href>` 領域を `PlantUmlSvgRenderer` が抽出して `RenderedSvg.getLinkAreas()` で返す。`SvgPreviewPanel` は右クリック (`isPopupTrigger`) でその領域をヒットテストし、ヒットすればリスナを発火する

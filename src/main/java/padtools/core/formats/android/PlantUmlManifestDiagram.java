@@ -124,6 +124,12 @@ public final class PlantUmlManifestDiagram {
         if (m.getApplicationAllowBackup() != null) {
             header.append("\\nallowBackup: ").append(m.getApplicationAllowBackup());
         }
+        if (m.getMinSdkVersion() != null) {
+            header.append("\\nminSdk: ").append(m.getMinSdkVersion());
+        }
+        if (m.getTargetSdkVersion() != null) {
+            header.append("\\ntargetSdk: ").append(m.getTargetSdkVersion());
+        }
         if (o.showMetaData && !m.getApplicationMetaData().isEmpty()) {
             header.append("\\n--meta-data--");
             for (Map.Entry<String, String> me : m.getApplicationMetaData().entrySet()) {
@@ -168,13 +174,24 @@ public final class PlantUmlManifestDiagram {
             String name = c.getName() == null || c.getName().isEmpty()
                     ? "(unnamed)" : c.getName();
             String stereo = "<<" + c.getKind().label() + ">>";
-            out.append(inner).append("component \"").append(escape(shortName(name)))
+            // alias / foregroundServiceType を補助情報として 2 行目に表示する。
+            StringBuilder labelBuf = new StringBuilder(escape(shortName(name)));
+            if (c.isActivityAlias()) {
+                labelBuf.append("\\n→ ").append(escape(shortName(c.getTargetActivity())));
+            }
+            if (c.getForegroundServiceType() != null) {
+                labelBuf.append("\\nfgType: ").append(escape(c.getForegroundServiceType()));
+            }
+            out.append(inner).append("component \"").append(labelBuf)
                     .append("\" as ").append(alias).append(' ').append(stereo);
             if (Boolean.TRUE.equals(c.getExported())) {
                 out.append(" #LightYellow");
             }
             if (c.isLauncher()) {
                 out.append(" <<launcher>>");
+            }
+            if (c.isActivityAlias()) {
+                out.append(" <<alias>>");
             }
             if (sourceSet != null && !"main".equals(sourceSet)) {
                 out.append(" <<src:").append(sourceSet).append(">>");

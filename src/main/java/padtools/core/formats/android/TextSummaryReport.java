@@ -60,6 +60,7 @@ public final class TextSummaryReport {
         if (m.getApplicationAllowBackup() != null) {
             sb.append("- allowBackup: `").append(m.getApplicationAllowBackup()).append("`\n");
         }
+        appendSdkSection(sb, m);
         if (!m.getApplicationMetaData().isEmpty()) {
             sb.append("\n**Application meta-data:**\n\n");
             for (Map.Entry<String, String> me : m.getApplicationMetaData().entrySet()) {
@@ -71,7 +72,72 @@ public final class TextSummaryReport {
         appendComponentList(sb, "Services", m.getServices());
         appendComponentList(sb, "Receivers", m.getReceivers());
         appendComponentList(sb, "Providers", m.getProviders());
+        appendCustomPermissionList(sb, m.getCustomPermissions());
+        appendDeepLinkList(sb, m);
         sb.append('\n');
+    }
+
+    private static void appendSdkSection(StringBuilder sb, AndroidManifestInfo m) {
+        if (m.getMinSdkVersion() == null && m.getTargetSdkVersion() == null
+                && m.getMaxSdkVersion() == null) {
+            return;
+        }
+        sb.append("\n**uses-sdk:**\n\n");
+        if (m.getMinSdkVersion() != null) {
+            sb.append("- minSdkVersion: `").append(m.getMinSdkVersion()).append("`\n");
+        }
+        if (m.getTargetSdkVersion() != null) {
+            sb.append("- targetSdkVersion: `").append(m.getTargetSdkVersion()).append("`\n");
+        }
+        if (m.getMaxSdkVersion() != null) {
+            sb.append("- maxSdkVersion: `").append(m.getMaxSdkVersion()).append("`\n");
+        }
+    }
+
+    private static void appendCustomPermissionList(StringBuilder sb,
+                                                     List<AndroidCustomPermission> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        sb.append("\n**Custom Permissions (declared by app):**\n\n");
+        for (AndroidCustomPermission p : list) {
+            sb.append("- `").append(p.getName()).append('`');
+            if (p.getProtectionLevel() != null) {
+                sb.append(" — protectionLevel: `").append(p.getProtectionLevel()).append('`');
+            }
+            if (p.getPermissionGroup() != null) {
+                sb.append(", group: `").append(p.getPermissionGroup()).append('`');
+            }
+            sb.append('\n');
+        }
+    }
+
+    private static void appendDeepLinkList(StringBuilder sb, AndroidManifestInfo m) {
+        // VIEW + BROWSABLE を持つ Activity の Deep Link URI を平坦に列挙する。
+        boolean header = false;
+        for (AndroidComponentInfo c : m.getActivities()) {
+            for (AndroidIntentFilter f : c.getIntentFilters()) {
+                if (!f.isViewDeepLink()) {
+                    continue;
+                }
+                for (AndroidDataSpec d : f.getDataSpecs()) {
+                    String uri = d.toDeepLinkUri();
+                    if (uri == null) {
+                        continue;
+                    }
+                    if (!header) {
+                        sb.append("\n**Deep Links:**\n\n");
+                        header = true;
+                    }
+                    sb.append("- `").append(uri).append('`')
+                            .append(" → `").append(c.getName()).append('`');
+                    if (Boolean.TRUE.equals(f.getAutoVerify())) {
+                        sb.append(" *(autoVerify)*");
+                    }
+                    sb.append('\n');
+                }
+            }
+        }
     }
 
     /** Markdown サマリーを生成。 */
@@ -202,10 +268,13 @@ public final class TextSummaryReport {
                     sb.append("- Application class: `")
                             .append(m.getApplicationClass()).append("`\n");
                 }
+                appendSdkSection(sb, m);
                 appendComponentList(sb, "Activities", m.getActivities());
                 appendComponentList(sb, "Services", m.getServices());
                 appendComponentList(sb, "Receivers", m.getReceivers());
                 appendComponentList(sb, "Providers", m.getProviders());
+                appendCustomPermissionList(sb, m.getCustomPermissions());
+                appendDeepLinkList(sb, m);
                 sb.append('\n');
             }
         }
@@ -219,11 +288,18 @@ public final class TextSummaryReport {
         sb.append("\n**").append(label).append(":**\n\n");
         for (AndroidComponentInfo c : list) {
             sb.append("- `").append(c.getName()).append('`');
+            if (c.isActivityAlias()) {
+                sb.append(" *(alias → `").append(c.getTargetActivity()).append("`)*");
+            }
             if (Boolean.TRUE.equals(c.getExported())) {
                 sb.append(" *(exported)*");
             }
             if (c.isLauncher()) {
                 sb.append(" *(launcher)*");
+            }
+            if (c.getForegroundServiceType() != null) {
+                sb.append(" *(foregroundServiceType: `")
+                        .append(c.getForegroundServiceType()).append("`)*");
             }
             if (!c.getIntentFilters().isEmpty()) {
                 sb.append(" — intent-filters: ").append(c.getIntentFilters().size());
@@ -237,6 +313,9 @@ public final class TextSummaryReport {
                 if (!f.getCategories().isEmpty()) {
                     sb.append("  - categories: ")
                             .append(String.join(", ", f.getCategories())).append('\n');
+                }
+                if (Boolean.TRUE.equals(f.getAutoVerify())) {
+                    sb.append("  - autoVerify: `true`\n");
                 }
             }
         }

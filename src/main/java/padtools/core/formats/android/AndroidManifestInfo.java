@@ -17,12 +17,16 @@ public class AndroidManifestInfo {
     private String applicationTheme;
     private Boolean applicationDebuggable;
     private Boolean applicationAllowBackup;
+    private Integer minSdkVersion;
+    private Integer targetSdkVersion;
+    private Integer maxSdkVersion;
 
     private final List<AndroidComponentInfo> activities = new ArrayList<>();
     private final List<AndroidComponentInfo> services = new ArrayList<>();
     private final List<AndroidComponentInfo> receivers = new ArrayList<>();
     private final List<AndroidComponentInfo> providers = new ArrayList<>();
     private final List<AndroidPermissionInfo> permissions = new ArrayList<>();
+    private final List<AndroidCustomPermission> customPermissions = new ArrayList<>();
     private final List<String> features = new ArrayList<>();
     private final Map<String, String> applicationMetaData = new LinkedHashMap<>();
 
@@ -107,8 +111,40 @@ public class AndroidManifestInfo {
         return permissions;
     }
 
+    /** アプリ自身が {@code <permission>} で宣言した独自パーミッション。 */
+    public List<AndroidCustomPermission> getCustomPermissions() {
+        return customPermissions;
+    }
+
     public List<String> getFeatures() {
         return features;
+    }
+
+    /** {@code <uses-sdk android:minSdkVersion="..."/>}。 */
+    public Integer getMinSdkVersion() {
+        return minSdkVersion;
+    }
+
+    public void setMinSdkVersion(Integer minSdkVersion) {
+        this.minSdkVersion = minSdkVersion;
+    }
+
+    /** {@code <uses-sdk android:targetSdkVersion="..."/>}。 */
+    public Integer getTargetSdkVersion() {
+        return targetSdkVersion;
+    }
+
+    public void setTargetSdkVersion(Integer targetSdkVersion) {
+        this.targetSdkVersion = targetSdkVersion;
+    }
+
+    /** {@code <uses-sdk android:maxSdkVersion="..."/>} (推奨されないが互換のため保持)。 */
+    public Integer getMaxSdkVersion() {
+        return maxSdkVersion;
+    }
+
+    public void setMaxSdkVersion(Integer maxSdkVersion) {
+        this.maxSdkVersion = maxSdkVersion;
     }
 
     public Map<String, String> getApplicationMetaData() {

@@ -36,6 +36,8 @@ public class AndroidComponentInfo {
     private String process;
     private String permission;
     private String authorities;
+    private String targetActivity;
+    private String foregroundServiceType;
     private final List<AndroidIntentFilter> intentFilters = new ArrayList<>();
     private final Map<String, String> metaData = new LinkedHashMap<>();
 
@@ -103,6 +105,36 @@ public class AndroidComponentInfo {
 
     public void setAuthorities(String authorities) {
         this.authorities = authorities;
+    }
+
+    /**
+     * {@code <activity-alias>} の {@code targetActivity} 属性 (FQN 解決済み)。
+     * 通常の Activity / Service / Receiver / Provider では null。
+     */
+    public String getTargetActivity() {
+        return targetActivity;
+    }
+
+    public void setTargetActivity(String targetActivity) {
+        this.targetActivity = targetActivity;
+    }
+
+    /** alias として宣言されたかどうか。 */
+    public boolean isActivityAlias() {
+        return targetActivity != null && !targetActivity.isEmpty();
+    }
+
+    /**
+     * {@code <service>} の {@code foregroundServiceType} 属性。
+     * Android 14 以降の foreground service では必須宣言で、
+     * {@code "camera|microphone"} のように {@code |} 区切りで複数指定可能。
+     */
+    public String getForegroundServiceType() {
+        return foregroundServiceType;
+    }
+
+    public void setForegroundServiceType(String foregroundServiceType) {
+        this.foregroundServiceType = foregroundServiceType;
     }
 
     public List<AndroidIntentFilter> getIntentFilters() {

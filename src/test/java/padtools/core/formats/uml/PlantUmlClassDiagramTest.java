@@ -282,8 +282,8 @@ public class PlantUmlClassDiagramTest {
         String src = "/** ユーザを表すクラス */\nclass User { int id; }";
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src));
-        // INLINE モードがデフォルト
-        assertTrue(puml, puml.contains(".. ユーザを表すクラス .."));
+        // INLINE モードがデフォルト。デフォルト色 (#008800) でラップされる
+        assertTrue(puml, puml.contains(".. <color:#008800>ユーザを表すクラス</color> .."));
     }
 
     @Test
@@ -296,8 +296,8 @@ public class PlantUmlClassDiagramTest {
                 + "}";
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src));
-        assertTrue(puml, puml.contains(".. ユーザID .."));
-        assertTrue(puml, puml.contains(".. 表示名を返す .."));
+        assertTrue(puml, puml.contains(".. <color:#008800>ユーザID</color> .."));
+        assertTrue(puml, puml.contains(".. <color:#008800>表示名を返す</color> .."));
     }
 
     @Test
@@ -310,7 +310,7 @@ public class PlantUmlClassDiagramTest {
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src));
         // INLINE では先頭行のみ出す
-        assertTrue(puml, puml.contains(".. 1 行目 .."));
+        assertTrue(puml, puml.contains(".. <color:#008800>1 行目</color> .."));
     }
 
     @Test
@@ -320,7 +320,7 @@ public class PlantUmlClassDiagramTest {
         String src = "/** doc */ class C {}";
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src), o);
-        assertFalse(puml, puml.contains(".. doc .."));
+        assertFalse(puml, puml.contains("doc"));
     }
 
     @Test
@@ -355,7 +355,7 @@ public class PlantUmlClassDiagramTest {
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src));
         // INLINE モードでは先頭 1 行のみ
-        assertTrue(puml, puml.contains(".. 概要 1 行目。 .."));
+        assertTrue(puml, puml.contains(".. <color:#008800>概要 1 行目。</color> .."));
         // @param 行は表示されない
         assertFalse(puml, puml.contains("@param"));
     }
@@ -381,8 +381,52 @@ public class PlantUmlClassDiagramTest {
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract(src));
         // foo にだけ付く想定。bar に "doc" が出ないこと
-        int count = puml.split("\\.\\. doc \\.\\.", -1).length - 1;
+        int count = puml.split("\\.\\. <color:#008800>doc</color> \\.\\.", -1).length - 1;
         assertEquals("doc コメントが 1 箇所のみ出ること", 1, count);
+    }
+
+    @Test
+    public void testInlineCommentWrappedInColorTag() {
+        // デフォルト色 (#008800) がインラインコメントを <color:...> で囲む
+        String src = "/** クラス説明 */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains("<color:#008800>クラス説明</color>"));
+    }
+
+    @Test
+    public void testInlineCommentColorCustomizable() {
+        // commentColor を任意の値に差し替えられる
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.commentColor = "#FF00AA";
+        String src = "/** クラス説明 */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertTrue(puml, puml.contains(".. <color:#FF00AA>クラス説明</color> .."));
+    }
+
+    @Test
+    public void testInlineCommentColorDisabledWhenEmpty() {
+        // commentColor が空なら従来通り色タグなしで出力する
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.commentColor = "";
+        String src = "/** クラス説明 */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertTrue(puml, puml.contains(".. クラス説明 .."));
+        assertFalse(puml, puml.contains("<color:"));
+    }
+
+    @Test
+    public void testNoteStyleEmitsSkinparamForCommentColor() {
+        // NOTE モード時はコメント色を skinparam noteBorderColor / noteFontColor に流す
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        String src = "/** クラス説明 */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertTrue(puml, puml.contains("skinparam noteBorderColor #008800"));
+        assertTrue(puml, puml.contains("skinparam noteFontColor #008800"));
     }
 
     // --- アノテーション表示 ---

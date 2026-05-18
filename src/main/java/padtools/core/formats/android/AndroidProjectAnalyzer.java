@@ -199,7 +199,7 @@ public final class AndroidProjectAnalyzer {
      * {@code /root/app/src/main/AndroidManifest.xml} → {@code app}
      * (src/main 以下はモジュール内のソースセットなのでモジュール名から除外)。
      */
-    static String inferModuleName(File root, File f) {
+    public static String inferModuleName(File root, File f) {
         try {
             String rootPath = root.getCanonicalPath();
             String filePath = f.getCanonicalPath();

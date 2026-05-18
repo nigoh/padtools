@@ -45,11 +45,18 @@ java -jar PadTools.jar ~/AndroidStudioProjects/MyApp
 GUI の操作:
 
 * **File → Open Project...** (Ctrl+O) — Android / Gradle プロジェクトのルートディレクトリを選択
+* **File → Cancel Loading** — 進行中の解析を中断 (AOSP 級プロジェクトで途中で気が変わったとき用)
 * **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / コンポーネント図 / 依存図 のラジオ選択
 * **Diagram → Choose Sequence Entry...** — シーケンス図の起点 `Class.method` を絞り込みリストから選択
+* **Diagram → Scope...** — クラス図 / パッケージ図の表示範囲を絞り込み (パッケージ複数選択 / モジュール複数選択 / 正規表現 / 最大クラス数 / シードからの hop 数)
+* **Diagram → Clear Scope** — 絞り込みを解除
+* **左ペイン (ProjectTreePanel)** — モジュール → パッケージ → クラス → メソッド の遅延展開ツリー。
+    * パッケージノード右クリック → `Show class diagram of this package` でそのパッケージだけのクラス図にドリルダウン
+    * メソッドノード選択 → シーケンス図起点として即座に切替
 * **View → Zoom In / Out / 100% / Fit** (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+F) — プレビューズーム。Ctrl+ホイールでもズーム、左ドラッグでパン
 * **右ペイン**: Preview タブ (画像) と PlantUML Source タブ (生成テキスト) を切替
 * **File → Save Diagram As...** (Ctrl+S) — SVG / PNG / PUML 形式で保存
+* **ステータスバー** に解析進捗 (`Analyzing 1234/56789`) と解析完了サマリが出る
 
 ### CLI から個別図を生成
 

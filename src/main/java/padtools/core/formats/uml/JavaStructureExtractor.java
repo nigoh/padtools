@@ -44,6 +44,37 @@ public final class JavaStructureExtractor {
         return Collections.unmodifiableList(e.results);
     }
 
+    /**
+     * ヘッダ情報のみ (package / simpleName / kind / modifiers / superClass / interfaces /
+     * enclosingClass / アノテーション名) を抽出する軽量モード。
+     *
+     * <p>fields / methods / comments / enumConstants は破棄され、各 ClassInfo の
+     * {@link JavaClassInfo#isDetailed()} は false。大規模プロジェクトでヒープを抑えつつ
+     * 一覧表示・ツリー構築・図のフィルタリングだけを行いたい場合に使う。詳細が必要に
+     * なったら {@link ClassIndex#detail} で対象クラスだけ Stage B 化する。</p>
+     */
+    public static List<JavaClassInfo> extractHeadersOnly(String source, ErrorListener listener) {
+        List<JavaClassInfo> full = extract(source, listener);
+        List<JavaClassInfo> headers = new ArrayList<>(full.size());
+        for (JavaClassInfo c : full) {
+            JavaClassInfo h = new JavaClassInfo();
+            h.setPackageName(c.getPackageName());
+            h.setSimpleName(c.getSimpleName());
+            h.setKind(c.getKind());
+            h.getModifiers().addAll(c.getModifiers());
+            h.getAnnotations().addAll(c.getAnnotations());
+            h.setSuperClass(c.getSuperClass());
+            h.getInterfaces().addAll(c.getInterfaces());
+            h.setEnclosingClass(c.getEnclosingClass());
+            h.setAaosCategory(c.getAaosCategory());
+            h.setAndroidComponentType(c.getAndroidComponentType());
+            // fields / methods / enumConstants / comment は破棄
+            h.setDetailed(false);
+            headers.add(h);
+        }
+        return Collections.unmodifiableList(headers);
+    }
+
     private JavaStructureExtractor() {
     }
 

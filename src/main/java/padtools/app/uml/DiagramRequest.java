@@ -5,6 +5,9 @@ package padtools.app.uml;
  *
  * <p>{@link DiagramKind#SEQUENCE} の場合のみ {@link #sequenceEntryClass} と
  * {@link #sequenceEntryMethod} を使用する。それ以外の図種ではこれらの値は無視される。</p>
+ *
+ * <p>大規模プロジェクトの可読性確保のため、{@link DiagramScope} で表示クラスを
+ * 絞り込める。null/未指定は「全件」を意味する。</p>
  */
 public final class DiagramRequest {
 
@@ -12,13 +15,20 @@ public final class DiagramRequest {
     private final String sequenceEntryClass;
     private final String sequenceEntryMethod;
     private final boolean includeLegend;
+    private final DiagramScope scope;
 
     public DiagramRequest(DiagramKind kind) {
-        this(kind, null, null, true);
+        this(kind, null, null, true, null);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend) {
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, null);
+    }
+
+    public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
+                          String sequenceEntryMethod, boolean includeLegend,
+                          DiagramScope scope) {
         if (kind == null) {
             throw new IllegalArgumentException("kind is null");
         }
@@ -26,6 +36,7 @@ public final class DiagramRequest {
         this.sequenceEntryClass = sequenceEntryClass;
         this.sequenceEntryMethod = sequenceEntryMethod;
         this.includeLegend = includeLegend;
+        this.scope = scope;
     }
 
     public DiagramKind getKind() {
@@ -42,5 +53,9 @@ public final class DiagramRequest {
 
     public boolean isIncludeLegend() {
         return includeLegend;
+    }
+
+    public DiagramScope getScope() {
+        return scope;
     }
 }

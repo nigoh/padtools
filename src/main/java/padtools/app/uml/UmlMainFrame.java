@@ -2,7 +2,9 @@ package padtools.app.uml;
 
 import padtools.Main;
 import padtools.Setting;
+import padtools.util.CancelToken;
 import padtools.util.ErrorListener;
+import padtools.util.ProgressListener;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -15,6 +17,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -33,6 +36,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.List;
 
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 
@@ -66,6 +70,8 @@ public class UmlMainFrame extends JFrame {
     private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
+    private final JProgressBar loadProgress = new JProgressBar();
+    private final JMenuItem cancelLoadingItem = new JMenuItem("Cancel Loading");
     private final ButtonGroup diagramGroup = new ButtonGroup();
     private final java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems
             = new java.util.EnumMap<>(DiagramKind.class);
@@ -76,6 +82,10 @@ public class UmlMainFrame extends JFrame {
     private String currentPuml;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
     private String sequenceEntry;
+    /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
+    private DiagramScope currentScope;
+    /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
+    private CancelToken loadingCancelToken;
 
     public UmlMainFrame(File initialProject) {
         super(WINDOW_TITLE);
@@ -92,6 +102,11 @@ public class UmlMainFrame extends JFrame {
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
+        treePanel.setOnPackageSelected(this::onTreePackageSelected);
+
+        loadProgress.setStringPainted(true);
+        loadProgress.setVisible(false);
+        loadProgress.setPreferredSize(new Dimension(200, 16));
 
         setJMenuBar(buildMenuBar());
 
@@ -143,6 +158,13 @@ public class UmlMainFrame extends JFrame {
         JMenuItem refresh = new JMenuItem("Refresh");
         refresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
         refresh.addActionListener(e -> refreshDiagram());
+        cancelLoadingItem.addActionListener(e -> {
+            if (loadingCancelToken != null) {
+                loadingCancelToken.cancel();
+                status.setText("Cancelling...");
+            }
+        });
+        cancelLoadingItem.setEnabled(false);
         JMenuItem exit = new JMenuItem("Exit");
         exit.addActionListener(e -> {
             saveWindowState();
@@ -152,6 +174,7 @@ public class UmlMainFrame extends JFrame {
         m.add(save);
         m.addSeparator();
         m.add(refresh);
+        m.add(cancelLoadingItem);
         m.addSeparator();
         m.add(exit);
         return m;
@@ -177,6 +200,15 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
         pickEntry.addActionListener(e -> pickSequenceEntry());
         m.add(pickEntry);
+        JMenuItem scope = new JMenuItem("Scope...");
+        scope.addActionListener(e -> openScopeDialog());
+        m.add(scope);
+        JMenuItem clearScope = new JMenuItem("Clear Scope");
+        clearScope.addActionListener(e -> {
+            currentScope = null;
+            refreshDiagram();
+        });
+        m.add(clearScope);
         return m;
     }
 
@@ -220,7 +252,10 @@ public class UmlMainFrame extends JFrame {
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
         bar.add(status, BorderLayout.CENTER);
-        bar.add(zoomLabel, BorderLayout.EAST);
+        JPanel east = new JPanel(new BorderLayout(8, 0));
+        east.add(loadProgress, BorderLayout.WEST);
+        east.add(zoomLabel, BorderLayout.EAST);
+        bar.add(east, BorderLayout.EAST);
         return bar;
     }
 
@@ -239,14 +274,27 @@ public class UmlMainFrame extends JFrame {
     private void loadProject(File root) {
         status.setText("Analyzing " + root.getName() + " ...");
         treePanel.clear();
+        loadProgress.setVisible(true);
+        loadProgress.setIndeterminate(true);
+        loadProgress.setString("Scanning...");
+        cancelLoadingItem.setEnabled(true);
+        final CancelToken cancel = new CancelToken();
+        loadingCancelToken = cancel;
+        // EDT に間引きながら進捗を流す。生のリスナーは複数スレッドから呼ばれる。
+        final ProgressListener prog = ProgressListener.throttled(
+                (done, total, message) -> SwingUtilities.invokeLater(
+                        () -> updateLoadProgress(done, total, message)),
+                150L);
         new SwingWorker<Void, Void>() {
             private Throwable error;
+            private boolean cancelled;
 
             @Override
             protected Void doInBackground() {
                 try {
                     cache.clear();
-                    cache.load(root, ErrorListener.silent());
+                    cache.load(root, ErrorListener.silent(), prog, cancel, null);
+                    cancelled = cancel.isCancelled();
                 } catch (Exception ex) {
                     error = ex;
                 }
@@ -255,6 +303,12 @@ public class UmlMainFrame extends JFrame {
 
             @Override
             protected void done() {
+                loadingCancelToken = null;
+                cancelLoadingItem.setEnabled(false);
+                loadProgress.setVisible(false);
+                loadProgress.setIndeterminate(false);
+                loadProgress.setValue(0);
+                loadProgress.setString(null);
                 if (error != null) {
                     JOptionPane.showMessageDialog(UmlMainFrame.this,
                             "Failed to analyze project: " + error.getMessage(),
@@ -262,14 +316,77 @@ public class UmlMainFrame extends JFrame {
                     status.setText(" ");
                     return;
                 }
+                if (cancelled) {
+                    status.setText("Cancelled.");
+                    return;
+                }
                 treePanel.populate(cache.getAnalysis(), cache.getClasses(),
-                        root.getName());
+                        root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
+                currentScope = null;
                 status.setText("Analyzed " + cache.getClasses().size() + " class(es)"
                         + " from " + root.getAbsolutePath());
                 refreshDiagram();
             }
         }.execute();
+    }
+
+    private void updateLoadProgress(int done, int total, String message) {
+        if (total > 0) {
+            if (loadProgress.isIndeterminate()) {
+                loadProgress.setIndeterminate(false);
+            }
+            loadProgress.setMaximum(total);
+            loadProgress.setValue(Math.min(done, total));
+            loadProgress.setString(done + "/" + total);
+            status.setText("Analyzing " + done + "/" + total
+                    + (message != null && !message.isEmpty() ? " — " + message : ""));
+        } else {
+            loadProgress.setIndeterminate(true);
+            loadProgress.setString(message != null ? message : "Scanning...");
+            if (message != null) {
+                status.setText(message);
+            }
+        }
+    }
+
+    private void onTreePackageSelected(String pkg) {
+        if (pkg == null || pkg.isEmpty() || "(default)".equals(pkg)) {
+            return;
+        }
+        currentScope = DiagramScope.builder().includePackage(pkg).build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Scope: package " + pkg);
+        refreshDiagram();
+    }
+
+    private void openScopeDialog() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        java.util.Set<String> packages = new java.util.TreeSet<>();
+        java.util.Set<String> modules = new java.util.TreeSet<>(cache.getClassToModule().values());
+        for (padtools.core.formats.uml.JavaClassInfo c : cache.getClasses()) {
+            String p = c.getPackageName();
+            if (p != null && !p.isEmpty()) {
+                packages.add(p);
+            }
+        }
+        DiagramScopeDialog dlg = new DiagramScopeDialog(this,
+                List.copyOf(packages), List.copyOf(modules), currentScope);
+        dlg.setVisible(true);
+        DiagramScope picked = dlg.getResult();
+        if (picked != null) {
+            currentScope = picked.isEmpty() ? null : picked;
+            refreshDiagram();
+        }
     }
 
     /**
@@ -334,6 +451,7 @@ public class UmlMainFrame extends JFrame {
         }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
         final String entry = sequenceEntry;
+        final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
 
@@ -342,7 +460,7 @@ public class UmlMainFrame extends JFrame {
                 try {
                     DiagramRequest req = (kind == DiagramKind.SEQUENCE && entry != null)
                             ? buildSequenceRequest(entry)
-                            : new DiagramRequest(kind);
+                            : new DiagramRequest(kind, null, null, true, scope);
                     String puml = DiagramService.generatePuml(req, cache);
                     // ベクター SVG として描画して、PlantUML の PNG 4096x4096
                     // キャンバス上限による切り詰めを回避する。

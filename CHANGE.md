@@ -4,6 +4,30 @@ Change log
 Unreleased
 --------
 
+* **AOSP 級プロジェクト対応 (Large project readability)** — 数万クラス規模でも「読み込めて」「図として読める」ようにパイプライン全体を刷新
+    * **並列スキャン + 並列パース** (`AndroidProjectScanner`, `UmlGenerator`)
+        * `AndroidProjectScanner.walk` を `Files.walkFileTree` ベースに置き換え、深い再帰でも安定動作
+        * `UmlGenerator.extractFromProjectDetailed` を専用 ExecutorService (CPU - 1 並列) で並列化
+        * `Options.maxFiles` で取り込み上限、`Options.cancelToken` で途中中断、`Options.useAospDefaults` で `prebuilts/.repo/out-soong/test_mapping/.cache` を追加除外
+    * **進捗 + キャンセル ユーティリティ** (`padtools.util.ProgressListener`, `padtools.util.CancelToken`)
+        * `silent() / console() / throttled(delegate, ms)` ファクトリで GUI/CLI のどちらでも使える
+        * `UmlMainFrame` のステータスバーに `JProgressBar` を追加し、`File → Cancel Loading` で進行中の解析を中断可能
+    * **Stage A / Stage B 二相パース** (`JavaStructureExtractor.extractHeadersOnly`, `ClassIndex`)
+        * ヘッダ (パッケージ / 名前 / kind / modifiers / super / interfaces / アノテーション) のみで全件保持し、必要なクラスだけ `ClassIndex.detail(qn)` で詳細にフルパースする
+        * 50,000 クラスでも数十 MB 程度に収まる想定
+    * **ツリーの遅延展開** (`ProjectTreePanel`)
+        * モジュール → パッケージ ノードまでだけ初期構築。パッケージ展開時にクラス、クラス展開時にメソッドを生成
+        * Gradle 解析結果 (`AndroidProjectAnalyzer.inferModuleName`) と紐付け、`(other)` 集約を解消
+        * パッケージノード右クリック → `Show class diagram of this package` でクラス図にドリルダウン
+    * **DiagramScope による表示範囲指定** (`DiagramScope`, `DiagramScopeDialog`, `DiagramService.applyScope`)
+        * パッケージ前方一致 / モジュール / 正規表現 / シード+N hop / 最大クラス数 を組み合わせて絞り込み
+        * Diagram メニュー: `Scope...` で編集、`Clear Scope` で解除
+        * 絞り込みで件数が減ったり `maxClasses` で切り詰められたら `footer` 行に警告を出す
+    * **永続ディスクキャッシュ** (`PersistentAnalysisCache`)
+        * `~/.padtools/cache/<hash>/` に Stage A ヘッダ + ソースパス + モジュール紐付けを保存
+        * キャッシュキー = プロジェクトルート + (path/mtime/size) 列の SHA-256。ファイルが 1 件でも変われば別ディレクトリで自動無効化
+        * `lazyDetails=true` + `useDiskCache=true` (デフォルト) で利用
+    * **追加テスト**: `AndroidProjectScannerScaleTest`, `UmlGeneratorParallelTest`, `ClassIndexTest`, `DiagramScopeTest`, `DiagramServiceScopeTest`, `JavaClassInfoCodecTest`, `PersistentAnalysisCacheTest`, `CacheKeyTest`, `CancelTokenTest`, `ProgressListenerTest`, `SyntheticAospScaleTest` (`-DrunPerfTests=true` でのみ実行)
 * **クラス図コメントの色付け** (`PlantUmlClassDiagram`)
     * インラインコメント (`.. text ..`) を `<color:#008800>...</color>` で囲み、クラス本体のメンバーと視覚的に区別できるようにした
     * NOTE スタイルでは `skinparam noteBorderColor` / `skinparam noteFontColor` を自動付与し、注釈ブロックの枠線と文字色を同色に揃える

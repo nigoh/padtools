@@ -89,6 +89,11 @@ public class Main {
         final Option optSummary = new Option(null, "summary", false);
         final Option optAll = new Option("A", "all", false);
         final Option optNoManifestMerge = new Option(null, "no-manifest-merge", false);
+        final Option optNoComments = new Option(null, "no-comments", false);
+        final Option optCommentStyle = new Option(null, "comment-style", true);
+        final Option optNoAnnotations = new Option(null, "no-annotations", false);
+        final Option optNoEnumConstants = new Option(null, "no-enum-constants", false);
+        final Option optNoFinal = new Option(null, "no-final", false);
         final Option optListMethods = new Option(null, "list-methods", false);
         final Option optSeqDepth = new Option(null, "seq-depth", true);
 
@@ -97,7 +102,10 @@ public class Main {
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
                 optGradle, optManifest, optComponent, optDepGraph, optSummary,
-                optAll, optNoManifestMerge, optListMethods, optSeqDepth});
+                optAll, optNoManifestMerge,
+                optNoComments, optCommentStyle, optNoAnnotations,
+                optNoEnumConstants, optNoFinal,
+                optListMethods, optSeqDepth});
 
         try {
             optParser.parse(args, 1);
@@ -148,23 +156,19 @@ public class Main {
             legendOverride = Boolean.FALSE;
         }
         boolean mergeManifest = !optNoManifestMerge.isSet();
-        Integer seqDepth = null;
-        if (!optSeqDepth.getArguments().isEmpty()) {
-            try {
-                seqDepth = Integer.parseInt(optSeqDepth.getArguments().getLast());
-            } catch (NumberFormatException ex) {
-                System.err.println("Invalid --seq-depth value: "
-                        + optSeqDepth.getArguments().getLast());
-                System.exit(1);
-                return;
-            }
+        UmlOverrides umlOverrides = UmlOverrides.build(
+                optNoComments, optNoAnnotations, optNoEnumConstants,
+                optNoFinal, optCommentStyle, optSeqDepth);
+        if (umlOverrides == null) {
+            return; // 引数エラー: UmlOverrides.build 内で System.exit 済み
         }
         if (optListMethods.isSet()) {
             handleListMethods(file_in, file_out, listener);
             return;
         }
         if (optAll.isSet()) {
-            handleAll(file_in, file_out, listener, legendOverride, mergeManifest);
+            handleAll(file_in, file_out, listener, legendOverride, mergeManifest,
+                    umlOverrides);
             return;
         }
         if (optGradle.isSet()) {
@@ -192,7 +196,7 @@ public class Main {
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
                             ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener, legendOverride, mergeManifest, seqDepth);
+                    listener, legendOverride, mergeManifest, umlOverrides);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
@@ -308,7 +312,7 @@ public class Main {
                                         ErrorListener listener,
                                         Boolean legendOverride,
                                         boolean mergeManifest,
-                                        Integer seqDepth) throws IOException {
+                                        UmlOverrides overrides) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -338,8 +342,8 @@ public class Main {
             if (Boolean.FALSE.equals(legendOverride)) {
                 sqOpts.includeLegend = false;
             }
-            if (seqDepth != null) {
-                sqOpts.maxDepth = seqDepth;
+            if (overrides != null && overrides.seqDepth != null) {
+                sqOpts.maxDepth = overrides.seqDepth;
             }
             output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
                     infos, entryClass, entryMethod, sqOpts);
@@ -348,6 +352,9 @@ public class Main {
                     = new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
             if (Boolean.FALSE.equals(legendOverride)) {
                 clOpts.includeLegend = false;
+            }
+            if (overrides != null) {
+                overrides.applyTo(clOpts);
             }
             output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
@@ -492,7 +499,8 @@ public class Main {
     private static void handleAll(File fileIn, File fileOut,
                                     ErrorListener listener,
                                     Boolean legendOverride,
-                                    boolean mergeManifest) throws IOException {
+                                    boolean mergeManifest,
+                                    UmlOverrides overrides) throws IOException {
         if (fileIn == null || !fileIn.isDirectory()) {
             System.err.println("--all requires a project directory.");
             System.exit(1);
@@ -562,6 +570,9 @@ public class Main {
                 new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             clsOpts.includeLegend = false;
+        }
+        if (overrides != null) {
+            overrides.applyTo(clsOpts);
         }
         File clsFile = new File(fileOut, "class-diagram.svg");
         PlantUmlRenderer.renderSvg(
@@ -735,6 +746,12 @@ public class Main {
         System.err.println("  -A --all: Output ALL artifacts as SVG "
                 + "(summary.md + 4 svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
+        System.err.println("  --no-comments: Disable JavaDoc/comment rendering in class diagram.");
+        System.err.println("  --comment-style inline|note: "
+                + "Choose comment placement (default: inline).");
+        System.err.println("  --no-annotations: Disable @annotation rendering in class diagram.");
+        System.err.println("  --no-enum-constants: Disable enum constant rendering.");
+        System.err.println("  --no-final: Disable {final} marker on final fields.");
         System.err.println("  --list-methods: List Class.method candidates for use with -q.");
         System.err.println("  --seq-depth N: Sequence trace depth limit (default 5, 0=unlimited).");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary/-A.");

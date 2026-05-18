@@ -20,9 +20,11 @@ public class JavaClassInfo {
     private final List<String> interfaces = new ArrayList<>();
     private final List<JavaFieldInfo> fields = new ArrayList<>();
     private final List<JavaMethodInfo> methods = new ArrayList<>();
+    private final List<String> enumConstants = new ArrayList<>();
     private String enclosingClass;
     private String aaosCategory;
     private String androidComponentType;
+    private String comment;
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
     public String getQualifiedName() {
@@ -120,5 +122,19 @@ public class JavaClassInfo {
 
     public void setAndroidComponentType(String androidComponentType) {
         this.androidComponentType = androidComponentType;
+    }
+
+    /** enum 定数名のリスト (kind が ENUM の場合のみ意味を持つ)。 */
+    public List<String> getEnumConstants() {
+        return enumConstants;
+    }
+
+    /** JavaDoc / 直前コメントを整形した文字列。未取得時は null。 */
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 }

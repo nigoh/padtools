@@ -274,4 +274,205 @@ public class PlantUmlClassDiagramTest {
                 JavaStructureExtractor.extract("class A {}"));
         assertFalse(puml, puml.contains("== Android コンポーネント =="));
     }
+
+    // --- コメント表示 ---
+
+    @Test
+    public void testJavadocOnClassEmitsInlineByDefault() {
+        String src = "/** ユーザを表すクラス */\nclass User { int id; }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        // INLINE モードがデフォルト
+        assertTrue(puml, puml.contains(".. ユーザを表すクラス .."));
+    }
+
+    @Test
+    public void testJavadocOnFieldAndMethodEmitsInline() {
+        String src = "class C {\n"
+                + "  /** ユーザID */\n"
+                + "  int id;\n"
+                + "  /** 表示名を返す */\n"
+                + "  String name() { return null; }\n"
+                + "}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains(".. ユーザID .."));
+        assertTrue(puml, puml.contains(".. 表示名を返す .."));
+    }
+
+    @Test
+    public void testLineCommentMergedAndAttached() {
+        String src = "class C {\n"
+                + "  // 1 行目\n"
+                + "  // 2 行目\n"
+                + "  int x;\n"
+                + "}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        // INLINE では先頭行のみ出す
+        assertTrue(puml, puml.contains(".. 1 行目 .."));
+    }
+
+    @Test
+    public void testCommentDisabled() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showComments = false;
+        String src = "/** doc */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertFalse(puml, puml.contains(".. doc .."));
+    }
+
+    @Test
+    public void testCommentNoteStyle() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        String src = "/** クラスの説明 */\nclass C {\n"
+                + "  /** field の説明 */ int x;\n"
+                + "}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        // INLINE 形式 (..) は出ない
+        assertFalse(puml, puml.contains(".. クラスの説明 .."));
+        // クラスレベル note
+        assertTrue(puml, puml.contains("note top of"));
+        assertTrue(puml, puml.contains("クラスの説明"));
+        // メンバーレベル note
+        assertTrue(puml, puml.contains("note right of"));
+        assertTrue(puml, puml.contains("::x"));
+        assertTrue(puml, puml.contains("field の説明"));
+        assertTrue(puml, puml.contains("end note"));
+    }
+
+    @Test
+    public void testCommentJavadocStripsLeadingAsterisksAndTags() {
+        String src = "/**\n"
+                + " * 概要 1 行目。\n"
+                + " * 詳細 2 行目。\n"
+                + " * @param x ignored\n"
+                + " */\n"
+                + "class C { void m() {} }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        // INLINE モードでは先頭 1 行のみ
+        assertTrue(puml, puml.contains(".. 概要 1 行目。 .."));
+        // @param 行は表示されない
+        assertFalse(puml, puml.contains("@param"));
+    }
+
+    @Test
+    public void testCommentInlineLengthLimited() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.commentMaxLength = 10;
+        String src = "/** 非常に非常に非常に長いコメントです */ class C {}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertTrue("expected truncated marker '…'", puml.contains("…"));
+    }
+
+    @Test
+    public void testCommentNotAttachedAcrossDecls() {
+        // /** doc */ は foo の直前にあり、bar の直前にはない
+        String src = "class C {\n"
+                + "  /** doc */\n"
+                + "  int foo;\n"
+                + "  int bar;\n"
+                + "}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        // foo にだけ付く想定。bar に "doc" が出ないこと
+        int count = puml.split("\\.\\. doc \\.\\.", -1).length - 1;
+        assertEquals("doc コメントが 1 箇所のみ出ること", 1, count);
+    }
+
+    // --- アノテーション表示 ---
+
+    @Test
+    public void testAnnotationsOnMembersEmittedByDefault() {
+        String src = "class C {\n"
+                + "  @Nullable\n"
+                + "  String name;\n"
+                + "  @Deprecated\n"
+                + "  void m() {}\n"
+                + "}";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains("@Nullable"));
+        assertTrue(puml, puml.contains("@Deprecated"));
+    }
+
+    @Test
+    public void testAnnotationsHiddenByDefaultForOverride() {
+        String src = "class C { @Override public String toString() { return null; } }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        // @Override は既定で非表示
+        assertFalse(puml, puml.contains("@Override"));
+    }
+
+    @Test
+    public void testAnnotationsDisabled() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showAnnotations = false;
+        String src = "class C { @Nullable String name; }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertFalse(puml, puml.contains("@Nullable"));
+    }
+
+    // --- enum 定数 ---
+
+    @Test
+    public void testEnumConstantsEmittedByDefault() {
+        String src = "enum Color { RED, GREEN, BLUE }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains("RED"));
+        assertTrue(puml, puml.contains("GREEN"));
+        assertTrue(puml, puml.contains("BLUE"));
+    }
+
+    @Test
+    public void testEnumConstantsWithMembersSeparated() {
+        String src = "enum E { A, B; int x() { return 1; } }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains("A"));
+        assertTrue(puml, puml.contains("B"));
+        // PlantUML の区切り '--' が定数とメンバーの間に入る
+        assertTrue(puml, puml.contains("--"));
+        assertTrue(puml, puml.contains("x(): int"));
+    }
+
+    @Test
+    public void testEnumConstantsDisabled() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showEnumConstants = false;
+        String src = "enum Color { RED, GREEN }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        // クラス本体内に RED が出ないこと (class エイリアスとは別に)
+        assertFalse(puml, puml.contains("\n  RED\n"));
+        assertFalse(puml, puml.contains("\n  GREEN\n"));
+    }
+
+    // --- final マーカー ---
+
+    @Test
+    public void testFinalMarkerEmittedByDefault() {
+        String src = "class C { public final int N = 1; }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src));
+        assertTrue(puml, puml.contains("{final}"));
+    }
+
+    @Test
+    public void testFinalMarkerDisabled() {
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showFinal = false;
+        String src = "class C { public final int N = 1; }";
+        String puml = PlantUmlClassDiagram.generate(
+                JavaStructureExtractor.extract(src), o);
+        assertFalse(puml, puml.contains("{final}"));
+    }
 }

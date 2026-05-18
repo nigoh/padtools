@@ -47,4 +47,43 @@ public class PlantUmlSvgRendererTest {
             fail("Unexpected IOException: " + ex.getMessage());
         }
     }
+
+    @Test
+    public void testLinkAreasEmptyWhenNoLinks() throws IOException {
+        String puml = "@startuml\nclass Foo\n@enduml\n";
+        PlantUmlSvgRenderer.RenderedSvg r = PlantUmlSvgRenderer.render(puml);
+        assertNotNull(r);
+        assertNotNull("getLinkAreas should never be null", r.getLinkAreas());
+        assertTrue("should be empty when no [[url]] embedded",
+                r.getLinkAreas().isEmpty());
+    }
+
+    @Test
+    public void testLinkAreasExtractedFromPlantUmlUrl() throws IOException {
+        String puml = "@startuml\n"
+                + "class Foo [[padtools://class/com.example.Foo]]\n"
+                + "class Bar [[padtools://class/com.example.Bar]]\n"
+                + "Foo --> Bar\n"
+                + "@enduml\n";
+        PlantUmlSvgRenderer.RenderedSvg r = PlantUmlSvgRenderer.render(puml);
+        assertNotNull(r);
+        java.util.List<PlantUmlSvgRenderer.LinkArea> areas = r.getLinkAreas();
+        assertNotNull(areas);
+        assertTrue("should have at least two link areas, got " + areas.size(),
+                areas.size() >= 2);
+        boolean foo = false;
+        boolean bar = false;
+        for (PlantUmlSvgRenderer.LinkArea a : areas) {
+            if ("padtools://class/com.example.Foo".equals(a.getHref())) {
+                foo = true;
+                assertTrue(a.getWidth() > 0);
+                assertTrue(a.getHeight() > 0);
+            }
+            if ("padtools://class/com.example.Bar".equals(a.getHref())) {
+                bar = true;
+            }
+        }
+        assertTrue("Foo link area not found", foo);
+        assertTrue("Bar link area not found", bar);
+    }
 }

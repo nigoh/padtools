@@ -37,6 +37,26 @@ public class PlantUmlClassDiagramTest {
     }
 
     @Test
+    public void testInteractiveLinksDisabledByDefault() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void m() {} }");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertFalse("[[padtools://...]] should not appear by default: " + puml,
+                puml.contains("[[padtools://"));
+    }
+
+    @Test
+    public void testInteractiveLinksEmitsUrlPerClass() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void m() {} } class Bar { void n() {} }");
+        PlantUmlClassDiagram.Options opts = new PlantUmlClassDiagram.Options();
+        opts.interactiveLinks = true;
+        String puml = PlantUmlClassDiagram.generate(infos, opts);
+        assertTrue(puml, puml.contains("[[padtools://class/x.Foo]]"));
+        assertTrue(puml, puml.contains("[[padtools://class/x.Bar]]"));
+    }
+
+    @Test
     public void testInterfaceEmit() {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "interface I { void m(); }");

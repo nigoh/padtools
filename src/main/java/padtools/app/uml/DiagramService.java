@@ -85,6 +85,7 @@ public final class DiagramService {
                 PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 o.maxClasses = maxClasses;
+                o.interactiveLinks = request.isInteractiveLinks();
                 if (scopedTotal < originalTotal) {
                     o.footerWarning = "scope filter: " + scopedTotal + " of "
                             + originalTotal + " classes";

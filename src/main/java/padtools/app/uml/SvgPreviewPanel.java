@@ -1,6 +1,7 @@
 package padtools.app.uml;
 
 import org.apache.batik.gvt.GraphicsNode;
+import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -20,6 +21,10 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * PlantUML のレンダリング結果をズーム・パン対応で表示するパネル。
@@ -58,6 +63,11 @@ public class SvgPreviewPanel extends JPanel {
 
     private Runnable zoomChangeListener;
 
+    /** SVG 内のクリック可能リンク領域 ({@link PlantUmlSvgRenderer.LinkArea})。 */
+    private List<LinkArea> linkAreas = Collections.emptyList();
+    /** 右クリックでリンク領域にヒットしたときに呼ばれるリスナ。 */
+    private BiConsumer<LinkArea, MouseEvent> linkPopupListener;
+
     public SvgPreviewPanel() {
         setBackground(new Color(0xF7, 0xF7, 0xF7));
         setupMouseHandlers();
@@ -88,9 +98,62 @@ public class SvgPreviewPanel extends JPanel {
         }
         // 同時に画像モードもクリアし、表示内容を一意にする
         this.image = null;
+        // 旧 SVG の領域情報は無効化する (差し替え後の正しい値は別途 setLinkAreas で再設定)
+        this.linkAreas = Collections.emptyList();
         updatePreferredSize();
         revalidate();
         repaint();
+    }
+
+    /**
+     * SVG 内のクリック可能領域 ({@code [[url]]} 由来) を設定する。
+     * {@code null} または空リストでクリア。
+     */
+    public void setLinkAreas(List<LinkArea> areas) {
+        this.linkAreas = (areas == null || areas.isEmpty())
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(areas));
+    }
+
+    /** 現在保持しているリンク領域のリスト (never null)。 */
+    public List<LinkArea> getLinkAreas() {
+        return linkAreas;
+    }
+
+    /**
+     * 右クリックでリンク領域にヒットしたときに呼ばれるリスナを登録する。
+     * 第 1 引数はヒットした {@link LinkArea}、第 2 引数は元の {@link MouseEvent}。
+     * {@code null} で解除。
+     */
+    public void setOnLinkPopup(BiConsumer<LinkArea, MouseEvent> listener) {
+        this.linkPopupListener = listener;
+    }
+
+    /**
+     * パネル座標 {@code p} に対応する {@link LinkArea} を返す。ヒットしなければ {@code null}。
+     * SVG 座標系 = パネル座標 / zoomLevel。
+     */
+    LinkArea hitTestLink(Point p) {
+        if (linkAreas.isEmpty() || zoomLevel <= 0) {
+            return null;
+        }
+        double sx = p.x / zoomLevel;
+        double sy = p.y / zoomLevel;
+        // 後勝ち (内側の小さい矩形が後に追加されているとは限らないので) →
+        // 最も内側に見えるよう、面積が小さい矩形を優先する
+        LinkArea best = null;
+        double bestArea = Double.POSITIVE_INFINITY;
+        for (LinkArea a : linkAreas) {
+            if (!a.contains(sx, sy)) {
+                continue;
+            }
+            double area = a.getWidth() * a.getHeight();
+            if (area < bestArea) {
+                bestArea = area;
+                best = a;
+            }
+        }
+        return best;
     }
 
     public GraphicsNode getSvgGraphicsNode() {
@@ -104,6 +167,7 @@ public class SvgPreviewPanel extends JPanel {
         this.svgNode = null;
         this.svgWidth = 0;
         this.svgHeight = 0;
+        this.linkAreas = Collections.emptyList();
         updatePreferredSize();
         revalidate();
         repaint();
@@ -280,6 +344,9 @@ public class SvgPreviewPanel extends JPanel {
                 if (!hasContent()) {
                     return;
                 }
+                if (maybeFireLinkPopup(e)) {
+                    return;
+                }
                 if (SwingUtilities.isMiddleMouseButton(e)
                         || SwingUtilities.isLeftMouseButton(e)) {
                     dragStart = e.getPoint();
@@ -313,6 +380,7 @@ public class SvgPreviewPanel extends JPanel {
             public void mouseReleased(MouseEvent e) {
                 dragStart = null;
                 setCursor(hasContent() ? handCursor : defaultCursor);
+                maybeFireLinkPopup(e);
             }
 
             @Override
@@ -328,6 +396,25 @@ public class SvgPreviewPanel extends JPanel {
         addMouseListener(handler);
         addMouseMotionListener(handler);
         addMouseWheelListener(handler);
+    }
+
+    /**
+     * 右クリック (ポップアップトリガ) かつリンク領域内なら登録済みリスナを発火する。
+     * Linux は {@code mousePressed}、Windows/Mac は {@code mouseReleased} 側で
+     * isPopupTrigger が true になるため両方から呼ぶ前提。
+     *
+     * @return リンクポップアップを発火した場合 true (呼び出し側はそれ以降の処理を抑制してよい)
+     */
+    private boolean maybeFireLinkPopup(MouseEvent e) {
+        if (!e.isPopupTrigger() || linkPopupListener == null || linkAreas.isEmpty()) {
+            return false;
+        }
+        LinkArea hit = hitTestLink(e.getPoint());
+        if (hit == null) {
+            return false;
+        }
+        linkPopupListener.accept(hit, e);
+        return true;
     }
 
     @Override

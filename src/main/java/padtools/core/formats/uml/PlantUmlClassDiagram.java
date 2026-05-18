@@ -69,6 +69,18 @@ public final class PlantUmlClassDiagram {
         public String footerWarning;
         /** Jetpack (Fragment / ViewModel / Hilt 等) ステレオタイプ・装飾の設定。既定で無効。 */
         public JetpackOptions jetpack = new JetpackOptions();
+        /**
+         * 各クラス宣言に {@code [[padtools://class/<FQN>]]} を付与する。
+         * GUI プレビューで右クリック→メソッド一覧のヒットテスト用に SVG へ
+         * {@code <a xlink:href>} を埋め込みたい場合のみ true にする。
+         * CLI 出力や保存図には影響させないため既定で false。
+         */
+        public boolean interactiveLinks = false;
+        /**
+         * {@link #interactiveLinks} の URL スキーム接頭辞。
+         * SVG 上の {@code href} から FQN を取り出す側 (GUI) と揃える。
+         */
+        public String interactiveLinkPrefix = "padtools://class/";
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -250,6 +262,11 @@ public final class PlantUmlClassDiagram {
         }
         if (!stereo.isEmpty()) {
             out.append(' ').append(stereo);
+        }
+        if (o.interactiveLinks) {
+            String prefix = o.interactiveLinkPrefix != null
+                    ? o.interactiveLinkPrefix : "padtools://class/";
+            out.append(" [[").append(prefix).append(c.getQualifiedName()).append("]]");
         }
         out.append(" {\n");
         // INLINE 表示時はクラスコメントを本体の先頭に置く

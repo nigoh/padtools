@@ -4,6 +4,11 @@ Change log
 Unreleased
 --------
 
+* **クラス図プレビューの右クリックからシーケンス図へ** (`PlantUmlClassDiagram.Options.interactiveLinks` / `PlantUmlSvgRenderer.LinkArea` / `SvgPreviewPanel.setOnLinkPopup`)
+    * GUI でクラス図を表示中、クラスの枠を右クリックすると、そのクラスのメソッド一覧が `JPopupMenu` で開く。メソッドを選ぶと既存の `sequenceEntry` 経路でシーケンス図に置き換わる
+    * 仕組み: クラス図生成時に各クラスへ `[[padtools://class/<FQN>]]` を埋め込み、PlantUML が SVG に出力する `<a xlink:href>` 領域を `PlantUmlSvgRenderer` が抽出して `RenderedSvg.getLinkAreas()` で返す。`SvgPreviewPanel` は右クリック (`isPopupTrigger`) でその領域をヒットテストし、ヒットすればリスナを発火する
+    * URL 埋め込みは GUI プレビュー描画時 (`DiagramRequest.isInteractiveLinks() == true`) のみ。CLI / `Save Diagram As...` / `--per-folder` などの出力には影響しない
+    * 抽象メソッドはツリー側と同じく除外する。メソッドラベルは `name(paramType, ...)` 形式
 * **フォルダ単位のクラス図一括出力** (`PerFolderClassDiagrams`)
     * プロジェクトを再帰スキャンし、ソースファイルを直接含む各フォルダごとに 1 枚ずつクラス図 (`classes.puml` + `classes.svg`) を生成。出力ディレクトリ配下に元の相対パス階層を維持して書き出す
     * 大規模プロジェクトで「全クラス 1 枚絵」が読めない/レンダリングが重い問題を緩和。`ClassIndex.source(qn)` でクラスをソース配置フォルダごとに分割する

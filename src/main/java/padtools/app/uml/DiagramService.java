@@ -1,8 +1,10 @@
 package padtools.app.uml;
 
+import padtools.core.formats.android.AndroidLayoutInfo;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
+import padtools.core.formats.android.PlantUmlLayoutDiagram;
 import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.uml.ClassIndex;
 import padtools.core.formats.uml.JavaClassInfo;
@@ -127,6 +129,25 @@ public final class DiagramService {
                 PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlManifestDiagram.generate(analysis, o);
+            }
+            case LAYOUT: {
+                String key = request.getLayoutKey();
+                if (key == null || key.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Layout diagram requires layoutKey (select a layout file)");
+                }
+                if (analysis == null) {
+                    throw new IllegalStateException(
+                            "Layout diagram requires Android project analysis");
+                }
+                AndroidLayoutInfo layout = analysis.findLayoutByKey(key);
+                if (layout == null) {
+                    throw new IllegalArgumentException(
+                            "Layout not found for key: " + key);
+                }
+                PlantUmlLayoutDiagram.Options o = new PlantUmlLayoutDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlLayoutDiagram.generate(layout, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());

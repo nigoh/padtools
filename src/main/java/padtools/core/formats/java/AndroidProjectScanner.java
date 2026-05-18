@@ -70,6 +70,8 @@ public final class AndroidProjectScanner {
         public boolean includeGradle = false;
         /** AndroidManifest.xml を含める。 */
         public boolean includeManifest = false;
+        /** res/layout/ 配下の XML レイアウトファイルを含める。 */
+        public boolean includeLayout = false;
         /** 除外ディレクトリ名のセット。 */
         public Set<String> excludedDirs = DEFAULT_EXCLUDED_DIRS;
         /** AOSP 級プロジェクト向けの追加除外名 ({@link #AOSP_EXTRA_EXCLUDED_DIRS}) も合成する。 */
@@ -205,7 +207,23 @@ public final class AndroidProjectScanner {
         if (opts.includeManifest && name.equals("androidmanifest.xml")) {
             return true;
         }
+        if (opts.includeLayout && name.endsWith(".xml") && isInLayoutDir(f)) {
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * 親ディレクトリ名が {@code layout} または {@code layout-*} (例: {@code layout-land},
+     * {@code layout-sw600dp-v21}) の場合に true を返す。
+     */
+    private static boolean isInLayoutDir(File f) {
+        File parent = f.getParentFile();
+        if (parent == null) {
+            return false;
+        }
+        String dir = parent.getName();
+        return "layout".equals(dir) || dir.startsWith("layout-");
     }
 
     /** ファイルを UTF-8 で読み込んで文字列として返す。 */

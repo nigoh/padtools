@@ -34,6 +34,7 @@ public final class AndroidProjectAnalyzer {
         AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
         opts.includeGradle = true;
         opts.includeManifest = true;
+        opts.includeLayout = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
 
         // 0. gradle/libs.versions.toml があれば先に読み込み、後段のパースで参照する
@@ -75,6 +76,26 @@ public final class AndroidProjectAnalyzer {
                 }
                 info.setModuleName(moduleName);
                 analysis.getGradleByModule().put(moduleName, info);
+            } else if (name.endsWith(".xml") && isInLayoutDir(f)) {
+                String content = safeRead(f, l);
+                if (content == null) {
+                    continue;
+                }
+                AndroidLayoutInfo info;
+                try {
+                    info = AndroidLayoutParser.parse(content, l);
+                } catch (RuntimeException ex) {
+                    l.onError(f.getName(), -1, "layout parse failed: " + ex.getMessage());
+                    continue;
+                }
+                info.setFilePath(f.getAbsolutePath());
+                info.setFileName(f.getName());
+                info.setModuleName(moduleName);
+                info.setSourceSet(inferLayoutSourceSet(f));
+                info.setConfigQualifier(inferLayoutConfigQualifier(f));
+                analysis.getLayoutsByModule()
+                        .computeIfAbsent(moduleName, k -> new ArrayList<>())
+                        .add(info);
             } else if (name.equals("androidmanifest.xml")) {
                 String content = safeRead(f, l);
                 if (content == null) {
@@ -101,11 +122,69 @@ public final class AndroidProjectAnalyzer {
 
         int gradleCount = analysis.getGradleByModule().size();
         int manifestCount = analysis.allManifests().size();
+        int layoutCount = analysis.allLayouts().size();
         l.onError(null, -1,
                 "android analyzer: " + gradleCount + " gradle file(s), "
-                        + manifestCount + " manifest(s)");
+                        + manifestCount + " manifest(s), "
+                        + layoutCount + " layout(s)");
 
         return analysis;
+    }
+
+    /** 親ディレクトリが {@code layout} または {@code layout-*} のときに true。 */
+    private static boolean isInLayoutDir(File f) {
+        File parent = f.getParentFile();
+        if (parent == null) {
+            return false;
+        }
+        String dir = parent.getName();
+        return "layout".equals(dir) || dir.startsWith("layout-");
+    }
+
+    /**
+     * layout ファイルの親ディレクトリ名から configuration qualifier を抽出する。
+     * {@code res/layout/} → {@code ""}、{@code res/layout-land/} → {@code "land"}、
+     * {@code res/layout-sw600dp-v21/} → {@code "sw600dp-v21"}。
+     */
+    static String inferLayoutConfigQualifier(File layoutFile) {
+        File parent = layoutFile.getParentFile();
+        if (parent == null) {
+            return "";
+        }
+        String dir = parent.getName();
+        if ("layout".equals(dir)) {
+            return "";
+        }
+        if (dir.startsWith("layout-") && dir.length() > "layout-".length()) {
+            return dir.substring("layout-".length());
+        }
+        return "";
+    }
+
+    /**
+     * layout ファイルのパスから Gradle ソースセット名を推定する。
+     * {@code src/<sourceSet>/res/layout/...} の {@code <sourceSet>} 部分。
+     * 該当しなければ {@code "main"}。
+     */
+    static String inferLayoutSourceSet(File layoutFile) {
+        // .../<sourceSet>/res/layout-?/<file>.xml の <sourceSet> を取り出す
+        File parent = layoutFile.getParentFile();      // layout or layout-*
+        if (parent == null) {
+            return "main";
+        }
+        File res = parent.getParentFile();             // res
+        if (res == null || !"res".equals(res.getName())) {
+            return "main";
+        }
+        File sourceSetDir = res.getParentFile();       // main / debug / flavor
+        if (sourceSetDir == null) {
+            return "main";
+        }
+        File src = sourceSetDir.getParentFile();       // src
+        if (src != null && "src".equals(src.getName())) {
+            return sourceSetDir.getName();
+        }
+        return "main";
     }
 
     private static void backfillPackageFromGradle(AndroidProjectAnalysis analysis) {

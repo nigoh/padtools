@@ -13,6 +13,9 @@ Change log
     * `plugins {}` ブロック + `java {}` ブロック方式へ書き換え
     * Task の lazy registration (`tasks.register`) へ移行
     * Gradle Wrapper (9.4.1) をリポジトリ同梱
+* `PadTools.jar` を fat jar 化
+    * 依存ライブラリ (Batik 等) を jar 内に同梱し、`java -jar PadTools.jar` 単独で動作可能に
+    * 配布 zip も `libs/` ディレクトリ無しのフラット構成に変更
 
 1.5
 --------

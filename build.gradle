@@ -40,8 +40,17 @@ jar {
     archiveFileName = 'PadTools.jar'
     manifest {
         attributes 'Main-Class': 'padtools.Main'
-        attributes 'Class-Path': configurations.runtimeClasspath.collect { 'libs/' + it.name }.join(' ')
     }
+
+    // 依存ライブラリを同梱して単体実行可能な fat jar にする。
+    // 各依存 jar の META-INF/*.SF, *.DSA, *.RSA は署名検証で衝突を起こすので除外する。
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 checkstyle {
@@ -54,14 +63,12 @@ checkstyle {
 tasks.named('checkstyleMain') { source = 'src/main/java' }
 tasks.named('checkstyleTest') { source = 'src/test/java' }
 
+// `PadTools.jar` は単体で動く fat jar なので、配布 zip には起動補助ファイル
+// (Windows/Unix 起動スクリプト、デフォルト設定) と jar 本体だけを含める。
 tasks.register('makeZip', Zip) {
     dependsOn 'jar'
     outputs.upToDateWhen { false }
 
     from 'bundle'
     from 'build/libs/PadTools.jar'
-
-    into('libs') {
-        from configurations.runtimeClasspath
-    }
 }

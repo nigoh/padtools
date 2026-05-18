@@ -2,6 +2,7 @@ package padtools.core.formats.uml;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -136,6 +137,39 @@ public class PlantUmlClassDiagramTest {
         c.setKind(JavaClassInfo.Kind.CLASS);
         String puml = PlantUmlClassDiagram.generate(Arrays.asList(c));
         assertTrue(puml, puml.contains("<<CarManager>>"));
+    }
+
+    @Test
+    public void testAaosBindingEmitsBindsAndImplements() {
+        // Manager → AIDL → Service の三者揃いでクラス図に <<binds>> と <<implements>> が出る
+        List<JavaClassInfo> infos = new ArrayList<>();
+        infos.addAll(JavaStructureExtractor.extract(
+                "package android.car.audio;\n"
+                        + "public class CarAudioManager { ICarAudio mService; }\n"));
+        infos.addAll(AidlParser.parse(
+                "package android.car.audio;\n"
+                        + "interface ICarAudio { void play(); }\n"));
+        infos.addAll(JavaStructureExtractor.extract(
+                "package com.android.car;\n"
+                        + "public class CarAudioService extends ICarAudio.Stub { public void play() {} }\n"));
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue(puml, puml.contains("<<binds>>"));
+        assertTrue(puml, puml.contains("<<implements>>"));
+    }
+
+    @Test
+    public void testAaosBindingCanBeDisabled() {
+        List<JavaClassInfo> infos = new ArrayList<>();
+        infos.addAll(JavaStructureExtractor.extract(
+                "package android.car.audio;\n"
+                        + "public class CarAudioManager { ICarAudio mService; }\n"));
+        infos.addAll(AidlParser.parse(
+                "package android.car.audio;\n"
+                        + "interface ICarAudio { void play(); }\n"));
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showAaosBindings = false;
+        String puml = PlantUmlClassDiagram.generate(infos, o);
+        assertFalse(puml, puml.contains("<<binds>>"));
     }
 
     @Test

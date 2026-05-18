@@ -35,6 +35,18 @@ public final class PlantUmlClassDiagram {
         public boolean showMethods = true;
         public boolean groupByPackage = true;
         public boolean markAaosCategories = true;
+        /**
+         * AAOS 命名規約に従う Manager / AIDL / Service の三者を
+         * {@code <<binds>>} および {@code <<implements>>} 線で結びつけて描画する。
+         * {@link AaosBindingLinker} で抽出した binding のみ追加されるため、
+         * AAOS パッケージ外のクラスには影響しない。
+         */
+        public boolean showAaosBindings = true;
+        /**
+         * {@link #showAaosBindings} の最小確信度 (1〜3)。
+         * 1: 命名一致のみ、2: 型参照あり、3: Service の implements 一致あり。
+         */
+        public int aaosBindingMinConfidence = 1;
         /** 凡例ブロックをダイアグラム右に追加する。 */
         public boolean includeLegend = true;
         /** 利用関係を出すフィールド型の最大要素数 (1 クラスあたり)。多すぎる場合に抑制。 */
@@ -175,6 +187,9 @@ public final class PlantUmlClassDiagram {
             for (JavaClassInfo c : classes) {
                 emitUsage(out, c, knownNames, aliasByQn, qnBySimple, o);
             }
+        }
+        if (o.showAaosBindings) {
+            emitAaosBindings(out, classes, aliasByQn, qnBySimple, o);
         }
         if (o.includeLegend) {
             PlantUmlClassLegend.emit(out, classes, o);
@@ -531,6 +546,37 @@ public final class PlantUmlClassDiagram {
             out.append(": ").append(m.getReturnType());
         }
         out.append('\n');
+    }
+
+    /**
+     * AAOS の Manager / AIDL / Service の 3 者を {@code <<binds>>} と
+     * {@code <<implements>>} 線で結ぶ。{@link AaosBindingLinker} で抽出した binding に
+     * 対し、関係線を 1 行ずつ emit する。
+     */
+    private static void emitAaosBindings(StringBuilder out,
+                                          List<JavaClassInfo> classes,
+                                          java.util.Map<String, String> aliasByQn,
+                                          java.util.Map<String, String> qnBySimple,
+                                          Options o) {
+        List<AaosBinding> bindings = AaosBindingLinker.link(classes, o.aaosBindingMinConfidence);
+        for (AaosBinding b : bindings) {
+            String managerId = relationId(b.getManagerFqn(), aliasByQn, qnBySimple);
+            if (b.getAidlFqn() != null) {
+                String aidlId = relationId(b.getAidlFqn(), aliasByQn, qnBySimple);
+                out.append(managerId).append(" ..> ").append(aidlId)
+                        .append(" : <<binds>>\n");
+                if (b.getServiceFqn() != null) {
+                    String serviceId = relationId(b.getServiceFqn(), aliasByQn, qnBySimple);
+                    out.append(aidlId).append(" <|.. ").append(serviceId)
+                            .append(" : <<implements>>\n");
+                }
+            } else if (b.getServiceFqn() != null) {
+                // AIDL が見つからない場合は Manager → Service の直接バインド
+                String serviceId = relationId(b.getServiceFqn(), aliasByQn, qnBySimple);
+                out.append(managerId).append(" ..> ").append(serviceId)
+                        .append(" : <<binds>>\n");
+            }
+        }
     }
 
     private static void emitInheritance(StringBuilder out, JavaClassInfo c,

@@ -232,9 +232,13 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 
 ```sh
 ./gradlew check        # テスト + Checkstyle
-./gradlew jar          # build/libs/PadTools.jar を生成
-./gradlew makeZip      # 配布用 zip (jar + 依存 libs/) を生成
+./gradlew jar          # build/libs/PadTools.jar (依存内包の単体実行可能 jar) を生成
+./gradlew makeZip      # 配布用 zip (jar + 起動補助スクリプト) を生成
 ```
+
+生成された `build/libs/PadTools.jar` は依存ライブラリ (Apache Batik 等)
+を同梱した fat jar なので、`java -jar PadTools.jar` を単独で実行できます。
+別途 `libs/` ディレクトリを置く必要はありません。
 
 Gradle 8.x (8.14+) でも同じ `build.gradle` で動作します。
 

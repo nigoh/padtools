@@ -66,8 +66,9 @@ public class Main {
      * @param args 引数
      */
     public static void main(String[] args) throws IOException {
-        // SettingManager を初期化
+        // SettingManager を初期化し、永続化されたスタイルをレンダラへ反映
         SettingManager.initialize();
+        PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());
 
         //オプション定義
         final Option optHelp = new Option("h", "help", false);

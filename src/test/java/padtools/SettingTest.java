@@ -4,6 +4,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import padtools.core.formats.uml.DiagramStyle;
+
 import java.io.File;
 import java.io.IOException;
 
@@ -67,6 +69,63 @@ public class SettingTest {
         assertEquals(768, loaded.getWindowHeight());
         assertEquals(280, loaded.getMainSplitLocation());
         assertEquals(150, loaded.getLeftSplitLocation());
+    }
+
+    @Test
+    public void testDefaultStyleIsEmpty() {
+        Setting setting = new Setting();
+        DiagramStyle s = setting.getStyle();
+        assertEquals("", s.getTheme());
+        assertEquals("", s.getBackgroundColor());
+        assertEquals("", s.getFontName());
+        assertEquals(0, s.getFontSize());
+        assertEquals(DiagramStyle.Direction.DEFAULT, s.getDirection());
+        assertEquals("", s.getCustomSkinparam());
+    }
+
+    @Test
+    public void testStyleRoundTrip() throws IOException {
+        Setting original = new Setting();
+        DiagramStyle style = new DiagramStyle();
+        style.setTheme("cerulean");
+        style.setBackgroundColor("#1E1E1E");
+        style.setFontName("Helvetica");
+        style.setFontSize(14);
+        style.setDirection(DiagramStyle.Direction.LEFT_TO_RIGHT);
+        style.setCustomSkinparam("skinparam shadowing false\n");
+        original.setStyle(style);
+
+        File file = tempFolder.newFile("settings-style.xml");
+        original.saveToFile(file);
+
+        Setting loaded = Setting.loadFromFile(file);
+        DiagramStyle out = loaded.getStyle();
+        assertEquals("cerulean", out.getTheme());
+        assertEquals("#1E1E1E", out.getBackgroundColor());
+        assertEquals("Helvetica", out.getFontName());
+        assertEquals(14, out.getFontSize());
+        assertEquals(DiagramStyle.Direction.LEFT_TO_RIGHT, out.getDirection());
+        assertEquals("skinparam shadowing false\n", out.getCustomSkinparam());
+    }
+
+    @Test
+    public void testLoadWithoutStyleKeysUsesDefaults() throws IOException {
+        // 旧バージョンが書き出した style.* キー無しの XML を読んでも、
+        // デフォルトスタイルで起動できることを確認する。
+        File file = tempFolder.newFile("legacy-no-style.xml");
+        String legacy = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<!DOCTYPE properties SYSTEM "
+                + "\"http://java.sun.com/dtd/properties.dtd\">"
+                + "<properties>"
+                + "<entry key=\"windowWidth\">1024</entry>"
+                + "</properties>";
+        java.nio.file.Files.write(file.toPath(),
+                legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        Setting loaded = Setting.loadFromFile(file);
+        DiagramStyle s = loaded.getStyle();
+        assertEquals("", s.getTheme());
+        assertEquals(DiagramStyle.Direction.DEFAULT, s.getDirection());
     }
 
     @Test

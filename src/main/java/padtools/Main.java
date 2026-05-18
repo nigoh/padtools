@@ -89,13 +89,15 @@ public class Main {
         final Option optSummary = new Option(null, "summary", false);
         final Option optAll = new Option("A", "all", false);
         final Option optNoManifestMerge = new Option(null, "no-manifest-merge", false);
+        final Option optListMethods = new Option(null, "list-methods", false);
+        final Option optSeqDepth = new Option(null, "seq-depth", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
                 optGradle, optManifest, optComponent, optDepGraph, optSummary,
-                optAll, optNoManifestMerge});
+                optAll, optNoManifestMerge, optListMethods, optSeqDepth});
 
         try {
             optParser.parse(args, 1);
@@ -146,6 +148,21 @@ public class Main {
             legendOverride = Boolean.FALSE;
         }
         boolean mergeManifest = !optNoManifestMerge.isSet();
+        Integer seqDepth = null;
+        if (!optSeqDepth.getArguments().isEmpty()) {
+            try {
+                seqDepth = Integer.parseInt(optSeqDepth.getArguments().getLast());
+            } catch (NumberFormatException ex) {
+                System.err.println("Invalid --seq-depth value: "
+                        + optSeqDepth.getArguments().getLast());
+                System.exit(1);
+                return;
+            }
+        }
+        if (optListMethods.isSet()) {
+            handleListMethods(file_in, file_out, listener);
+            return;
+        }
         if (optAll.isSet()) {
             handleAll(file_in, file_out, listener, legendOverride, mergeManifest);
             return;
@@ -175,7 +192,7 @@ public class Main {
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
                             ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener, legendOverride, mergeManifest);
+                    listener, legendOverride, mergeManifest, seqDepth);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
@@ -290,7 +307,8 @@ public class Main {
                                         String sequenceEntry,
                                         ErrorListener listener,
                                         Boolean legendOverride,
-                                        boolean mergeManifest) throws IOException {
+                                        boolean mergeManifest,
+                                        Integer seqDepth) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -320,6 +338,9 @@ public class Main {
             if (Boolean.FALSE.equals(legendOverride)) {
                 sqOpts.includeLegend = false;
             }
+            if (seqDepth != null) {
+                sqOpts.maxDepth = seqDepth;
+            }
             output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
                     infos, entryClass, entryMethod, sqOpts);
         } else {
@@ -331,6 +352,37 @@ public class Main {
             output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
         writeUmlOutput(fileOut, output);
+    }
+
+    /**
+     * {@code --list-methods}: 入力ソース内のメソッドを列挙し、{@code Class.method} 形式で
+     * 1 行ずつ stdout (もしくは {@code -o} 指定先) に書き出す。シーケンス図の起点を
+     * シェルから選ぶ用途 (fzf, peco 等と組み合わせ) を想定。
+     */
+    private static void handleListMethods(File fileIn, File fileOut,
+                                            ErrorListener listener) throws IOException {
+        if (fileIn == null) {
+            System.err.println("--list-methods requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
+        if (fileIn.isDirectory()) {
+            infos = UmlGenerator.extractFromProject(fileIn, null, listener);
+        } else {
+            String src = AndroidProjectScanner.readFile(fileIn);
+            infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
+        }
+        java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
+                padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
+        StringBuilder sb = new StringBuilder();
+        for (padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate c : candidates) {
+            sb.append(c.getEntry())
+                    .append("\t(").append(c.callCount).append(" call")
+                    .append(c.callCount == 1 ? "" : "s")
+                    .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
+        }
+        writeText(fileOut, sb.toString());
     }
 
     /** {@code --gradle}: 単一 build.gradle (もしくはディレクトリ) を Markdown サマリーに変換。 */
@@ -422,17 +474,20 @@ public class Main {
     }
 
     /**
-     * {@code --all}: プロジェクトディレクトリを入力に、5 種類の成果物を出力ディレクトリへ一括書き出し。
+     * {@code --all}: プロジェクトディレクトリを入力に、複数種類の成果物を出力ディレクトリへ一括書き出し。
      * <ul>
      *   <li>{@code summary.md} - Markdown プロジェクトサマリー</li>
      *   <li>{@code class-diagram.svg} - PlantUML クラス図 (manifest 自動マージ)</li>
      *   <li>{@code component-diagram.svg} - PlantUML Android コンポーネント図</li>
      *   <li>{@code dependency-graph.svg} - PlantUML Gradle 依存グラフ</li>
      *   <li>{@code pad.svg} - Java→PAD 図 (Apache Batik で SVG 化)</li>
+     *   <li>{@code methods.txt} - シーケンス図の起点候補一覧 ({@code Class.method}) </li>
+     *   <li>{@code sequence-diagrams/}{@code <Class.method>.svg} - Android ライフサイクル
+     *       (Activity/Service の {@code onCreate} 等) を起点に自動生成したシーケンス図</li>
      * </ul>
      * <p>すべて同梱ライブラリのみで完結するため、PlantUML/dot のインストールは不要。
-     * シーケンス図は起点メソッド指定が必要なため {@code --all} には含めない
-     * (個別に {@code -q Class.method -o seq.svg} を使う)。</p>
+     * ライフサイクル外のメソッドからシーケンス図を作る場合は {@code methods.txt} を
+     * 参考に {@code -q Class.method -o seq.svg} で個別生成する。</p>
      */
     private static void handleAll(File fileIn, File fileOut,
                                     ErrorListener listener,
@@ -470,14 +525,14 @@ public class Main {
         AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
 
         // 1) Markdown サマリー
-        progress.step("[1/5] Generating summary.md");
+        progress.step("[1/7] Generating summary.md");
         File summaryFile = new File(fileOut, "summary.md");
         writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
         progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
         // 2) コンポーネント図 (SVG)
-        progress.step("[2/5] Generating component-diagram.svg");
+        progress.step("[2/7] Generating component-diagram.svg");
         PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             compOpts.includeLegend = false;
@@ -488,7 +543,7 @@ public class Main {
         listener.onError(null, -1, "wrote " + compFile.getPath());
 
         // 3) 依存グラフ (SVG)
-        progress.step("[3/5] Generating dependency-graph.svg");
+        progress.step("[3/7] Generating dependency-graph.svg");
         PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             depOpts.includeLegend = false;
@@ -500,7 +555,7 @@ public class Main {
         listener.onError(null, -1, "wrote " + depFile.getPath());
 
         // 4) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
-        progress.step("[4/5] Generating class-diagram.svg (scanning Java/AIDL)");
+        progress.step("[4/7] Generating class-diagram.svg (scanning Java/AIDL)");
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
@@ -515,7 +570,7 @@ public class Main {
         listener.onError(null, -1, "wrote " + clsFile.getPath());
 
         // 5) PAD (Java→SPD→SVG)。中間 SPD は temp ファイルに置き Converter.convert で SVG 化する。
-        progress.step("[5/5] Generating pad.svg (Java to PAD)");
+        progress.step("[5/7] Generating pad.svg (Java to PAD)");
         JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
         if (Boolean.TRUE.equals(legendOverride)) {
             convOpts.includeLegend = true;
@@ -537,8 +592,88 @@ public class Main {
         progress.wrote(padSvg);
         listener.onError(null, -1, "wrote " + padSvg.getPath());
 
+        // 6) シーケンス図の起点候補一覧
+        progress.step("[6/7] Generating methods.txt (sequence diagram entry candidates)");
+        java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
+                padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
+        StringBuilder methodsBuf = new StringBuilder();
+        for (padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate c : candidates) {
+            methodsBuf.append(c.getEntry())
+                    .append("\t(").append(c.callCount).append(" call")
+                    .append(c.callCount == 1 ? "" : "s")
+                    .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
+        }
+        File methodsFile = new File(fileOut, "methods.txt");
+        writeText(methodsFile, methodsBuf.toString());
+        progress.wrote(methodsFile, "(" + candidates.size() + " method(s))");
+        listener.onError(null, -1, "wrote " + methodsFile.getPath());
+
+        // 7) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
+        progress.step("[7/7] Generating sequence-diagrams/ (Android lifecycle entry points)");
+        File seqDir = new File(fileOut, "sequence-diagrams");
+        if (!seqDir.exists() && !seqDir.mkdirs()) {
+            System.err.println("[padtools]     Skipping sequence-diagrams (cannot create dir)");
+        } else {
+            int seqCount = generateLifecycleSequenceDiagrams(infos, seqDir, legendOverride,
+                    progress, listener);
+            progress.wrote(seqDir, "(" + seqCount + " diagram(s))");
+        }
+
         long elapsedMs = System.currentTimeMillis() - startMs;
         progress.done(fileOut, elapsedMs);
+    }
+
+    /** Activity/Service のライフサイクルメソッドを起点にシーケンス図を一括生成する。 */
+    private static int generateLifecycleSequenceDiagrams(
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos,
+            File outDir,
+            Boolean legendOverride,
+            ProgressLogger progress,
+            ErrorListener listener) throws IOException {
+        // 種別ごとの一般的な起点メソッド名 (見つかった最初の 1 つを採用)
+        java.util.Map<String, java.util.List<String>> entryByType = new java.util.LinkedHashMap<>();
+        entryByType.put("Activity", java.util.Arrays.asList(
+                "onCreate", "onStart", "onResume", "onPause", "onStop", "onDestroy"));
+        entryByType.put("Service", java.util.Arrays.asList(
+                "onStartCommand", "onCreate", "onBind", "onDestroy"));
+        entryByType.put("BroadcastReceiver", java.util.Arrays.asList("onReceive"));
+        entryByType.put("ContentProvider", java.util.Arrays.asList(
+                "onCreate", "query", "insert", "update", "delete"));
+        int count = 0;
+        padtools.core.formats.uml.PlantUmlSequenceDiagram.Options sqOpts
+                = new padtools.core.formats.uml.PlantUmlSequenceDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            sqOpts.includeLegend = false;
+        }
+        for (padtools.core.formats.uml.JavaClassInfo c : infos) {
+            String compType = c.getAndroidComponentType();
+            if (compType == null) {
+                continue;
+            }
+            java.util.List<String> methodNames = entryByType.get(compType);
+            if (methodNames == null) {
+                continue;
+            }
+            for (String mn : methodNames) {
+                padtools.core.formats.uml.JavaMethodInfo m = null;
+                for (padtools.core.formats.uml.JavaMethodInfo cand : c.getMethods()) {
+                    if (mn.equals(cand.getName()) && !cand.isAbstract()) {
+                        m = cand;
+                        break;
+                    }
+                }
+                if (m == null || m.getStatements().isEmpty()) {
+                    continue;
+                }
+                String puml = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
+                        infos, c.getSimpleName(), m.getName(), sqOpts);
+                String fileName = c.getSimpleName() + "." + m.getName() + ".svg";
+                File outFile = new File(outDir, fileName);
+                PlantUmlRenderer.renderSvg(puml, outFile);
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -600,6 +735,8 @@ public class Main {
         System.err.println("  -A --all: Output ALL artifacts as SVG "
                 + "(summary.md + 4 svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
+        System.err.println("  --list-methods: List Class.method candidates for use with -q.");
+        System.err.println("  --seq-depth N: Sequence trace depth limit (default 5, 0=unlimited).");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary/-A.");
     }
 }

@@ -476,29 +476,304 @@ public final class JavaStructureExtractor {
             }
         }
 
+        /**
+         * メソッド本体 ({@code {} は呼び出し前に消費済み) を再帰的に解析し、
+         * 文ツリーを {@link JavaMethodInfo#getStatements()} に格納する。
+         * 終了時には対応する {@code }} まで消費している。
+         */
         private void extractCallsInBody(JavaMethodInfo m) {
+            parseStatementBlock(m.getStatements());
+        }
+
+        /** 開き {@code {} は消費済み、対応する {@code }} を消費して戻る。 */
+        private void parseStatementBlock(List<JavaMethodInfo.Statement> out) {
+            while (!atEnd()) {
+                if (peek().is("}")) {
+                    next();
+                    return;
+                }
+                parseStatement(out);
+            }
+        }
+
+        /** 1 つの文を読む。 */
+        private void parseStatement(List<JavaMethodInfo.Statement> out) {
+            if (peek().is(";")) {
+                next();
+                return;
+            }
+            if (peek().is("{")) {
+                next();
+                parseStatementBlock(out);
+                return;
+            }
+            if (peek().isKw("if")) {
+                parseIf(out);
+                return;
+            }
+            if (peek().isKw("while")) {
+                parseWhile(out);
+                return;
+            }
+            if (peek().isKw("for")) {
+                parseFor(out);
+                return;
+            }
+            if (peek().isKw("do")) {
+                parseDoWhile(out);
+                return;
+            }
+            if (peek().isKw("switch")) {
+                parseSwitch(out);
+                return;
+            }
+            if (peek().isKw("try")) {
+                parseTry(out);
+                return;
+            }
+            if (peek().isKw("synchronized")) {
+                parseSynchronized(out);
+                return;
+            }
+            parseExpressionStatement(out);
+        }
+
+        /** {@code if (...)} 単体 (else 連鎖含む) を 1 つの {@link JavaMethodInfo.Block} として読む。 */
+        private void parseIf(List<JavaMethodInfo.Statement> out) {
+            next(); // if
+            String cond = consumeParens(out);
+            JavaMethodInfo.Block block = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.IF);
+            JavaMethodInfo.Branch first = new JavaMethodInfo.Branch("if", cond);
+            block.getBranches().add(first);
+            out.add(block);
+            parseSubStatement(first.getBody());
+            while (!atEnd() && peek().isKw("else")) {
+                next(); // else
+                if (peek().isKw("if")) {
+                    next(); // if
+                    String c2 = consumeParens(out);
+                    JavaMethodInfo.Branch ei = new JavaMethodInfo.Branch("else if", c2);
+                    block.getBranches().add(ei);
+                    parseSubStatement(ei.getBody());
+                } else {
+                    JavaMethodInfo.Branch e = new JavaMethodInfo.Branch("else", "");
+                    block.getBranches().add(e);
+                    parseSubStatement(e.getBody());
+                    break;
+                }
+            }
+        }
+
+        private void parseWhile(List<JavaMethodInfo.Statement> out) {
+            next(); // while
+            String cond = consumeParens(out);
+            JavaMethodInfo.Block b = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.WHILE);
+            JavaMethodInfo.Branch br = new JavaMethodInfo.Branch("while", cond);
+            b.getBranches().add(br);
+            out.add(b);
+            parseSubStatement(br.getBody());
+        }
+
+        private void parseFor(List<JavaMethodInfo.Statement> out) {
+            next(); // for
+            String header = consumeParens(out);
+            JavaMethodInfo.Block b = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.FOR);
+            JavaMethodInfo.Branch br = new JavaMethodInfo.Branch("for", header);
+            b.getBranches().add(br);
+            out.add(b);
+            parseSubStatement(br.getBody());
+        }
+
+        private void parseDoWhile(List<JavaMethodInfo.Statement> out) {
+            next(); // do
+            JavaMethodInfo.Block b = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.DO_WHILE);
+            JavaMethodInfo.Branch br = new JavaMethodInfo.Branch("do", "");
+            b.getBranches().add(br);
+            out.add(b);
+            parseSubStatement(br.getBody());
+            if (!atEnd() && peek().isKw("while")) {
+                next(); // while
+                String cond = consumeParens(out);
+                br.setLabel(cond);
+                if (peek().is(";")) {
+                    next();
+                }
+            }
+        }
+
+        private void parseSynchronized(List<JavaMethodInfo.Statement> out) {
+            next(); // synchronized
+            String lock = consumeParens(out);
+            JavaMethodInfo.Block b = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.SYNCHRONIZED);
+            JavaMethodInfo.Branch br = new JavaMethodInfo.Branch("synchronized", lock);
+            b.getBranches().add(br);
+            out.add(b);
+            parseSubStatement(br.getBody());
+        }
+
+        private void parseSwitch(List<JavaMethodInfo.Statement> out) {
+            next(); // switch
+            String cond = consumeParens(out);
+            JavaMethodInfo.Block sw = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.SWITCH);
+            // SWITCH 本体の式自体は最初の Branch に "switch" として保持
+            JavaMethodInfo.Branch head = new JavaMethodInfo.Branch("switch", cond);
+            sw.getBranches().add(head);
+            out.add(sw);
+            if (!peek().is("{")) {
+                return;
+            }
+            next(); // {
+            JavaMethodInfo.Branch currentCase = null;
+            while (!atEnd() && !peek().is("}")) {
+                if (peek().isKw("case") || peek().isKw("default")) {
+                    String type;
+                    String label;
+                    if (peek().isKw("default")) {
+                        next();
+                        type = "default";
+                        label = "";
+                    } else {
+                        next(); // case
+                        int s = peek().start;
+                        int e = s;
+                        while (!atEnd() && !peek().is(":") && !peek().is("->")) {
+                            e = peek().end;
+                            next();
+                        }
+                        type = "case";
+                        label = src.substring(s, e).trim();
+                    }
+                    if (!atEnd() && (peek().is(":") || peek().is("->"))) {
+                        next();
+                    }
+                    currentCase = new JavaMethodInfo.Branch(type, label);
+                    sw.getBranches().add(currentCase);
+                } else if (currentCase != null) {
+                    parseStatement(currentCase.getBody());
+                } else {
+                    // case の前に何かある異常系: 1 トークン進めるのみ
+                    next();
+                }
+            }
+            if (!atEnd() && peek().is("}")) {
+                next();
+            }
+        }
+
+        private void parseTry(List<JavaMethodInfo.Statement> out) {
+            next(); // try
+            // try-with-resources の括弧があれば読み飛ばす (内部の呼び出しは out に追加)
+            if (peek().is("(")) {
+                consumeParens(out);
+            }
+            JavaMethodInfo.Block t = new JavaMethodInfo.Block(JavaMethodInfo.Block.Kind.TRY);
+            JavaMethodInfo.Branch tryBranch = new JavaMethodInfo.Branch("try", "");
+            t.getBranches().add(tryBranch);
+            out.add(t);
+            parseSubStatement(tryBranch.getBody());
+            while (!atEnd() && peek().isKw("catch")) {
+                next();
+                String except = consumeParens(out);
+                JavaMethodInfo.Branch c = new JavaMethodInfo.Branch("catch", except);
+                t.getBranches().add(c);
+                parseSubStatement(c.getBody());
+            }
+            if (!atEnd() && peek().isKw("finally")) {
+                next();
+                JavaMethodInfo.Branch f = new JavaMethodInfo.Branch("finally", "");
+                t.getBranches().add(f);
+                parseSubStatement(f.getBody());
+            }
+        }
+
+        /** {@code if(cond)} の後ろなど、単一文または {@code {}} ブロックを読む。 */
+        private void parseSubStatement(List<JavaMethodInfo.Statement> out) {
+            if (atEnd()) {
+                return;
+            }
+            if (peek().is("{")) {
+                next();
+                parseStatementBlock(out);
+            } else {
+                parseStatement(out);
+            }
+        }
+
+        /**
+         * 開き {@code (} で始まる括弧内容を読み、ソース文字列としての中身を返す。
+         * 内部に呼び出し式があれば {@code out} に追加 (条件式評価で実行される呼び出しは
+         * 制御ブロックの直前に出るので、シーケンス図上もそのように見える)。
+         */
+        private String consumeParens(List<JavaMethodInfo.Statement> out) {
+            if (!peek().is("(")) {
+                return "";
+            }
+            int openEnd = peek().end;
+            next(); // (
             int depth = 1;
+            int closeStart = openEnd;
             while (!atEnd() && depth > 0) {
                 JavaToken t = peek();
-                if (t.is("{")) {
+                if (t.is("(")) {
                     depth++;
-                    next();
-                    continue;
-                }
-                if (t.is("}")) {
+                } else if (t.is(")")) {
                     depth--;
-                    next();
-                    continue;
+                    if (depth == 0) {
+                        closeStart = t.start;
+                        next();
+                        return src.substring(openEnd, closeStart).trim();
+                    }
                 }
-                // 識別子 ( パターン: 直前が IDENT で次が "("
                 if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
-                    // 制御構文キーワードは呼び出しとしない
                     String name = t.text;
                     boolean afterNew = idx > 0
                             && tokens.get(idx - 1).isKw("new");
                     if (!isControlKeyword(name) && !afterNew) {
                         String receiver = findReceiver();
-                        m.getCalls().add(new JavaMethodInfo.Call(receiver, name));
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
+                next();
+            }
+            return src.substring(openEnd, closeStart).trim();
+        }
+
+        /**
+         * 通常の式文 ({@code ;} 終端) または特殊文を読む。途中に出現する呼び出しを
+         * {@code out} に追加する。ブロック {@code {} に出会ったら再帰的に文として展開し、
+         * 同じ {@code out} に呼び出しを追加する (匿名クラス本体・ラムダ本体・配列初期化など)。
+         */
+        private void parseExpressionStatement(List<JavaMethodInfo.Statement> out) {
+            int parenDepth = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (parenDepth == 0 && t.is(";")) {
+                    next();
+                    return;
+                }
+                if (parenDepth == 0 && t.is("}")) {
+                    return;
+                }
+                if (t.is("(") || t.is("[")) {
+                    parenDepth++;
+                } else if (t.is(")") || t.is("]")) {
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                } else if (t.is("{")) {
+                    // 匿名クラス本体・ラムダ本体・配列初期化など。
+                    // 内部の呼び出しはフラットに out に追加する (構造化はしない)。
+                    next();
+                    parseStatementBlock(out);
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
+                    String name = t.text;
+                    boolean afterNew = idx > 0
+                            && tokens.get(idx - 1).isKw("new");
+                    if (!isControlKeyword(name) && !afterNew) {
+                        String receiver = findReceiver();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
                     }
                 }
                 next();

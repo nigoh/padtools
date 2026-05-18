@@ -14,6 +14,12 @@ Change log
     * Graphviz/dot を必要としないよう Smetana レイアウトを自動指定
       (`!pragma layout smetana` を `@startuml` 直後に自動挿入)
     * 従来の `.puml` テキスト出力は互換維持 (拡張子で切替)
+* シーケンス図 (`-q`) を強化
+    * 多段トレース: 呼び出し先メソッドが入力ソースに含まれていれば本体に再帰的に潜って展開 (デフォルト深さ 5、`--seq-depth N` で調整、0 で無制限)。サイクル検出付き
+    * 制御構造: `if/else` → `alt/else`、単一分岐 `if` → `opt`、`while`/`for`/`do-while` → `loop`、`switch` → `alt` (case 列)、`try/catch/finally` → `group/else catch/else finally`、`synchronized` → `critical`
+    * `--list-methods` オプションを追加: 入力ソース内のメソッドを `Class.method` 形式で列挙 (fzf 等で起点選択する用)
+    * GUI のシーケンス図生成ダイアログを、テキスト入力から **候補リスト + 絞り込みフィールド** に変更
+    * `--all` の出力に `methods.txt` (候補一覧) と `sequence-diagrams/` (Activity/Service ライフサイクル起点のシーケンス図群) を追加
 * 動作対象 Java を 17 以上に引き上げ
     * `sourceCompatibility` / `targetCompatibility` を 17 に変更
     * Apache Batik を 1.14 → 1.17 へ更新 (Java 17 互換性問題 BATIK-1260 解消)

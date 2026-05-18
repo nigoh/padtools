@@ -19,6 +19,10 @@ repositories {
 dependencies {
     implementation 'org.apache.xmlgraphics:batik-svggen:1.17'
     implementation 'org.apache.xmlgraphics:batik-dom:1.17'
+    // ベクター SVG プレビュー用: PlantUML が出力した SVG を GraphicsNode として
+    // 直接 Swing に描画するため Batik bridge を取り込む (transitively pulls in
+    // batik-anim / batik-bridge / batik-gvt / batik-css)。
+    implementation 'org.apache.xmlgraphics:batik-bridge:1.17'
     implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
     // PlantUML (GPLv3). UML 系出力を SVG として直接書き出すために同梱する。
     // graphviz/dot は不要 (PlantUmlRenderer が Smetana レイアウトを自動指定)。

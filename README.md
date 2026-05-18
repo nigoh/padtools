@@ -110,15 +110,31 @@ AAOS パターン (`<<CarManager>>` 等)、AndroidManifest 連携 (`<<Activity>>
 # Class.method を起点に呼び出し関係を抽出 (SVG)
 java -jar PadTools.jar -q "MainActivity.onCreate" -o seq.svg MainActivity.java
 
-# プロジェクト全体から特定メソッド
+# プロジェクト全体から特定メソッド (SVG)
 java -jar PadTools.jar -q "CarPowerManager.setListener" -o seq.svg ~/AOSP/Car
 
 # .puml で書き出す (編集用)
 java -jar PadTools.jar -q "MainActivity.onCreate" -o seq.puml MainActivity.java
+
+# 起点メソッドの候補一覧を表示 (fzf 等と組み合わせて選択)
+java -jar PadTools.jar --list-methods ~/AOSP/Car
+
+# 再帰トレースの深さを変更 (デフォルト 5、0 = 無制限)
+java -jar PadTools.jar -q "MainActivity.onCreate" --seq-depth 10 -o seq.svg ~/AndroidStudioProjects/MyApp
 ```
 
 メソッド本体内の `receiver.method()` 呼び出しを participant 間の同期メッセージとして描画。
 フィールド型からの receiver 解決にも対応 (例: `mService.foo()` → `IService.foo()`)。
+さらに以下も自動で扱います:
+
+- **多段トレース**: 呼び出し先メソッドが入力ソースに含まれていれば、`--seq-depth` 上限まで
+  本体に潜って展開。サイクル検出で再帰呼び出しは `note` で打ち切り。
+- **制御構造**: `if/else` → `alt` / `else`、単一分岐 `if` → `opt`、`while`/`for`/`do-while`
+  → `loop`、`switch` → `alt` (case 列)、`try/catch/finally` → `group/else catch/else finally`、
+  `synchronized` → `critical`。
+
+エディタからは「シーケンス図を生成」(Ctrl+Q) で起動すると、入力を解析して
+**メソッド候補リスト (絞り込み付き)** から起点を選択するダイアログが開きます。
 
 ### Android コンポーネント図 (PlantUML)
 
@@ -166,7 +182,7 @@ java -jar PadTools.jar --summary -o report.md ~/AndroidStudioProjects/MyApp
 ### 一括出力 (All-in-one)
 
 ```sh
-# プロジェクトを指定して 5 種類すべてを SVG (+ md) で出力ディレクトリに書き出す
+# プロジェクトを指定して全種類を出力ディレクトリに書き出す (SVG + md)
 java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 ```
 
@@ -179,10 +195,12 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `component-diagram.svg` | Android コンポーネント図 |
 | `dependency-graph.svg` | Gradle 依存グラフ |
 | `pad.svg` | Java → PAD 図 (統合) |
+| `methods.txt` | シーケンス図の起点候補一覧 (`Class.method`) |
+| `sequence-diagrams/` | Android ライフサイクル (Activity の `onCreate`/`onResume` 等、Service の `onStartCommand` 等) を起点とした SVG シーケンス図群 |
 
 SVG は同梱ライブラリのみで描画するため、PlantUML や graphviz の追加インストールは不要です。
-シーケンス図は起点メソッドの指定が必要なため `--all` には含まれません
-(`-q Class.method -o seq.svg` で個別生成してください)。
+ライフサイクル外のメソッドからシーケンス図を作りたい場合は `methods.txt` を参考に
+`-q Class.method -o seq.svg` で個別生成できます。
 
 ### Gradle / Manifest 単体解析
 

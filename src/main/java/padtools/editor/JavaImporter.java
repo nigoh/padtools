@@ -13,17 +13,30 @@ import padtools.core.formats.uml.UmlGenerator;
 import padtools.util.ErrorListener;
 import padtools.util.Messages;
 
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
 import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Java ソース・Gradle プロジェクトから SPD テキストを生成するエディタ統合ヘルパ。
@@ -127,7 +140,8 @@ public class JavaImporter {
 
     /**
      * Java ファイルを選択し、指定された Class.method からシーケンス図 PlantUML を生成する。
-     * entry が null/空ならダイアログで入力する。
+     * entry が null/空なら、入力ソースを解析して候補リストから選ばせる
+     * (前段の "Class.method を手入力" ダイアログから置き換え)。
      */
     public String chooseAndGenerateSequenceDiagram(String entry) {
         JFileChooser fc = new JFileChooser(".");
@@ -137,22 +151,6 @@ public class JavaImporter {
         if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return null;
         }
-        String e = entry;
-        if (e == null || e.trim().isEmpty()) {
-            e = JOptionPane.showInputDialog(parent,
-                    Messages.get("dialog.sequenceDiagram.entryPrompt"),
-                    "Class.method");
-            if (e == null || e.trim().isEmpty()) {
-                return null;
-            }
-        }
-        int dot = e.lastIndexOf('.');
-        if (dot < 0) {
-            showError(Messages.get("dialog.sequenceDiagram.invalidEntry"));
-            return null;
-        }
-        String entryClass = e.substring(0, dot);
-        String entryMethod = e.substring(dot + 1);
         File f = fc.getSelectedFile();
         try {
             List<String> warnings = new ArrayList<>();
@@ -164,6 +162,29 @@ public class JavaImporter {
                 String src = AndroidProjectScanner.readFile(f);
                 infos = UmlGenerator.extractFromSource(src, f.getName(), l);
             }
+            String chosen = entry;
+            if (chosen == null || chosen.trim().isEmpty()) {
+                java.util.List<PlantUmlSequenceDiagram.Candidate> candidates =
+                        PlantUmlSequenceDiagram.listCandidates(infos);
+                if (candidates.isEmpty()) {
+                    JOptionPane.showMessageDialog(parent,
+                            Messages.get("dialog.sequenceDiagram.noMethods"),
+                            Messages.get("dialog.openFailed"),
+                            JOptionPane.WARNING_MESSAGE);
+                    return null;
+                }
+                chosen = pickSequenceEntry(candidates);
+                if (chosen == null) {
+                    return null;
+                }
+            }
+            int dot = chosen.lastIndexOf('.');
+            if (dot < 0) {
+                showError(Messages.get("dialog.sequenceDiagram.invalidEntry"));
+                return null;
+            }
+            String entryClass = chosen.substring(0, dot);
+            String entryMethod = chosen.substring(dot + 1);
             String result = PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
             showWarnings(warnings);
             return result;
@@ -171,6 +192,89 @@ public class JavaImporter {
             showError(ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 候補リストから 1 件を選ばせるダイアログ。テキストフィールドで絞り込み可能。
+     * OK / キャンセル / Enter / Esc で操作。
+     * @return 選んだ {@code Class.method}、キャンセル時は null
+     */
+    private String pickSequenceEntry(List<PlantUmlSequenceDiagram.Candidate> candidates) {
+        DefaultListModel<String> model = new DefaultListModel<>();
+        List<String> all = new ArrayList<>();
+        for (PlantUmlSequenceDiagram.Candidate c : candidates) {
+            String row = c.getEntry()
+                    + "    [" + c.callCount + " call" + (c.callCount == 1 ? "" : "s")
+                    + ", " + c.visibility.name().toLowerCase(Locale.ROOT) + "]";
+            all.add(row);
+            model.addElement(row);
+        }
+        JList<String> list = new JList<>(model);
+        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        list.setSelectedIndex(0);
+        list.setVisibleRowCount(15);
+
+        JTextField filter = new JTextField();
+        filter.setToolTipText(Messages.get("dialog.sequenceDiagram.filterTip"));
+        filter.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { refilter(); }
+            @Override public void removeUpdate(DocumentEvent e) { refilter(); }
+            @Override public void changedUpdate(DocumentEvent e) { refilter(); }
+            private void refilter() {
+                String q = filter.getText().trim().toLowerCase(Locale.ROOT);
+                model.clear();
+                for (String row : all) {
+                    if (q.isEmpty() || row.toLowerCase(Locale.ROOT).contains(q)) {
+                        model.addElement(row);
+                    }
+                }
+                if (!model.isEmpty()) {
+                    list.setSelectedIndex(0);
+                }
+            }
+        });
+        // Enter で確定、Esc でキャンセル: JOptionPane 側がハンドルするので
+        // 個別キーバインドは下方向キーをフィルタ→リストへ送るのみ
+        filter.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_DOWN && model.getSize() > 0) {
+                    int i = Math.min(list.getSelectedIndex() + 1, model.getSize() - 1);
+                    list.setSelectedIndex(i);
+                    list.ensureIndexIsVisible(i);
+                    e.consume();
+                } else if (e.getKeyCode() == KeyEvent.VK_UP && model.getSize() > 0) {
+                    int i = Math.max(list.getSelectedIndex() - 1, 0);
+                    list.setSelectedIndex(i);
+                    list.ensureIndexIsVisible(i);
+                    e.consume();
+                }
+            }
+        });
+
+        JPanel panel = new JPanel(new BorderLayout(6, 6));
+        panel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        JLabel header = new JLabel(Messages.get("dialog.sequenceDiagram.pickPrompt"));
+        panel.add(header, BorderLayout.NORTH);
+        JPanel center = new JPanel(new BorderLayout(4, 4));
+        center.add(filter, BorderLayout.NORTH);
+        center.add(new JScrollPane(list), BorderLayout.CENTER);
+        panel.add(center, BorderLayout.CENTER);
+        panel.setPreferredSize(new Dimension(560, 420));
+
+        int ret = JOptionPane.showConfirmDialog(parent, panel,
+                Messages.get("dialog.sequenceDiagram.pickTitle"),
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (ret != JOptionPane.OK_OPTION) {
+            return null;
+        }
+        String selected = list.getSelectedValue();
+        if (selected == null) {
+            return null;
+        }
+        // "Class.method    [N calls, public]" から先頭の Class.method 部分のみ取り出す
+        int sp = selected.indexOf(' ');
+        return sp >= 0 ? selected.substring(0, sp) : selected;
     }
 
     /** プロジェクトディレクトリを選択し、Android コンポーネント図 PlantUML を生成。 */
@@ -242,6 +346,51 @@ public class JavaImporter {
                     PlantUmlClassDiagram.generate(infos));
             String spd = AndroidProjectScanner.convertProject(srcDir, null, null, l);
             writeIfMissing(new java.io.File(dstDir, "pad.spd"), spd);
+
+            // シーケンス図の起点候補一覧
+            java.util.List<PlantUmlSequenceDiagram.Candidate> candidates =
+                    PlantUmlSequenceDiagram.listCandidates(infos);
+            StringBuilder methodsBuf = new StringBuilder();
+            for (PlantUmlSequenceDiagram.Candidate c : candidates) {
+                methodsBuf.append(c.getEntry())
+                        .append("\t(").append(c.callCount).append(" call")
+                        .append(c.callCount == 1 ? "" : "s")
+                        .append(", ").append(c.visibility.name().toLowerCase(Locale.ROOT)).append(")\n");
+            }
+            writeIfMissing(new java.io.File(dstDir, "methods.txt"), methodsBuf.toString());
+
+            // Android ライフサイクルメソッド起点のシーケンス図
+            java.io.File seqDir = new java.io.File(dstDir, "sequence-diagrams");
+            if (seqDir.exists() || seqDir.mkdirs()) {
+                java.util.Map<String, java.util.List<String>> entryByType = new java.util.LinkedHashMap<>();
+                entryByType.put("Activity", java.util.Arrays.asList(
+                        "onCreate", "onStart", "onResume", "onPause", "onStop", "onDestroy"));
+                entryByType.put("Service", java.util.Arrays.asList(
+                        "onStartCommand", "onCreate", "onBind", "onDestroy"));
+                entryByType.put("BroadcastReceiver", java.util.Arrays.asList("onReceive"));
+                entryByType.put("ContentProvider", java.util.Arrays.asList(
+                        "onCreate", "query", "insert", "update", "delete"));
+                for (padtools.core.formats.uml.JavaClassInfo c : infos) {
+                    String compType = c.getAndroidComponentType();
+                    if (compType == null) continue;
+                    java.util.List<String> methodNames = entryByType.get(compType);
+                    if (methodNames == null) continue;
+                    for (String mn : methodNames) {
+                        padtools.core.formats.uml.JavaMethodInfo m = null;
+                        for (padtools.core.formats.uml.JavaMethodInfo cand : c.getMethods()) {
+                            if (mn.equals(cand.getName()) && !cand.isAbstract()) {
+                                m = cand;
+                                break;
+                            }
+                        }
+                        if (m == null || m.getStatements().isEmpty()) continue;
+                        String puml = PlantUmlSequenceDiagram.generate(
+                                infos, c.getSimpleName(), m.getName(), null);
+                        writeIfMissing(new java.io.File(seqDir,
+                                c.getSimpleName() + "." + m.getName() + ".puml"), puml);
+                    }
+                }
+            }
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;

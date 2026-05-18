@@ -467,12 +467,12 @@ public class MainFrame extends JFrame {
     }
 
     private void doGenerateSequenceDiagram() {
-        if (!releaseOK()) {
-            return;
-        }
-        String puml = new JavaImporter(this).chooseAndGenerateSequenceDiagram(null);
-        if (puml != null) {
-            applyImportedText(puml);
+        File out = new JavaImporter(this).chooseAndGenerateSequenceDiagram(null);
+        if (out != null) {
+            JOptionPane.showMessageDialog(this,
+                    Messages.get("dialog.sequenceDiagram.done") + "\n" + out.getAbsolutePath(),
+                    Messages.get("menu.file.sequenceDiagram"),
+                    JOptionPane.INFORMATION_MESSAGE);
         }
     }
 

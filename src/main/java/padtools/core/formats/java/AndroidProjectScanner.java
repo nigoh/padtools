@@ -1,14 +1,23 @@
 package padtools.core.formats.java;
 
+import padtools.util.CancelToken;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -18,6 +27,10 @@ import java.util.Set;
  *
  * <p>標準的な Gradle プロジェクトレイアウト (src/main/java) と Android プロジェクトレイアウト
  * (app/src/main/java, モジュール/src/main/java) を考慮した収集を行う。</p>
+ *
+ * <p>大規模プロジェクト (AOSP 級) でも詰まらないよう、内部実装は
+ * {@link Files#walkFileTree} ベース。{@link Options#cancelToken} で
+ * 途中キャンセル、{@link Options#maxFiles} で取り込み上限を指定できる。</p>
  *
  * <p>主な利用方法:</p>
  * <pre>{@code
@@ -32,11 +45,17 @@ public final class AndroidProjectScanner {
 
     /** 除外するディレクトリ名 (デフォルト)。 */
     public static final Set<String> DEFAULT_EXCLUDED_DIRS;
+    /** AOSP 級プロジェクト向けに追加で除外すべきディレクトリ名 (opt-in)。 */
+    public static final Set<String> AOSP_EXTRA_EXCLUDED_DIRS;
     static {
         Set<String> s = new HashSet<>(Arrays.asList(
                 "build", ".gradle", ".idea", ".git", "out", "bin",
                 "node_modules", ".kotlin", "captures", ".cxx"));
         DEFAULT_EXCLUDED_DIRS = Collections.unmodifiableSet(s);
+
+        Set<String> aosp = new HashSet<>(Arrays.asList(
+                "prebuilts", "out-soong", ".repo", "test_mapping", ".cache"));
+        AOSP_EXTRA_EXCLUDED_DIRS = Collections.unmodifiableSet(aosp);
     }
 
     /** スキャンオプション。 */
@@ -53,8 +72,16 @@ public final class AndroidProjectScanner {
         public boolean includeManifest = false;
         /** 除外ディレクトリ名のセット。 */
         public Set<String> excludedDirs = DEFAULT_EXCLUDED_DIRS;
+        /** AOSP 級プロジェクト向けの追加除外名 ({@link #AOSP_EXTRA_EXCLUDED_DIRS}) も合成する。 */
+        public boolean useAospDefaults = false;
         /** 最大再帰深さ (負値で無制限)。 */
         public int maxDepth = -1;
+        /** 取り込みファイル数の上限 (負値で無制限)。超過時点で走査を打ち切る。 */
+        public int maxFiles = -1;
+        /** シンボリックリンクを辿る。 */
+        public boolean followSymlinks = false;
+        /** キャンセルトークン。null なら未キャンセル扱い。 */
+        public CancelToken cancelToken;
     }
 
     /** デフォルト Options でスキャン。 */
@@ -78,36 +105,70 @@ public final class AndroidProjectScanner {
             }
             return result;
         }
-        walk(root, o, 0, result);
+        walk(root.toPath(), o, result);
         Collections.sort(result);
         return result;
     }
 
-    private static void walk(File dir, Options opts, int depth, List<File> result) {
-        if (opts.maxDepth >= 0 && depth > opts.maxDepth) {
-            return;
-        }
-        File[] entries = dir.listFiles();
-        if (entries == null) {
-            return;
-        }
-        for (File f : entries) {
-            if (f.isDirectory()) {
-                if (shouldExcludeDir(f, opts)) {
-                    continue;
+    private static void walk(Path rootPath, Options opts, List<File> result) {
+        Set<FileVisitOption> visitOpts = opts.followSymlinks
+                ? EnumSet.of(FileVisitOption.FOLLOW_LINKS)
+                : EnumSet.noneOf(FileVisitOption.class);
+        // 旧実装の maxDepth は「root から数えた再帰深さ」。walkFileTree の maxDepth は
+        // 「root を 1 と数える訪問深さ」なので +1 して換算 (無制限のときは MAX_VALUE)。
+        int walkDepth = opts.maxDepth < 0 ? Integer.MAX_VALUE : opts.maxDepth + 1;
+        final int maxFiles = opts.maxFiles;
+        final CancelToken cancel = opts.cancelToken != null ? opts.cancelToken : CancelToken.NONE;
+
+        try {
+            Files.walkFileTree(rootPath, visitOpts, walkDepth, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (cancel.isCancelled()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+                    // ルート自身は除外判定をスキップ
+                    if (dir.equals(rootPath)) {
+                        return FileVisitResult.CONTINUE;
+                    }
+                    if (shouldExcludeDir(dir.toFile(), opts)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-                walk(f, opts, depth + 1, result);
-            } else if (f.isFile()) {
-                if (accept(f, opts)) {
-                    result.add(f);
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (cancel.isCancelled()) {
+                        return FileVisitResult.TERMINATE;
+                    }
+                    File f = file.toFile();
+                    if (accept(f, opts)) {
+                        result.add(f);
+                        if (maxFiles >= 0 && result.size() >= maxFiles) {
+                            return FileVisitResult.TERMINATE;
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-            }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    // 権限拒否などは無視して継続
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException ex) {
+            // ルートが読めない等。空のまま返す (既存挙動を踏襲)。
         }
     }
 
     private static boolean shouldExcludeDir(File dir, Options opts) {
         String name = dir.getName();
         if (opts.excludedDirs != null && opts.excludedDirs.contains(name)) {
+            return true;
+        }
+        if (opts.useAospDefaults && AOSP_EXTRA_EXCLUDED_DIRS.contains(name)) {
             return true;
         }
         if (!opts.includeTests && isTestDir(dir)) {

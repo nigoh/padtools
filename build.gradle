@@ -28,6 +28,12 @@ dependencies {
     // graphviz/dot は不要 (PlantUmlRenderer が Smetana レイアウトを自動指定)。
     implementation 'net.sourceforge.plantuml:plantuml:1.2026.2'
     testImplementation 'junit:junit:4.13.2'
+    // Playwright (ブラウザ自動化) で生成 SVG をレンダリング・スナップショット検証する。
+    // 初回テスト実行時に `playwright install chromium` がトリガーされ Chromium が
+    // ~/.cache/ms-playwright 配下にダウンロードされる (~150MB)。
+    testImplementation 'com.microsoft.playwright:playwright:1.49.0'
+    // AssertJ-Swing で UmlMainFrame の Swing UI を Robot 経由でテストする。
+    testImplementation 'org.assertj:assertj-swing-junit:3.17.1'
 }
 
 def defaultEncoding = 'UTF-8'
@@ -41,6 +47,15 @@ test {
         events 'passed', 'skipped', 'failed'
         showStandardStreams = false
     }
+
+    // Swing GUI テスト (AssertJ-Swing) と Playwright Chromium 用の環境調整。
+    // - DISPLAY が設定されていなければ Swing GUI テストは Assume.assumeFalse で skip。
+    //   ローカル/CI でも実行したい場合は `xvfb-run -a ./gradlew test` でラップ。
+    // - Playwright は ~/.cache/ms-playwright に Chromium をダウンロードする。
+    //   ネットワーク制限環境では Playwright.create() が失敗し、
+    //   PlantUmlSvgPlaywrightTest は Assume.assumeNoException で skip となる。
+    systemProperty 'java.awt.headless',
+            (System.getenv('DISPLAY') != null ? 'false' : 'true')
 }
 
 jar {

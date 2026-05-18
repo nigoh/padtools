@@ -25,6 +25,7 @@ public class JavaClassInfo {
     private String aaosCategory;
     private String androidComponentType;
     private String comment;
+    private boolean detailed = true;
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
     public String getQualifiedName() {
@@ -136,5 +137,17 @@ public class JavaClassInfo {
 
     public void setComment(String comment) {
         this.comment = comment;
+    }
+
+    /**
+     * Stage B (詳細含む) としてロード済みかどうか。false の場合 fields/methods/comment 等は
+     * 取得されておらず、必要なら {@link padtools.core.formats.uml.ClassIndex#detail} で昇格させる。
+     */
+    public boolean isDetailed() {
+        return detailed;
+    }
+
+    public void setDetailed(boolean detailed) {
+        this.detailed = detailed;
     }
 }

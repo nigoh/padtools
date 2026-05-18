@@ -63,6 +63,10 @@ public final class PlantUmlClassDiagram {
         public boolean showEnumConstants = true;
         /** {@code final} フィールドに {@code &#123;final&#125;} マーカーを付ける。 */
         public boolean showFinal = true;
+        /** 図全体に出すクラスの最大数 (0 以下で無制限)。超過時は先頭から切り詰める。 */
+        public int maxClasses = 0;
+        /** 図末尾に出す警告メッセージ (PlantUML の {@code footer} 行)。null/空で出力しない。 */
+        public String footerWarning;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -83,6 +87,11 @@ public final class PlantUmlClassDiagram {
             throw new IllegalArgumentException("classes is null");
         }
         Options o = opts != null ? opts : new Options();
+        // maxClasses が指定されていれば先頭から切り詰める。
+        int originalTotal = classes.size();
+        if (o.maxClasses > 0 && classes.size() > o.maxClasses) {
+            classes = classes.subList(0, o.maxClasses);
+        }
         StringBuilder out = new StringBuilder();
         out.append("@startuml\n");
         if (o.title != null && !o.title.isEmpty()) {
@@ -155,6 +164,15 @@ public final class PlantUmlClassDiagram {
         }
         if (o.includeLegend) {
             PlantUmlClassLegend.emit(out, classes, o);
+        }
+        // フッタ警告: maxClasses で切り詰めた場合の自動メッセージを優先
+        String footer = o.footerWarning;
+        if ((footer == null || footer.isEmpty())
+                && o.maxClasses > 0 && originalTotal > classes.size()) {
+            footer = "showing " + classes.size() + " of " + originalTotal + " classes";
+        }
+        if (footer != null && !footer.isEmpty()) {
+            out.append("footer ").append(footer).append('\n');
         }
         out.append("@enduml\n");
         return out.toString();

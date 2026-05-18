@@ -9,12 +9,11 @@
     <suppress checks="LocalVariableName" files="ViewListView\.java" />
     <suppress checks="MethodName" files="SwitchView\.java" />
 
-    <!-- JavaParser は単一の解析器クラスとして 800 行を超えるが、機能単位で凝集しているため許可 -->
-    <suppress checks="FileLength" files="JavaParser\.java" />
+    <!-- JavaStructureExtractor は単一のパーサクラスとして 800 行を超えるが、トークン列を順番に
+         消化する状態機械なので機能単位で凝集しており分割する利点が薄いため許可。 -->
+    <suppress checks="FileLength" files="JavaStructureExtractor\.java" />
 
-    <!-- JavaSourceConverterTest は網羅的なテストケースを 1 クラスにまとめており 800 行を超える -->
-    <suppress checks="FileLength" files="JavaSourceConverterTest\.java" />
-
-    <!-- MainFrame は Swing UI 一式 + Java/Gradle/Manifest インポート/UML 生成のメニュー配線を含み 800 行を超える -->
-    <suppress checks="FileLength" files="MainFrame\.java" />
+    <!-- PlantUmlSequenceDiagram の内部ヘルパは PlantUML テキスト・呼び出しスタック・visited
+         セットなどを多数受け渡す必要があり、パラメータ数 8 を超える。外部 API は維持。 -->
+    <suppress checks="ParameterNumber" files="PlantUmlSequenceDiagram\.java" />
 </suppressions>

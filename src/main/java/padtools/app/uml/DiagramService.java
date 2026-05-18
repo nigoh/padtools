@@ -3,6 +3,7 @@ package padtools.app.uml;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
+import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.uml.ClassIndex;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaFieldInfo;
@@ -120,6 +121,11 @@ public final class DiagramService {
                         new PlantUmlGradleDependencyGraph.Options();
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlGradleDependencyGraph.generate(analysis, o);
+            }
+            case MANIFEST: {
+                PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlManifestDiagram.generate(analysis, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());

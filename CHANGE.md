@@ -4,6 +4,13 @@ Change log
 Unreleased
 --------
 
+* **新規 UML 図種: Manifest 図** (`PlantUmlManifestDiagram`)
+    * AndroidManifest.xml の `<application>` 属性 (package / class / theme / debuggable / allowBackup / meta-data) を中央の `<<application>>` ノードに据え、配下に Activity / Service / Receiver / Provider を種別ごとにグループ化して所属関係 (`*--`) を描く
+    * 周辺に `uses-permission` / `uses-feature` を別パッケージで配置し、launcher Activity と `exported=true` は視覚的に強調 (色 / ステレオタイプ)
+    * 同モジュール内に複数 manifest (main + debug + flavor 等) がある場合は sourceSet ごとに別 Application ノードを描画し、`<<src:debug>>` 等のステレオタイプを付与
+    * CLI: `-M` / `--manifest-diagram` で生成可能。`--all` の出力に `manifest-diagram.svg` を追加 (出力数 6 → 7)
+    * GUI: Diagram メニューに「Manifest Diagram」を追加。左ペインのプロジェクトツリーにモジュール直下の `[manifest] AndroidManifest.xml` ノードを表示し、Activities / Services / Receivers / Providers / Permissions / Features を展開可能に。Manifest 系ノードを選択すると Manifest 図に自動切替
+    * 右ペインに `Manifest Summary` タブを新設し、`TextSummaryReport.toManifestMarkdown` で AndroidManifest のみに絞った Markdown サマリーを表示
 * **AOSP 級プロジェクト対応 (Large project readability)** — 数万クラス規模でも「読み込めて」「図として読める」ようにパイプライン全体を刷新
     * **並列スキャン + 並列パース** (`AndroidProjectScanner`, `UmlGenerator`)
         * `AndroidProjectScanner.walk` を `Files.walkFileTree` ベースに置き換え、深い再帰でも安定動作

@@ -9,6 +9,7 @@ import padtools.core.formats.android.GradleProjectInfo;
 import padtools.core.formats.android.GradleScriptParser;
 import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
+import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
@@ -81,6 +82,7 @@ public class Main {
         final Option optGradle = new Option("g", "gradle", false);
         final Option optManifest = new Option("m", "manifest", false);
         final Option optComponent = new Option("d", "component-diagram", false);
+        final Option optManifestDiagram = new Option("M", "manifest-diagram", false);
         final Option optDepGraph = new Option("G", "dependency-graph", false);
         final Option optSummary = new Option(null, "summary", false);
         final Option optAll = new Option("A", "all", false);
@@ -98,7 +100,8 @@ public class Main {
                 optHelp, optOut,
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
-                optGradle, optManifest, optComponent, optDepGraph, optSummary,
+                optGradle, optManifest, optComponent, optManifestDiagram,
+                optDepGraph, optSummary,
                 optAll, optNoManifestMerge,
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
@@ -173,6 +176,10 @@ public class Main {
             handleComponentDiagram(file_in, file_out, listener, legendOverride);
             return;
         }
+        if (optManifestDiagram.isSet()) {
+            handleManifestDiagram(file_in, file_out, listener, legendOverride);
+            return;
+        }
         if (optDepGraph.isSet()) {
             handleDependencyGraph(file_in, file_out, listener, legendOverride);
             return;
@@ -191,7 +198,7 @@ public class Main {
         }
 
         if (file_out != null) {
-            System.err.println("-o requires one of: -c / -q / -d / -G / -g / -m"
+            System.err.println("-o requires one of: -c / -q / -d / -G / -g / -m / -M"
                     + " / --summary / -A / -Q / --list-methods");
             System.exit(1);
             return;
@@ -420,6 +427,36 @@ public class Main {
         writeUmlOutput(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
     }
 
+    /**
+     * {@code --manifest-diagram}: AndroidManifest.xml の構造 (Application + 配下コンポーネント
+     * + permissions + features) を 1 枚にまとめた PlantUML 図を生成する。
+     */
+    private static void handleManifestDiagram(File fileIn, File fileOut,
+                                                ErrorListener listener,
+                                                Boolean legendOverride) throws IOException {
+        if (fileIn == null) {
+            System.err.println("Manifest diagram requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        AndroidProjectAnalysis analysis;
+        if (fileIn.isDirectory()) {
+            analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+        } else {
+            String content = AndroidProjectScanner.readFile(fileIn);
+            AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
+            analysis = new AndroidProjectAnalysis();
+            java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
+            list.add(info);
+            analysis.getManifestsByModule().put(fileIn.getName(), list);
+        }
+        PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            o.includeLegend = false;
+        }
+        writeUmlOutput(fileOut, PlantUmlManifestDiagram.generate(analysis, o));
+    }
+
     /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
     private static void handleDependencyGraph(File fileIn, File fileOut,
                                                 ErrorListener listener,
@@ -455,6 +492,7 @@ public class Main {
      *   <li>{@code summary.md} - Markdown プロジェクトサマリー</li>
      *   <li>{@code class-diagram.svg} - PlantUML クラス図 (manifest 自動マージ)</li>
      *   <li>{@code component-diagram.svg} - PlantUML Android コンポーネント図</li>
+     *   <li>{@code manifest-diagram.svg} - PlantUML AndroidManifest 図 (Application + 配下コンポーネント)</li>
      *   <li>{@code dependency-graph.svg} - PlantUML Gradle 依存グラフ</li>
      *   <li>{@code methods.txt} - シーケンス図の起点候補一覧 ({@code Class.method}) </li>
      *   <li>{@code sequence-diagrams/}{@code <Class.method>.svg} - Android ライフサイクル
@@ -501,14 +539,14 @@ public class Main {
         AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
 
         // 1) Markdown サマリー
-        progress.step("[1/6] Generating summary.md");
+        progress.step("[1/7] Generating summary.md");
         File summaryFile = new File(fileOut, "summary.md");
         writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
         progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
         // 2) コンポーネント図 (SVG)
-        progress.step("[2/6] Generating component-diagram.svg");
+        progress.step("[2/7] Generating component-diagram.svg");
         PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             compOpts.includeLegend = false;
@@ -518,8 +556,20 @@ public class Main {
         progress.wrote(compFile);
         listener.onError(null, -1, "wrote " + compFile.getPath());
 
-        // 3) 依存グラフ (SVG)
-        progress.step("[3/6] Generating dependency-graph.svg");
+        // 3) Manifest 図 (SVG) — Application + 配下コンポーネントを 1 枚で可視化
+        progress.step("[3/7] Generating manifest-diagram.svg");
+        PlantUmlManifestDiagram.Options manOpts = new PlantUmlManifestDiagram.Options();
+        if (Boolean.FALSE.equals(legendOverride)) {
+            manOpts.includeLegend = false;
+        }
+        File manFile = new File(fileOut, "manifest-diagram.svg");
+        PlantUmlRenderer.renderSvg(
+                PlantUmlManifestDiagram.generate(analysis, manOpts), manFile);
+        progress.wrote(manFile);
+        listener.onError(null, -1, "wrote " + manFile.getPath());
+
+        // 4) 依存グラフ (SVG)
+        progress.step("[4/7] Generating dependency-graph.svg");
         PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             depOpts.includeLegend = false;
@@ -530,8 +580,8 @@ public class Main {
         progress.wrote(depFile);
         listener.onError(null, -1, "wrote " + depFile.getPath());
 
-        // 4) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
-        progress.step("[4/6] Generating class-diagram.svg (scanning Java/AIDL)");
+        // 5) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
+        progress.step("[5/7] Generating class-diagram.svg (scanning Java/AIDL)");
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
@@ -548,8 +598,8 @@ public class Main {
         progress.wrote(clsFile, "(" + infos.size() + " class(es))");
         listener.onError(null, -1, "wrote " + clsFile.getPath());
 
-        // 5) シーケンス図の起点候補一覧
-        progress.step("[5/6] Generating methods.txt (sequence diagram entry candidates)");
+        // 6) シーケンス図の起点候補一覧
+        progress.step("[6/7] Generating methods.txt (sequence diagram entry candidates)");
         java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
                 padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
         StringBuilder methodsBuf = new StringBuilder();
@@ -564,8 +614,8 @@ public class Main {
         progress.wrote(methodsFile, "(" + candidates.size() + " method(s))");
         listener.onError(null, -1, "wrote " + methodsFile.getPath());
 
-        // 6) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
-        progress.step("[6/6] Generating sequence-diagrams/ (Android lifecycle entry points)");
+        // 7) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
+        progress.step("[7/7] Generating sequence-diagrams/ (Android lifecycle entry points)");
         File seqDir = new File(fileOut, "sequence-diagrams");
         if (!seqDir.exists() && !seqDir.mkdirs()) {
             System.err.println("[padtools]     Skipping sequence-diagrams (cannot create dir)");
@@ -647,7 +697,7 @@ public class Main {
 
     private static void printUsage() {
         System.err.println(
-                "Arguments: [-o file] [-c|-q M|-d|-G|-g|-m|-Q|-A|--summary] [-v] [-h] [input]");
+                "Arguments: [-o file] [-c|-q M|-d|-M|-G|-g|-m|-Q|-A|--summary] [-v] [-h] [input]");
         System.err.println("  No arguments / [input dir]: Launch UML GUI for the project.");
         System.err.println("  -o file: Save diagram (puml/svg) or report (md) to file.");
         System.err.println("  -h: Show this help.");
@@ -659,6 +709,8 @@ public class Main {
         System.err.println("  -g --gradle: Output Markdown summary from build.gradle.");
         System.err.println("  -m --manifest: Output Markdown summary from AndroidManifest.xml.");
         System.err.println("  -d --component-diagram: PlantUML Android component diagram.");
+        System.err.println("  -M --manifest-diagram: "
+                + "PlantUML AndroidManifest diagram (Application + components).");
         System.err.println("  -G --dependency-graph: PlantUML Gradle dependency graph.");
         System.err.println("  --summary: Full project Markdown summary (dir).");
         System.err.println("  -A --all: Output ALL artifacts as SVG "

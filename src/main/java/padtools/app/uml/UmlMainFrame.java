@@ -2,6 +2,7 @@ package padtools.app.uml;
 
 import padtools.Main;
 import padtools.Setting;
+import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.uml.DiagramStyle;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.CancelToken;
@@ -70,6 +71,7 @@ public class UmlMainFrame extends JFrame {
     private final ProjectTreePanel treePanel = new ProjectTreePanel();
     private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
     private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
+    private final ManifestSummaryPanel manifestSummaryPanel = new ManifestSummaryPanel();
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
@@ -108,6 +110,8 @@ public class UmlMainFrame extends JFrame {
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
+        treePanel.setOnManifestSelected(this::onTreeManifestSelected);
+        treePanel.setOnComponentSelected(this::onTreeComponentSelected);
 
         loadProgress.setStringPainted(true);
         loadProgress.setVisible(false);
@@ -115,10 +119,11 @@ public class UmlMainFrame extends JFrame {
 
         setJMenuBar(buildMenuBar());
 
-        // 右側: プレビュー (ベクター SVG) と PlantUML ソースのタブ
+        // 右側: プレビュー (ベクター SVG) と PlantUML ソース / Manifest Summary のタブ
         JTabbedPane rightTabs = new JTabbedPane();
         rightTabs.addTab("Preview", new JScrollPane(previewPanel));
         rightTabs.addTab("PlantUML Source", sourcePanel);
+        rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                 treePanel, rightTabs);
@@ -339,6 +344,7 @@ public class UmlMainFrame extends JFrame {
     private void loadProject(File root) {
         status.setText("Analyzing " + root.getName() + " ...");
         treePanel.clear();
+        manifestSummaryPanel.setText("");
         loadProgress.setVisible(true);
         loadProgress.setIndeterminate(true);
         loadProgress.setString("Scanning...");
@@ -389,6 +395,7 @@ public class UmlMainFrame extends JFrame {
                         root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
                 currentScope = null;
+                updateManifestSummary();
                 status.setText("Analyzed " + cache.getClasses().size() + " class(es)"
                         + " from " + root.getAbsolutePath());
                 refreshDiagram();
@@ -453,6 +460,43 @@ public class UmlMainFrame extends JFrame {
             refreshDiagram();
         }
     }
+
+    /** Manifest Summary タブのテキストを最新の解析結果で更新する。 */
+    private void updateManifestSummary() {
+        if (cache.isLoaded() && cache.getAnalysis() != null) {
+            manifestSummaryPanel.setText(
+                    TextSummaryReport.toManifestMarkdown(cache.getAnalysis()));
+        } else {
+            manifestSummaryPanel.setText("");
+        }
+    }
+
+    /**
+     * 左ペインのツリーで Manifest ノード (または配下の Permissions / Features
+     * グループ) が選択されたら Manifest 図モードへ切り替える。
+     */
+    private void onTreeManifestSelected(padtools.core.formats.android.AndroidManifestInfo m) {
+        switchToManifestDiagram();
+    }
+
+    /**
+     * 左ペインのツリーで Manifest 配下の個別コンポーネントが選択されたら
+     * Manifest 図モードへ切り替える (将来的に該当ノードへ強調表示を入れる余地)。
+     */
+    private void onTreeComponentSelected(
+            padtools.core.formats.android.AndroidComponentInfo c) {
+        switchToManifestDiagram();
+    }
+
+    private void switchToManifestDiagram() {
+        currentKind = DiagramKind.MANIFEST;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.MANIFEST);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        refreshDiagram();
+    }
+
 
     /**
      * 左ペインのツリーでメソッドが選択された際のハンドラ。

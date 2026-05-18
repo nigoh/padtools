@@ -1,5 +1,7 @@
 package padtools.app.uml;
 
+import org.apache.batik.gvt.GraphicsNode;
+
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
@@ -20,7 +22,12 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 
 /**
- * {@link BufferedImage} (PlantUML レンダリング結果) をズーム・パン対応で表示するパネル。
+ * PlantUML のレンダリング結果をズーム・パン対応で表示するパネル。
+ *
+ * <p>ベクター SVG ({@link GraphicsNode}) とラスタ {@link BufferedImage} の
+ * どちらも表示できる。SVG モード ({@link #setSvgGraphicsNode}) では PlantUML の
+ * 4096x4096 PNG キャンバス上限を回避でき、巨大な図でも切り詰められない。
+ * 互換のため画像モード ({@link #setImage}) も維持している。</p>
  *
  * <p>操作:</p>
  * <ul>
@@ -39,6 +46,9 @@ public class SvgPreviewPanel extends JPanel {
     private static final double WHEEL_ZOOM_FACTOR = 1.1;
 
     private BufferedImage image;
+    private GraphicsNode svgNode;
+    private double svgWidth;
+    private double svgHeight;
     private double zoomLevel = 1.0;
 
     private Point dragStart;
@@ -63,16 +73,37 @@ public class SvgPreviewPanel extends JPanel {
         }
     }
 
-    /** 表示する画像を差し替え、初回はサイズに合わせてフィットさせる。 */
+    /**
+     * ベクター SVG ({@link GraphicsNode}) を表示する。倍率は維持される。
+     * {@code node} が {@code null} なら表示をクリアする。
+     */
+    public void setSvgGraphicsNode(GraphicsNode node, double width, double height) {
+        this.svgNode = node;
+        if (node == null) {
+            this.svgWidth = 0;
+            this.svgHeight = 0;
+        } else {
+            this.svgWidth = Math.max(1, width);
+            this.svgHeight = Math.max(1, height);
+        }
+        // 同時に画像モードもクリアし、表示内容を一意にする
+        this.image = null;
+        updatePreferredSize();
+        revalidate();
+        repaint();
+    }
+
+    public GraphicsNode getSvgGraphicsNode() {
+        return svgNode;
+    }
+
+    /** 表示する画像 (PNG など) を差し替える。倍率は維持される。 */
     public void setImage(BufferedImage img) {
         this.image = img;
-        if (img == null) {
-            setPreferredSize(new Dimension(0, 0));
-            revalidate();
-            repaint();
-            return;
-        }
-        // 倍率はそのまま維持 (連続更新でズーム位置を保つ)
+        // SVG モードと同居しないようクリア
+        this.svgNode = null;
+        this.svgWidth = 0;
+        this.svgHeight = 0;
         updatePreferredSize();
         revalidate();
         repaint();
@@ -112,7 +143,9 @@ public class SvgPreviewPanel extends JPanel {
 
     /** ビューポートに収まるように倍率を調整する。 */
     public void zoomToFit() {
-        if (image == null) {
+        double iw = contentWidth();
+        double ih = contentHeight();
+        if (iw <= 0 || ih <= 0) {
             return;
         }
         JViewport vp = getParentViewport();
@@ -123,9 +156,33 @@ public class SvgPreviewPanel extends JPanel {
         if (extent.width <= 0 || extent.height <= 0) {
             return;
         }
-        double zx = (double) extent.width / image.getWidth();
-        double zy = (double) extent.height / image.getHeight();
+        double zx = extent.width / iw;
+        double zy = extent.height / ih;
         setZoomLevel(Math.min(zx, zy));
+    }
+
+    private double contentWidth() {
+        if (svgNode != null) {
+            return svgWidth;
+        }
+        if (image != null) {
+            return image.getWidth();
+        }
+        return 0;
+    }
+
+    private double contentHeight() {
+        if (svgNode != null) {
+            return svgHeight;
+        }
+        if (image != null) {
+            return image.getHeight();
+        }
+        return 0;
+    }
+
+    private boolean hasContent() {
+        return svgNode != null || image != null;
     }
 
     private JViewport getParentViewport() {
@@ -149,18 +206,20 @@ public class SvgPreviewPanel extends JPanel {
     }
 
     private void updatePreferredSize() {
-        if (image == null) {
+        double cw = contentWidth();
+        double ch = contentHeight();
+        if (cw <= 0 || ch <= 0) {
             setPreferredSize(new Dimension(0, 0));
             return;
         }
-        int w = (int) Math.max(1, image.getWidth() * zoomLevel);
-        int h = (int) Math.max(1, image.getHeight() * zoomLevel);
+        int w = (int) Math.max(1, cw * zoomLevel);
+        int h = (int) Math.max(1, ch * zoomLevel);
         setPreferredSize(new Dimension(w, h));
     }
 
     /** マウスポインタ位置を画面上の同じ点に保ったままズームする。 */
     private void zoomAt(Point screenPos, double newZoom) {
-        if (image == null) {
+        if (!hasContent()) {
             return;
         }
         double clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newZoom));
@@ -218,7 +277,7 @@ public class SvgPreviewPanel extends JPanel {
 
             @Override
             public void mousePressed(MouseEvent e) {
-                if (image == null) {
+                if (!hasContent()) {
                     return;
                 }
                 if (SwingUtilities.isMiddleMouseButton(e)
@@ -253,12 +312,12 @@ public class SvgPreviewPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 dragStart = null;
-                setCursor(image != null ? handCursor : defaultCursor);
+                setCursor(hasContent() ? handCursor : defaultCursor);
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                setCursor(image != null ? handCursor : defaultCursor);
+                setCursor(hasContent() ? handCursor : defaultCursor);
             }
 
             @Override
@@ -274,17 +333,21 @@ public class SvgPreviewPanel extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        if (image == null) {
-            return;
-        }
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                     RenderingHints.VALUE_ANTIALIAS_ON);
-            AffineTransform tx = AffineTransform.getScaleInstance(zoomLevel, zoomLevel);
-            g2.drawImage(image, tx, null);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                    RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            if (svgNode != null) {
+                g2.scale(zoomLevel, zoomLevel);
+                svgNode.paint(g2);
+            } else if (image != null) {
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                AffineTransform tx = AffineTransform.getScaleInstance(zoomLevel, zoomLevel);
+                g2.drawImage(image, tx, null);
+            }
         } finally {
             g2.dispose();
         }

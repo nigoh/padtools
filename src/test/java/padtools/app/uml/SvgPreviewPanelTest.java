@@ -5,6 +5,7 @@ import org.junit.Test;
 import java.awt.image.BufferedImage;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -69,5 +70,39 @@ public class SvgPreviewPanelTest {
         p.setZoomChangeListener(() -> count[0]++);
         p.setZoomLevel(2.0);
         assertEquals(1, count[0]);
+    }
+
+    @Test
+    public void testSetSvgGraphicsNodeClearsImage() throws Exception {
+        SvgPreviewPanel p = new SvgPreviewPanel();
+        p.setImage(new BufferedImage(40, 30, BufferedImage.TYPE_INT_RGB));
+        PlantUmlSvgRenderer.RenderedSvg svg = PlantUmlSvgRenderer.render(
+                "@startuml\nA -> B\n@enduml\n");
+        assertNotNull(svg);
+        p.setSvgGraphicsNode(svg.getRoot(), svg.getWidth(), svg.getHeight());
+        // SVG モードに切替後は画像モードはクリアされる
+        assertNull(p.getImage());
+        assertSame(svg.getRoot(), p.getSvgGraphicsNode());
+    }
+
+    @Test
+    public void testSetImageClearsSvgGraphicsNode() throws Exception {
+        SvgPreviewPanel p = new SvgPreviewPanel();
+        PlantUmlSvgRenderer.RenderedSvg svg = PlantUmlSvgRenderer.render(
+                "@startuml\nA -> B\n@enduml\n");
+        assertNotNull(svg);
+        p.setSvgGraphicsNode(svg.getRoot(), svg.getWidth(), svg.getHeight());
+        p.setImage(new BufferedImage(20, 10, BufferedImage.TYPE_INT_RGB));
+        // 画像モードに切替後は SVG モードはクリアされる
+        assertNull(p.getSvgGraphicsNode());
+        assertNotNull(p.getImage());
+    }
+
+    @Test
+    public void testClearSvgGraphicsNode() {
+        SvgPreviewPanel p = new SvgPreviewPanel();
+        p.setSvgGraphicsNode(null, 0, 0);
+        assertNull(p.getSvgGraphicsNode());
+        assertNull(p.getImage());
     }
 }

@@ -1,6 +1,18 @@
 Change log
 =============
 
+Unreleased
+--------
+
+* **GUI プレビューをベクター SVG 化** (`PlantUmlSvgRenderer` + `SvgPreviewPanel`)
+    * PlantUML 出力を PNG ではなく SVG として描画し、Apache Batik (`batik-bridge`)
+      で `GraphicsNode` に変換して `SvgPreviewPanel` 上で直接ペイントする
+    * PlantUML の PNG キャンバス 4096x4096 制約に縛られなくなり、巨大な
+      クラス図でも切り詰められずに表示できる
+    * ズーム時もアンチエイリアスを保ったまま再描画される
+    * PNG エクスポートは保存時に `PlantUmlImageRenderer` で再生成する経路に変更
+      (プレビューは常にベクターのみを保持)
+
 2.0 (UML-only pivot)
 --------
 

@@ -34,6 +34,8 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 
+import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
+
 /**
  * UML 専用のメインウィンドウ。
  *
@@ -41,8 +43,9 @@ import java.io.File;
  * と {@link PumlSourcePanel} をタブで切り替え表示する。
  * メニューから図種選択・ズーム操作・エクスポートを行える。</p>
  *
- * <p>図の生成と PNG レンダリングは {@link SwingWorker} でバックグラウンド実行し、
- * 図種/オプション変更時の再描画は {@link Timer} で 300ms デバウンスする。</p>
+ * <p>図の生成と SVG (ベクター) レンダリングは {@link SwingWorker} で
+ * バックグラウンド実行し、図種/オプション変更時の再描画は {@link Timer} で
+ * 300ms デバウンスする。PNG ラスタ化は保存時のみ行う。</p>
  */
 public class UmlMainFrame extends JFrame {
 
@@ -91,7 +94,7 @@ public class UmlMainFrame extends JFrame {
 
         setJMenuBar(buildMenuBar());
 
-        // 右側: プレビュー (画像) と PlantUML ソースのタブ
+        // 右側: プレビュー (ベクター SVG) と PlantUML ソースのタブ
         JTabbedPane rightTabs = new JTabbedPane();
         rightTabs.addTab("Preview", new JScrollPane(previewPanel));
         rightTabs.addTab("PlantUML Source", sourcePanel);
@@ -306,7 +309,7 @@ public class UmlMainFrame extends JFrame {
         final DiagramKind kind = currentKind;
         if (kind == DiagramKind.SEQUENCE
                 && (sequenceEntry == null || sequenceEntry.isEmpty())) {
-            previewPanel.setImage(null);
+            previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose a sequence entry from Diagram menu.");
             return;
@@ -323,8 +326,10 @@ public class UmlMainFrame extends JFrame {
                             ? buildSequenceRequest(entry)
                             : new DiagramRequest(kind);
                     String puml = DiagramService.generatePuml(req, cache);
-                    BufferedImage img = PlantUmlImageRenderer.toBufferedImage(puml);
-                    return new RenderResult(puml, img);
+                    // ベクター SVG として描画して、PlantUML の PNG 4096x4096
+                    // キャンバス上限による切り詰めを回避する。
+                    RenderedSvg svg = PlantUmlSvgRenderer.render(puml);
+                    return new RenderResult(puml, svg);
                 } catch (Throwable ex) {
                     error = ex;
                     return null;
@@ -342,17 +347,19 @@ public class UmlMainFrame extends JFrame {
                 }
                 try {
                     RenderResult r = get();
-                    if (r == null || r.image == null) {
-                        previewPanel.setImage(null);
+                    if (r == null || r.svg == null) {
+                        previewPanel.setSvgGraphicsNode(null, 0, 0);
                         sourcePanel.setText(r != null ? r.puml : "");
-                        status.setText(kind.getDisplayName() + ": (no image)");
+                        status.setText(kind.getDisplayName() + ": (no diagram)");
                         return;
                     }
                     currentPuml = r.puml;
-                    previewPanel.setImage(r.image);
+                    previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
+                            r.svg.getWidth(), r.svg.getHeight());
                     sourcePanel.setText(r.puml);
                     status.setText(kind.getDisplayName() + " rendered ("
-                            + r.image.getWidth() + "x" + r.image.getHeight() + ")");
+                            + (int) Math.round(r.svg.getWidth()) + "x"
+                            + (int) Math.round(r.svg.getHeight()) + ", SVG)");
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(UmlMainFrame.this,
                             "Failed to display: " + ex.getMessage(),
@@ -408,7 +415,13 @@ public class UmlMainFrame extends JFrame {
             fmt = UmlExporter.Format.fromFileName(chosen.getName());
         }
         try {
-            UmlExporter.export(fmt, chosen, currentPuml, previewPanel.getImage());
+            BufferedImage pngImage = null;
+            if (fmt == UmlExporter.Format.PNG) {
+                // プレビューはベクター SVG なので PNG エクスポート時にだけ
+                // 同じ PlantUML テキストから PNG をレンダリングする。
+                pngImage = PlantUmlImageRenderer.toBufferedImage(currentPuml);
+            }
+            UmlExporter.export(fmt, chosen, currentPuml, pngImage);
             status.setText("Saved: " + chosen.getAbsolutePath());
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
@@ -447,11 +460,11 @@ public class UmlMainFrame extends JFrame {
 
     private static final class RenderResult {
         final String puml;
-        final BufferedImage image;
+        final RenderedSvg svg;
 
-        RenderResult(String puml, BufferedImage image) {
+        RenderResult(String puml, RenderedSvg svg) {
             this.puml = puml;
-            this.image = image;
+            this.svg = svg;
         }
     }
 

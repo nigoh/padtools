@@ -4,6 +4,16 @@ Change log
 Unreleased
 --------
 
+* **左ペインのプロジェクトツリーが左クリックに反応するように修正** (`ProjectTreePanel` / `UmlMainFrame`)
+    * これまで `ProjectTreePanel.notifySelection()` はメソッド / クラス / Manifest / Component に対しては該当ハンドラを発火していたが、`UmlMainFrame` 側でクラス用ハンドラ (`setOnClassSelected`) を登録しておらず、また**パッケージ / モジュール** ノードは左クリックでは何も発火しない構造 (`onClassSelected(null)` に落ちるだけ) だった。結果として「左側のリストをクリックしても何も反応しない」状態だった
+    * **クラスノードのクリック**: 当該クラスを `seed` + `neighborHops=1` のスコープでクラス図に切り替える (`UmlMainFrame.onTreeClassSelected`)
+    * **パッケージノードのクリック**: 既存の右クリックメニュー経由のドリルダウンと同じ「該当パッケージにスコープしたクラス図」を左クリックでも開けるようにする
+    * **モジュールノードのクリック**: `setOnModuleSelected` ハンドラを新設し、当該モジュールに含まれるクラスだけに絞ったクラス図に切り替える (`UmlMainFrame.onTreeModuleSelected`)
+    * **メソッドノード選択時の二重発火を除去**: `MethodEntry` 経路で `onClassSelected` が併発呼び出しされていたため、`setOnClassSelected` を登録すると method クリック直後にシーケンス図がクラス図で上書きされる衝突があった。Method ノードは `onMethodSelected` のみ発火する設計に整理
+    * **モジュール自動展開バグの修正**: `populate()` 完了時、`tree.expandRow(i)` を `i < root.getChildCount()` で回していたためルート行 (row 0) しか展開対象にならず、モジュールが常に折りたたまれた状態で表示されていた。`TreePath` 経由で各モジュールノードを明示的に展開するよう修正
+    * **回帰防止テスト**: `UmlMainFrameSwingTest.testTreeNodeClickFiresScopeChange` で module / package / class それぞれのクリックがステータスバーに `Scope: ...` を出すところまでを GUI 経由で検証
+    * 目的: ユーザーが左ペインの項目を選んだときに、それに対応した範囲のクラス図 (または既存のシーケンス図 / Manifest 図) へ自然に切り替わるようにし、「クリックしても無反応」という UX バグを解消する
+
 * **Android 14 / 15 manifest 属性への対応** (`AndroidPropertyInfo` / `ForegroundServiceTypeCatalog` / `AndroidManifestInfo` 拡張)
     * **`<property>` 要素のパース** (Android 12+): application / activity / service / receiver / provider 配下の `<property android:name=... value=.../resource=.../>` を `AndroidPropertyInfo` で保持。`android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE` 等の Android 14 必須 property を見逃さない
     * **`foregroundServiceType` カタログ化** (`ForegroundServiceTypeCatalog`): Android 10 (`dataSync` / `mediaPlayback` / `phoneCall` / `location` / `connectedDevice` / `mediaProjection`), Android 11 (`camera` / `microphone`), Android 14 (`health` / `remoteMessaging` / `shortService` / `specialUse` / `systemExempted`), Android 15 (`mediaProcessing`) の全 14 種を最小 API レベル + 対応 `FOREGROUND_SERVICE_*` permission とともに保持

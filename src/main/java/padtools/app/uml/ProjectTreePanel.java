@@ -61,6 +61,7 @@ public class ProjectTreePanel extends JPanel {
     private java.util.function.Consumer<JavaClassInfo> onClassSelected;
     private java.util.function.Consumer<MethodSelection> onMethodSelected;
     private java.util.function.Consumer<String> onPackageSelected;
+    private java.util.function.Consumer<String> onModuleSelected;
     private java.util.function.Consumer<AndroidManifestInfo> onManifestSelected;
     private java.util.function.Consumer<AndroidComponentInfo> onComponentSelected;
 
@@ -109,9 +110,18 @@ public class ProjectTreePanel extends JPanel {
         this.onMethodSelected = listener;
     }
 
-    /** パッケージノード右クリック → ドリルダウン用ハンドラ。 */
+    /**
+     * パッケージノードのクリック (左クリック選択 / 右クリックメニュー両方) で発火する
+     * ドリルダウン用ハンドラ。 受け取り側は当該パッケージにスコープしたクラス図への
+     * 切り替えなどを行う。
+     */
     public void setOnPackageSelected(java.util.function.Consumer<String> listener) {
         this.onPackageSelected = listener;
+    }
+
+    /** モジュールノード選択時のハンドラ。受け取り側は当該モジュールにスコープした図への切替などを行う。 */
+    public void setOnModuleSelected(java.util.function.Consumer<String> listener) {
+        this.onModuleSelected = listener;
     }
 
     /** Manifest ノード選択時のコールバック。Manifest 図への切り替え等に使う。 */
@@ -174,9 +184,11 @@ public class ProjectTreePanel extends JPanel {
             root.add(moduleNode);
         }
         model.reload(root);
-        // モジュールノードを開いておく
+        // モジュールノードは開いた状態で見せておく (パッケージ一覧がすぐ見えるように)。
+        // row index ではなく TreePath で展開しないとルートと取り違える。
         for (int i = 0; i < root.getChildCount(); i++) {
-            tree.expandRow(i);
+            DefaultMutableTreeNode mod = (DefaultMutableTreeNode) root.getChildAt(i);
+            tree.expandPath(new TreePath(mod.getPath()));
         }
     }
 
@@ -240,14 +252,23 @@ public class ProjectTreePanel extends JPanel {
                 if (onMethodSelected != null) {
                     onMethodSelected.accept(new MethodSelection(me.owner, me.method));
                 }
-                if (onClassSelected != null) {
-                    onClassSelected.accept(me.owner);
-                }
                 return;
             }
             if (u instanceof ClassEntry) {
                 if (onClassSelected != null) {
                     onClassSelected.accept(((ClassEntry) u).info);
+                }
+                return;
+            }
+            if (u instanceof PackageEntry) {
+                if (onPackageSelected != null) {
+                    onPackageSelected.accept(((PackageEntry) u).name);
+                }
+                return;
+            }
+            if (u instanceof ModuleEntry) {
+                if (onModuleSelected != null) {
+                    onModuleSelected.accept(((ModuleEntry) u).name);
                 }
                 return;
             }

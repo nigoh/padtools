@@ -7,6 +7,10 @@ PadTools は **Java / Android (Gradle + AndroidManifest.xml + AIDL) プロジェ
 UML 図を生成する Swing ベースの対話型ツール**です。同梱の PlantUML で描画するため、
 Graphviz / PlantUML の追加インストールは不要です。
 
+本プロジェクトは **MIT ライセンスで公開されているオープンソースソフトウェア (OSS)** です。
+ソースコードは GitHub ([nigoh/padtools](https://github.com/nigoh/padtools)) で公開しており、
+誰でも自由に利用・改変・再配布できます。バグ報告や Pull Request も歓迎します。
+
 対応する UML 図種:
 
 | 図種 | 説明 |
@@ -161,11 +165,17 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 
 ライセンス
 ------------------------------------------------
+PadTools は **オープンソースソフトウェア** として MIT ライセンスのもとで公開されています。
+
     Copyright (c) 2015-2026 naou and contributors
 
     Released under the MIT license (http://opensource.org/licenses/mit-license)
 
-同梱の PlantUML は GPLv3 ライセンスです。
+MIT ライセンスは [OSI (Open Source Initiative)](https://opensource.org/licenses/MIT) が
+承認したオープンソースライセンスで、商用・非商用を問わず自由に利用・改変・再配布が可能です
+(著作権表示とライセンス文の保持が条件)。
+
+なお、同梱の PlantUML は GPLv3 ライセンスです。
 
 リンク
 ------------------------------------------------

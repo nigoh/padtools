@@ -331,8 +331,11 @@ public final class PlantUmlClassDiagram {
         out.append(" ..\n");
     }
 
-    /** PlantUML の {@code ..} セパレータと干渉する文字を抑止し、長さも制限する。 */
-    private static String sanitizeInlineComment(String s, int maxLen) {
+    /**
+     * PlantUML の {@code ..} セパレータと干渉する文字を抑止し、長さも制限する。
+     * シーケンス図側からも再利用するため package-private。
+     */
+    static String sanitizeInlineComment(String s, int maxLen) {
         // PlantUML の class body 内でレイアウトを乱す制御文字を除去
         String t = s.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ').trim();
         // 末尾の '..' は区切りと干渉するためスペースに置換
@@ -381,7 +384,8 @@ public final class PlantUmlClassDiagram {
         }
     }
 
-    private static void appendNoteBody(StringBuilder out, String comment, String indent) {
+    /** note ブロックの本文を 1 行ずつ書き出す。シーケンス図側からも再利用するため package-private。 */
+    static void appendNoteBody(StringBuilder out, String comment, String indent) {
         String[] lines = comment.split("\n", -1);
         for (String line : lines) {
             String t = line.replace('\r', ' ').replace('\t', ' ').trim();

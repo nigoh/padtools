@@ -107,6 +107,7 @@ public class JavaMethodInfo {
     private final List<String> annotations = new ArrayList<>();
     private final List<Statement> statements = new ArrayList<>();
     private String comment;
+    private final List<String> bodyComments = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -203,5 +204,13 @@ public class JavaMethodInfo {
 
     public void setComment(String comment) {
         this.comment = comment;
+    }
+
+    /**
+     * メソッド本体内で出現したコメント (行/ブロック/JavaDoc) を整形済み文字列で順に保持する。
+     * シーケンス図の note にメソッド意図を併載する際に利用する。
+     */
+    public List<String> getBodyComments() {
+        return bodyComments;
     }
 }

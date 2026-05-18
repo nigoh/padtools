@@ -55,6 +55,7 @@ GUI の操作:
     * パッケージノード右クリック → `Show class diagram of this package` でそのパッケージだけのクラス図にドリルダウン
     * メソッドノード選択 → シーケンス図起点として即座に切替
     * Manifest 系ノード選択 → Manifest 図に自動切替
+* **クラス図プレビュー上のクラス右クリック** — そのクラスのメソッド一覧をポップアップで開き、選んだメソッドを起点にシーケンス図へ即座に切り替え (抽象メソッドは除外)
 * **View → Zoom In / Out / 100% / Fit** (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+F) — プレビューズーム。Ctrl+ホイールでもズーム、左ドラッグでパン
 * **右ペイン**: Preview タブ (画像) / PlantUML Source タブ (生成テキスト) / Manifest Summary タブ (AndroidManifest の Markdown サマリー) を切替
 * **File → Save Diagram As...** (Ctrl+S) — SVG / PNG / PUML 形式で保存

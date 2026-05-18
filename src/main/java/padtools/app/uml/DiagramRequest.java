@@ -16,19 +16,26 @@ public final class DiagramRequest {
     private final String sequenceEntryMethod;
     private final boolean includeLegend;
     private final DiagramScope scope;
+    private final boolean interactiveLinks;
 
     public DiagramRequest(DiagramKind kind) {
-        this(kind, null, null, true, null);
+        this(kind, null, null, true, null, false);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend) {
-        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, null);
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, null, false);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend,
                           DiagramScope scope) {
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, scope, false);
+    }
+
+    public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
+                          String sequenceEntryMethod, boolean includeLegend,
+                          DiagramScope scope, boolean interactiveLinks) {
         if (kind == null) {
             throw new IllegalArgumentException("kind is null");
         }
@@ -37,6 +44,7 @@ public final class DiagramRequest {
         this.sequenceEntryMethod = sequenceEntryMethod;
         this.includeLegend = includeLegend;
         this.scope = scope;
+        this.interactiveLinks = interactiveLinks;
     }
 
     public DiagramKind getKind() {
@@ -57,5 +65,13 @@ public final class DiagramRequest {
 
     public DiagramScope getScope() {
         return scope;
+    }
+
+    /**
+     * クラス図の各クラスに {@code [[padtools://class/<FQN>]]} を埋め込むか。
+     * GUI プレビューで右クリック→メソッド一覧のヒットテストに使うときだけ true にする。
+     */
+    public boolean isInteractiveLinks() {
+        return interactiveLinks;
     }
 }

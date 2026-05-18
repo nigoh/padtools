@@ -20,6 +20,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
@@ -38,10 +39,15 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.List;
 
+import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
+import padtools.core.formats.uml.JavaClassInfo;
+import padtools.core.formats.uml.JavaMethodInfo;
+import padtools.util.ErrorListener;
 
 /**
  * UML 専用のメインウィンドウ。
@@ -108,6 +114,7 @@ public class UmlMainFrame extends JFrame {
 
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
+        previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
         treePanel.setOnManifestSelected(this::onTreeManifestSelected);
@@ -533,13 +540,114 @@ public class UmlMainFrame extends JFrame {
         if (sel == null) {
             return;
         }
-        sequenceEntry = sel.getEntry();
+        switchToSequenceDiagram(sel.getEntry());
+    }
+
+    /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
+    private void switchToSequenceDiagram(String entry) {
+        sequenceEntry = entry;
         currentKind = DiagramKind.SEQUENCE;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
         if (item != null) {
             item.setSelected(true);
         }
         refreshDiagram();
+    }
+
+    /**
+     * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
+     * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
+     */
+    private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
+        if (link == null || event == null) {
+            return;
+        }
+        if (!cache.isLoaded()) {
+            return;
+        }
+        String fqn = parseClassFqn(link.getHref());
+        if (fqn == null || fqn.isEmpty()) {
+            return;
+        }
+        JavaClassInfo cls = lookupDetailedClass(fqn);
+        if (cls == null) {
+            return;
+        }
+        JPopupMenu popup = buildMethodPopup(cls);
+        if (popup.getComponentCount() == 0) {
+            status.setText(cls.getSimpleName() + ": no concrete methods");
+            return;
+        }
+        popup.show(event.getComponent(), event.getX(), event.getY());
+    }
+
+    /** {@code padtools://class/<FQN>} 形式の URL から FQN を取り出す。マッチしなければ null。 */
+    private static String parseClassFqn(String href) {
+        if (href == null) {
+            return null;
+        }
+        final String prefix = "padtools://class/";
+        if (!href.startsWith(prefix)) {
+            return null;
+        }
+        return href.substring(prefix.length());
+    }
+
+    /**
+     * FQN から詳細展開済みの {@link JavaClassInfo} を取得する。
+     * ClassIndex があれば Stage B (detail) を返し、メソッド本体まで揃った状態にする。
+     */
+    private JavaClassInfo lookupDetailedClass(String fqn) {
+        if (cache.getIndex() != null) {
+            JavaClassInfo d = cache.getIndex().detail(fqn, ErrorListener.silent());
+            if (d != null) {
+                return d;
+            }
+        }
+        for (JavaClassInfo c : cache.getClasses()) {
+            if (fqn.equals(c.getQualifiedName())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * クラスのメソッド一覧から {@link JPopupMenu} を構築する。
+     * 抽象メソッドは ProjectTreePanel と同様に除外する。
+     */
+    private JPopupMenu buildMethodPopup(JavaClassInfo cls) {
+        JPopupMenu popup = new JPopupMenu(cls.getSimpleName());
+        for (JavaMethodInfo m : cls.getMethods()) {
+            if (m.isAbstract()) {
+                continue;
+            }
+            String name = m.getName();
+            if (name == null || name.isEmpty()) {
+                continue;
+            }
+            JMenuItem item = new JMenuItem(formatMethodLabel(m));
+            String entry = cls.getSimpleName() + "." + name;
+            item.addActionListener(e -> switchToSequenceDiagram(entry));
+            popup.add(item);
+        }
+        return popup;
+    }
+
+    /** PopupMenu 表示用のメソッドラベル: {@code name(paramType, ...)}。 */
+    private static String formatMethodLabel(JavaMethodInfo m) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(m.getName()).append('(');
+        List<String> types = m.getParameterTypes();
+        for (int i = 0; i < types.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            String t = types.get(i);
+            sb.append(t == null ? "?" : t);
+        }
+        sb.append(')');
+        return sb.toString();
     }
 
     private void pickSequenceEntry() {
@@ -594,9 +702,10 @@ public class UmlMainFrame extends JFrame {
             @Override
             protected RenderResult doInBackground() {
                 try {
+                    boolean wantLinks = (kind == DiagramKind.CLASS);
                     DiagramRequest req = (kind == DiagramKind.SEQUENCE && entry != null)
                             ? buildSequenceRequest(entry)
-                            : new DiagramRequest(kind, null, null, true, scope);
+                            : new DiagramRequest(kind, null, null, true, scope, wantLinks);
                     String puml = DiagramService.generatePuml(req, cache);
                     // ベクター SVG として描画して、PlantUML の PNG 4096x4096
                     // キャンバス上限による切り詰めを回避する。
@@ -628,6 +737,7 @@ public class UmlMainFrame extends JFrame {
                     currentPuml = r.puml;
                     previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
                             r.svg.getWidth(), r.svg.getHeight());
+                    previewPanel.setLinkAreas(r.svg.getLinkAreas());
                     sourcePanel.setText(r.puml);
                     status.setText(kind.getDisplayName() + " rendered ("
                             + (int) Math.round(r.svg.getWidth()) + "x"

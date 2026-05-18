@@ -20,6 +20,9 @@ dependencies {
     implementation 'org.apache.xmlgraphics:batik-svggen:1.17'
     implementation 'org.apache.xmlgraphics:batik-dom:1.17'
     implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
+    // PlantUML (GPLv3). UML 系出力を SVG として直接書き出すために同梱する。
+    // graphviz/dot は不要 (PlantUmlRenderer が Smetana レイアウトを自動指定)。
+    implementation 'net.sourceforge.plantuml:plantuml:1.2026.2'
     testImplementation 'junit:junit:4.13.2'
 }
 

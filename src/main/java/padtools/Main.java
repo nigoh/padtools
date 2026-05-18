@@ -12,6 +12,7 @@ import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
+import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.editor.Editor;
 import padtools.util.ErrorListener;
@@ -265,6 +266,19 @@ public class Main {
     }
 
     /**
+     * PlantUML 系出力の書き出し。{@code fileOut} の拡張子が {@code .svg} なら
+     * 同梱 PlantUML で SVG にレンダリングし、それ以外 (null や .puml/.txt) は
+     * PlantUML テキストをそのまま書き出す (標準出力可)。
+     */
+    private static void writeUmlOutput(File fileOut, String puml) throws IOException {
+        if (fileOut != null && fileOut.getName().toLowerCase().endsWith(".svg")) {
+            PlantUmlRenderer.renderSvg(puml, fileOut);
+        } else {
+            writeText(fileOut, puml);
+        }
+    }
+
+    /**
      * Java/AIDL ソースから PlantUML (クラス図 / シーケンス図) を生成。
      * @param fileIn 入力ファイルまたはディレクトリ
      * @param fileOut 出力ファイル (.puml/.plantuml/.txt)。null なら標準出力
@@ -316,7 +330,7 @@ public class Main {
             }
             output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
-        writeText(fileOut, output);
+        writeUmlOutput(fileOut, output);
     }
 
     /** {@code --gradle}: 単一 build.gradle (もしくはディレクトリ) を Markdown サマリーに変換。 */
@@ -375,7 +389,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeText(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
+        writeUmlOutput(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
     }
 
     /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
@@ -392,7 +406,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeText(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
+        writeUmlOutput(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
     }
 
     /** {@code --summary}: プロジェクト全体の Markdown サマリーを生成。 */
@@ -411,12 +425,14 @@ public class Main {
      * {@code --all}: プロジェクトディレクトリを入力に、5 種類の成果物を出力ディレクトリへ一括書き出し。
      * <ul>
      *   <li>{@code summary.md} - Markdown プロジェクトサマリー</li>
-     *   <li>{@code class-diagram.puml} - PlantUML クラス図 (manifest 自動マージ)</li>
-     *   <li>{@code component-diagram.puml} - PlantUML Android コンポーネント図</li>
-     *   <li>{@code dependency-graph.puml} - PlantUML Gradle 依存グラフ</li>
-     *   <li>{@code pad.spd} - Java→SPD (PAD) 統合出力</li>
+     *   <li>{@code class-diagram.svg} - PlantUML クラス図 (manifest 自動マージ)</li>
+     *   <li>{@code component-diagram.svg} - PlantUML Android コンポーネント図</li>
+     *   <li>{@code dependency-graph.svg} - PlantUML Gradle 依存グラフ</li>
+     *   <li>{@code pad.svg} - Java→PAD 図 (Apache Batik で SVG 化)</li>
      * </ul>
-     * <p>シーケンス図は起点メソッド指定が必要なため {@code --all} には含めない (個別に {@code -q} を使う)。</p>
+     * <p>すべて同梱ライブラリのみで完結するため、PlantUML/dot のインストールは不要。
+     * シーケンス図は起点メソッド指定が必要なため {@code --all} には含めない
+     * (個別に {@code -q Class.method -o seq.svg} を使う)。</p>
      */
     private static void handleAll(File fileIn, File fileOut,
                                     ErrorListener listener,
@@ -460,30 +476,31 @@ public class Main {
         progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
-        // 2) コンポーネント図
-        progress.step("[2/5] Generating component-diagram.puml");
+        // 2) コンポーネント図 (SVG)
+        progress.step("[2/5] Generating component-diagram.svg");
         PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             compOpts.includeLegend = false;
         }
-        File compFile = new File(fileOut, "component-diagram.puml");
-        writeText(compFile, PlantUmlComponentDiagram.generate(analysis, compOpts));
+        File compFile = new File(fileOut, "component-diagram.svg");
+        PlantUmlRenderer.renderSvg(PlantUmlComponentDiagram.generate(analysis, compOpts), compFile);
         progress.wrote(compFile);
         listener.onError(null, -1, "wrote " + compFile.getPath());
 
-        // 3) 依存グラフ
-        progress.step("[3/5] Generating dependency-graph.puml");
+        // 3) 依存グラフ (SVG)
+        progress.step("[3/5] Generating dependency-graph.svg");
         PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             depOpts.includeLegend = false;
         }
-        File depFile = new File(fileOut, "dependency-graph.puml");
-        writeText(depFile, PlantUmlGradleDependencyGraph.generate(analysis, depOpts));
+        File depFile = new File(fileOut, "dependency-graph.svg");
+        PlantUmlRenderer.renderSvg(
+                PlantUmlGradleDependencyGraph.generate(analysis, depOpts), depFile);
         progress.wrote(depFile);
         listener.onError(null, -1, "wrote " + depFile.getPath());
 
-        // 4) クラス図 (UmlGenerator は内部で再走査するが、manifest 連携のため別経路)
-        progress.step("[4/5] Generating class-diagram.puml (scanning Java/AIDL)");
+        // 4) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
+        progress.step("[4/5] Generating class-diagram.svg (scanning Java/AIDL)");
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
@@ -491,22 +508,34 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             clsOpts.includeLegend = false;
         }
-        File clsFile = new File(fileOut, "class-diagram.puml");
-        writeText(clsFile, padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts));
+        File clsFile = new File(fileOut, "class-diagram.svg");
+        PlantUmlRenderer.renderSvg(
+                padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts), clsFile);
         progress.wrote(clsFile, "(" + infos.size() + " class(es))");
         listener.onError(null, -1, "wrote " + clsFile.getPath());
 
-        // 5) Java→PAD
-        progress.step("[5/5] Generating pad.spd (Java to SPD conversion)");
+        // 5) PAD (Java→SPD→SVG)。中間 SPD は temp ファイルに置き Converter.convert で SVG 化する。
+        progress.step("[5/5] Generating pad.svg (Java to PAD)");
         JavaSourceConverter.Options convOpts = new JavaSourceConverter.Options();
         if (Boolean.TRUE.equals(legendOverride)) {
             convOpts.includeLegend = true;
         }
         String spd = AndroidProjectScanner.convertProject(fileIn, null, convOpts, listener);
-        File spdFile = new File(fileOut, "pad.spd");
-        writeText(spdFile, spd);
-        progress.wrote(spdFile);
-        listener.onError(null, -1, "wrote " + spdFile.getPath());
+        File padSvg = new File(fileOut, "pad.svg");
+        File tmpSpd = File.createTempFile("padtools-all-", ".spd");
+        try {
+            try (Writer w = new OutputStreamWriter(
+                    new FileOutputStream(tmpSpd), StandardCharsets.UTF_8)) {
+                w.write(spd);
+            }
+            Converter.convert(tmpSpd, padSvg, 1.0);
+        } finally {
+            if (!tmpSpd.delete()) {
+                tmpSpd.deleteOnExit();
+            }
+        }
+        progress.wrote(padSvg);
+        listener.onError(null, -1, "wrote " + padSvg.getPath());
 
         long elapsedMs = System.currentTimeMillis() - startMs;
         progress.done(fileOut, elapsedMs);
@@ -552,7 +581,8 @@ public class Main {
 
     private static void printUsage() {
         System.err.println("Arguments: [-o file] [-s scale] [-j|-J|-c|-q M] [-v] [-h] [input]");
-        System.err.println("  -o file: Save to file (spd/png/svg/pdf/puml).");
+        System.err.println("  -o file: Save to file "
+                + "(spd/png/svg/pdf for PAD, puml/svg for UML, md for summary).");
         System.err.println("  -s scale: Image scale (available when result is image).");
         System.err.println("  -h: Show this help.");
         System.err.println("  -j --java: Treat input as a Java source file.");
@@ -567,8 +597,8 @@ public class Main {
         System.err.println("  -d --component-diagram: PlantUML Android component diagram.");
         System.err.println("  -G --dependency-graph: PlantUML Gradle dependency graph.");
         System.err.println("  --summary: Full project Markdown summary (dir).");
-        System.err.println("  -A --all: Output ALL artifacts (summary/component/deps/class/pad) "
-                + "to the directory specified by -o.");
+        System.err.println("  -A --all: Output ALL artifacts as SVG "
+                + "(summary.md + 4 svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary/-A.");
     }

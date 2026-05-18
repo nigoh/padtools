@@ -98,6 +98,8 @@ public class Main {
         final Option optListMethods = new Option(null, "list-methods", false);
         final Option optSeqDepth = new Option(null, "seq-depth", true);
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
+        // UML 専用 GUI へ切り替える隠しフラグ (PR5 で既定化予定)。
+        final Option optUiUml = new Option(null, "ui", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
@@ -108,7 +110,8 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams});
+                optSequenceDiagrams,
+                optUiUml});
 
         try {
             optParser.parse(args, 1);
@@ -214,6 +217,13 @@ public class Main {
         }
 
         if (file_out == null) {
+            // --ui=uml で UML 専用 GUI を起動 (PR5 で既定化予定)
+            String uiArg = optUiUml.getArguments().isEmpty()
+                    ? null : optUiUml.getArguments().getLast();
+            if (uiArg != null && uiArg.equalsIgnoreCase("uml")) {
+                padtools.app.uml.UmlApp.launch(file_in);
+                return;
+            }
             Editor.openEditor(file_in);
         } else {
             Converter.convert(file_in, file_out, scale);

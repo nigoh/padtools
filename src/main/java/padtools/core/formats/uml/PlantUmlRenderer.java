@@ -39,7 +39,7 @@ public final class PlantUmlRenderer {
      * Graphviz/dot 未インストール環境でもクラス図/コンポーネント図を描画できるようにする。
      * 既に {@code !pragma layout} 指定があれば変更しない。
      */
-    static String injectLayout(String puml) {
+    public static String injectLayout(String puml) {
         if (puml == null || puml.contains("!pragma layout")) {
             return puml;
         }

@@ -19,6 +19,7 @@ Graphviz / PlantUML の追加インストールは不要です。
 | パッケージ図 | パッケージごとのクラス数と参照関係 (継承 / 実装 / フィールド型) を集約 |
 | シーケンス図 | `Class.method` を起点に呼び出しを多段トレース、制御構造 (`if/while/switch/try`) を `alt/loop/group` で表現 |
 | コンポーネント図 | AndroidManifest の Activity / Service / Receiver / Provider、`exported` 属性、ランチャー強調、uses-permission |
+| Manifest 図 | AndroidManifest の `<application>` 属性 (package / class / theme / debuggable / allowBackup / meta-data) を中央ノードに、配下に Activity / Service / Receiver / Provider をグループ化、周辺に `uses-permission` / `uses-feature` を配置 |
 | Gradle 依存図 | モジュール間 `project(':x')` 依存と外部 Maven ライブラリ、`libs.versions.toml` 解決 |
 
 > 1.7 までは PAD (Problem Analysis Diagram) ツールでしたが、2.0 で
@@ -46,15 +47,16 @@ GUI の操作:
 
 * **File → Open Project...** (Ctrl+O) — Android / Gradle プロジェクトのルートディレクトリを選択
 * **File → Cancel Loading** — 進行中の解析を中断 (AOSP 級プロジェクトで途中で気が変わったとき用)
-* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / コンポーネント図 / 依存図 のラジオ選択
+* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / コンポーネント図 / 依存図 / Manifest 図 のラジオ選択
 * **Diagram → Choose Sequence Entry...** — シーケンス図の起点 `Class.method` を絞り込みリストから選択
 * **Diagram → Scope...** — クラス図 / パッケージ図の表示範囲を絞り込み (パッケージ複数選択 / モジュール複数選択 / 正規表現 / 最大クラス数 / シードからの hop 数)
 * **Diagram → Clear Scope** — 絞り込みを解除
-* **左ペイン (ProjectTreePanel)** — モジュール → パッケージ → クラス → メソッド の遅延展開ツリー。
+* **左ペイン (ProjectTreePanel)** — モジュール → パッケージ → クラス → メソッド の遅延展開ツリー。各モジュール直下には `[manifest] AndroidManifest.xml` ノードも表示され、Activities / Services / Receivers / Providers / Permissions / Features を展開可能。
     * パッケージノード右クリック → `Show class diagram of this package` でそのパッケージだけのクラス図にドリルダウン
     * メソッドノード選択 → シーケンス図起点として即座に切替
+    * Manifest 系ノード選択 → Manifest 図に自動切替
 * **View → Zoom In / Out / 100% / Fit** (Ctrl+= / Ctrl+- / Ctrl+0 / Ctrl+F) — プレビューズーム。Ctrl+ホイールでもズーム、左ドラッグでパン
-* **右ペイン**: Preview タブ (画像) と PlantUML Source タブ (生成テキスト) を切替
+* **右ペイン**: Preview タブ (画像) / PlantUML Source タブ (生成テキスト) / Manifest Summary タブ (AndroidManifest の Markdown サマリー) を切替
 * **File → Save Diagram As...** (Ctrl+S) — SVG / PNG / PUML 形式で保存
 * **ステータスバー** に解析進捗 (`Analyzing 1234/56789`) と解析完了サマリが出る
 
@@ -76,8 +78,9 @@ java -jar PadTools.jar --list-methods ~/AOSP/Car
 # Android ライフサイクル起点のシーケンス図を一括出力 (.puml + .svg)
 java -jar PadTools.jar -Q -o ./seq-out ~/AndroidStudioProjects/MyApp
 
-# コンポーネント図 / 依存グラフ
+# コンポーネント図 / Manifest 図 / 依存グラフ
 java -jar PadTools.jar -d -o components.svg ~/AndroidStudioProjects/MyApp
+java -jar PadTools.jar -M -o manifest.svg ~/AndroidStudioProjects/MyApp
 java -jar PadTools.jar -G -o deps.svg ~/AndroidStudioProjects/MyApp
 
 # Markdown プロジェクトサマリー
@@ -94,6 +97,7 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `summary.md` | Markdown プロジェクトサマリー |
 | `class-diagram.svg` | UML クラス図 (manifest 自動マージ) |
 | `component-diagram.svg` | Android コンポーネント図 |
+| `manifest-diagram.svg` | AndroidManifest 図 (Application + 配下コンポーネント) |
 | `dependency-graph.svg` | Gradle 依存グラフ |
 | `methods.txt` | シーケンス図の起点候補一覧 (`Class.method`) |
 | `sequence-diagrams/` | Android ライフサイクル起点のシーケンス図群 (`Class.method.puml` + `.svg` を併出力) |
@@ -107,6 +111,7 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `-q CLASS.METHOD` / `--sequence-diagram CLASS.METHOD` | PlantUML シーケンス図を生成 |
 | `-Q` / `--sequence-diagrams` | Android プロジェクトのライフサイクル起点シーケンス図を `-o` ディレクトリへ一括出力 (`.puml` + `.svg`) |
 | `-d` / `--component-diagram` | PlantUML Android コンポーネント図を生成 |
+| `-M` / `--manifest-diagram` | PlantUML AndroidManifest 図を生成 (Application + 配下コンポーネント + permissions + features) |
 | `-G` / `--dependency-graph` | PlantUML Gradle 依存グラフを生成 |
 | `-g` / `--gradle` | Gradle ファイル単体を Markdown サマリー化 |
 | `-m` / `--manifest` | AndroidManifest.xml 単体を Markdown サマリー化 |

@@ -10,6 +10,70 @@ import java.util.TreeSet;
  */
 public final class TextSummaryReport {
 
+    /**
+     * AndroidManifest のみに絞った Markdown サマリーを生成する。
+     *
+     * <p>{@link #toMarkdown(AndroidProjectAnalysis)} は Gradle モジュール情報も含むため、
+     * UI 側で「manifest だけを見たい」ケースでは情報過多になる。本メソッドは
+     * {@code <application>} 属性 / コンポーネント / permissions / features のみを
+     * モジュール × sourceSet 単位で並べる。</p>
+     */
+    public static String toManifestMarkdown(AndroidProjectAnalysis analysis) {
+        if (analysis == null) {
+            throw new IllegalArgumentException("analysis is null");
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("# AndroidManifest Summary\n\n");
+        if (analysis.getManifestsByModule().isEmpty()) {
+            sb.append("(no AndroidManifest.xml found)\n");
+            return sb.toString();
+        }
+        for (Map.Entry<String, List<AndroidManifestInfo>> e
+                : analysis.getManifestsByModule().entrySet()) {
+            String module = e.getKey();
+            List<AndroidManifestInfo> manifests = e.getValue();
+            sb.append("## Module `").append(module).append("`");
+            if (manifests.size() > 1) {
+                sb.append(" — ").append(manifests.size()).append(" manifests");
+            }
+            sb.append("\n\n");
+            for (AndroidManifestInfo m : manifests) {
+                appendManifestDetail(sb, m);
+            }
+        }
+        sb.append("## Permissions\n\n");
+        appendPermissionsSection(sb, analysis);
+        sb.append("## Features\n\n");
+        appendFeaturesSection(sb, analysis);
+        return sb.toString();
+    }
+
+    private static void appendManifestDetail(StringBuilder sb, AndroidManifestInfo m) {
+        sb.append("### sourceSet `").append(m.getSourceSet()).append("`\n\n");
+        appendIf(sb, "Package", m.getPackageName());
+        appendIf(sb, "Application class", m.getApplicationClass());
+        appendIf(sb, "Application label", m.getApplicationLabel());
+        appendIf(sb, "Theme", m.getApplicationTheme());
+        if (m.getApplicationDebuggable() != null) {
+            sb.append("- debuggable: `").append(m.getApplicationDebuggable()).append("`\n");
+        }
+        if (m.getApplicationAllowBackup() != null) {
+            sb.append("- allowBackup: `").append(m.getApplicationAllowBackup()).append("`\n");
+        }
+        if (!m.getApplicationMetaData().isEmpty()) {
+            sb.append("\n**Application meta-data:**\n\n");
+            for (Map.Entry<String, String> me : m.getApplicationMetaData().entrySet()) {
+                sb.append("- `").append(me.getKey()).append("` = `")
+                        .append(me.getValue()).append("`\n");
+            }
+        }
+        appendComponentList(sb, "Activities", m.getActivities());
+        appendComponentList(sb, "Services", m.getServices());
+        appendComponentList(sb, "Receivers", m.getReceivers());
+        appendComponentList(sb, "Providers", m.getProviders());
+        sb.append('\n');
+    }
+
     /** Markdown サマリーを生成。 */
     public static String toMarkdown(AndroidProjectAnalysis analysis) {
         if (analysis == null) {

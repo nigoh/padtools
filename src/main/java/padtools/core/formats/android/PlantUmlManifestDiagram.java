@@ -1,0 +1,272 @@
+package padtools.core.formats.android;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
+/**
+ * AndroidProjectAnalysis を「アプリ視点」で 1 枚に描画する PlantUML 図を生成する。
+ *
+ * <p>{@link PlantUmlComponentDiagram} が intent-filter 中心の連携図であるのに対し、
+ * Manifest Diagram は AndroidManifest.xml に含まれる
+ * {@code <application>} の属性 (パッケージ名 / Application クラス / theme /
+ * debuggable / allowBackup) を中央のノードに据え、その配下に Activity / Service /
+ * Receiver / Provider をグループ化して所属関係を可視化する。
+ * 周辺に {@code <uses-permission>} と {@code <uses-feature>} を別ボックスで配置する。</p>
+ *
+ * <p>同一モジュールに複数 manifest (main + debug + flavor など) がある場合は
+ * sourceSet ごとに別 Application ノードを描画する。各コンポーネントは {@code main}
+ * 以外なら {@code <<src:debug>>} 等のステレオタイプが付き、launcher と exported は
+ * 視覚的に強調する。</p>
+ */
+public final class PlantUmlManifestDiagram {
+
+    /** 出力オプション。 */
+    public static class Options {
+        public boolean includeLegend = true;
+        public boolean groupByModule = true;
+        public boolean showPermissions = true;
+        public boolean showFeatures = true;
+        public boolean showMetaData = true;
+        public String title;
+    }
+
+    /** デフォルト Options で生成。 */
+    public static String generate(AndroidProjectAnalysis analysis) {
+        return generate(analysis, null);
+    }
+
+    /** オプション付き生成。 */
+    public static String generate(AndroidProjectAnalysis analysis, Options opts) {
+        if (analysis == null) {
+            throw new IllegalArgumentException("analysis is null");
+        }
+        Options o = opts != null ? opts : new Options();
+        StringBuilder out = new StringBuilder();
+        out.append("@startuml\n");
+        if (o.title != null && !o.title.isEmpty()) {
+            out.append("title ").append(o.title).append('\n');
+        }
+        // 全体の見た目を整える skinparam。文字数が多い Application ノードを
+        // 読みやすく保つために幅指定と縦並べを優先する。
+        out.append("skinparam componentStyle uml2\n");
+        out.append("skinparam rectangle {\n");
+        out.append("  BackgroundColor<<application>> #E0EEFF\n");
+        out.append("  BorderColor<<application>> #4A6FB7\n");
+        out.append("}\n");
+
+        boolean any = false;
+        int seq = 0;
+        for (Map.Entry<String, List<AndroidManifestInfo>> e
+                : analysis.getManifestsByModule().entrySet()) {
+            String moduleName = e.getKey();
+            List<AndroidManifestInfo> manifests = e.getValue();
+            if (manifests.isEmpty()) {
+                continue;
+            }
+            if (o.groupByModule) {
+                out.append("package \"module: ").append(moduleName).append("\" {\n");
+            }
+            for (AndroidManifestInfo m : manifests) {
+                seq = emitManifest(out, m, seq, o, o.groupByModule);
+                any = true;
+            }
+            if (o.groupByModule) {
+                out.append("}\n");
+            }
+        }
+        if (!any) {
+            out.append("note as N1\n  (no AndroidManifest.xml found)\nend note\n");
+        }
+        if (o.showPermissions) {
+            emitPermissions(out, analysis);
+        }
+        if (o.showFeatures) {
+            emitFeatures(out, analysis);
+        }
+        if (o.includeLegend) {
+            emitLegend(out, o);
+        }
+        out.append("@enduml\n");
+        return out.toString();
+    }
+
+    private static int emitManifest(StringBuilder out, AndroidManifestInfo m, int startSeq,
+                                     Options o, boolean indented) {
+        int seq = startSeq;
+        String indent = indented ? "  " : "";
+        String appAlias = "APP" + (seq++);
+
+        // Application ノード本体。属性を 1 行ずつ \n で並べる。
+        StringBuilder header = new StringBuilder();
+        header.append("Application");
+        if (!"main".equals(m.getSourceSet())) {
+            header.append(" [").append(m.getSourceSet()).append("]");
+        }
+        header.append("\\n----");
+        if (m.getPackageName() != null && !m.getPackageName().isEmpty()) {
+            header.append("\\npackage: ").append(escape(m.getPackageName()));
+        }
+        if (m.getApplicationClass() != null && !m.getApplicationClass().isEmpty()) {
+            header.append("\\nclass: ").append(escape(m.getApplicationClass()));
+        }
+        if (m.getApplicationLabel() != null && !m.getApplicationLabel().isEmpty()) {
+            header.append("\\nlabel: ").append(escape(m.getApplicationLabel()));
+        }
+        if (m.getApplicationTheme() != null && !m.getApplicationTheme().isEmpty()) {
+            header.append("\\ntheme: ").append(escape(m.getApplicationTheme()));
+        }
+        if (m.getApplicationDebuggable() != null) {
+            header.append("\\ndebuggable: ").append(m.getApplicationDebuggable());
+        }
+        if (m.getApplicationAllowBackup() != null) {
+            header.append("\\nallowBackup: ").append(m.getApplicationAllowBackup());
+        }
+        if (o.showMetaData && !m.getApplicationMetaData().isEmpty()) {
+            header.append("\\n--meta-data--");
+            for (Map.Entry<String, String> me : m.getApplicationMetaData().entrySet()) {
+                header.append("\\n").append(escape(me.getKey()))
+                        .append(" = ").append(escape(me.getValue()));
+            }
+        }
+        out.append(indent).append("rectangle \"").append(header).append("\" as ")
+                .append(appAlias).append(" <<application>>");
+        if (!"main".equals(m.getSourceSet())) {
+            out.append(" <<src:").append(m.getSourceSet()).append(">>");
+        }
+        out.append('\n');
+
+        // 種別ごとに 1 グループずつ。空グループは省略する。
+        seq = emitComponentGroup(out, "Activities", m.getActivities(), appAlias, seq,
+                indent, m.getSourceSet());
+        seq = emitComponentGroup(out, "Services", m.getServices(), appAlias, seq,
+                indent, m.getSourceSet());
+        seq = emitComponentGroup(out, "Receivers", m.getReceivers(), appAlias, seq,
+                indent, m.getSourceSet());
+        seq = emitComponentGroup(out, "Providers", m.getProviders(), appAlias, seq,
+                indent, m.getSourceSet());
+        return seq;
+    }
+
+    private static int emitComponentGroup(StringBuilder out, String label,
+                                           List<AndroidComponentInfo> list,
+                                           String appAlias, int startSeq,
+                                           String parentIndent, String sourceSet) {
+        if (list == null || list.isEmpty()) {
+            return startSeq;
+        }
+        int seq = startSeq;
+        String groupAlias = "G" + (seq++);
+        String inner = parentIndent + "  ";
+        out.append(parentIndent).append("package \"").append(label)
+                .append(" (").append(list.size()).append(")\" as ")
+                .append(groupAlias).append(" {\n");
+        for (AndroidComponentInfo c : list) {
+            String alias = "C" + (seq++);
+            String name = c.getName() == null || c.getName().isEmpty()
+                    ? "(unnamed)" : c.getName();
+            String stereo = "<<" + c.getKind().label() + ">>";
+            out.append(inner).append("component \"").append(escape(shortName(name)))
+                    .append("\" as ").append(alias).append(' ').append(stereo);
+            if (Boolean.TRUE.equals(c.getExported())) {
+                out.append(" #LightYellow");
+            }
+            if (c.isLauncher()) {
+                out.append(" <<launcher>>");
+            }
+            if (sourceSet != null && !"main".equals(sourceSet)) {
+                out.append(" <<src:").append(sourceSet).append(">>");
+            }
+            out.append('\n');
+        }
+        out.append(parentIndent).append("}\n");
+        out.append(parentIndent).append(appAlias).append(" *-- ").append(groupAlias)
+                .append('\n');
+        return seq;
+    }
+
+    private static void emitPermissions(StringBuilder out, AndroidProjectAnalysis analysis) {
+        Set<String> perms = new TreeSet<>();
+        for (AndroidManifestInfo m : analysis.allManifests()) {
+            for (AndroidPermissionInfo p : m.getPermissions()) {
+                if (p.getName() != null && !p.getName().isEmpty()) {
+                    perms.add(p.getName());
+                }
+            }
+        }
+        if (perms.isEmpty()) {
+            return;
+        }
+        out.append("package \"uses-permission\" {\n");
+        for (String p : perms) {
+            int dot = p.lastIndexOf('.');
+            String shortP = dot >= 0 ? p.substring(dot + 1) : p;
+            out.append("  [").append(shortP).append("] <<permission>>\n");
+        }
+        out.append("}\n");
+    }
+
+    private static void emitFeatures(StringBuilder out, AndroidProjectAnalysis analysis) {
+        Set<String> features = new TreeSet<>();
+        for (AndroidManifestInfo m : analysis.allManifests()) {
+            features.addAll(m.getFeatures());
+        }
+        if (features.isEmpty()) {
+            return;
+        }
+        out.append("package \"uses-feature\" {\n");
+        Map<String, String> aliases = new LinkedHashMap<>();
+        int seq = 0;
+        for (String f : features) {
+            String alias = "F" + (seq++);
+            aliases.put(f, alias);
+            int dot = f.lastIndexOf('.');
+            String shortF = dot >= 0 ? f.substring(dot + 1) : f;
+            out.append("  usecase \"").append(escape(shortF))
+                    .append("\" as ").append(alias).append(" <<feature>>\n");
+        }
+        out.append("}\n");
+    }
+
+    /** {@code com.x.MainActivity} → {@code MainActivity} (簡易表示)。 */
+    private static String shortName(String fqn) {
+        if (fqn == null) {
+            return "";
+        }
+        int dot = fqn.lastIndexOf('.');
+        return dot >= 0 ? fqn.substring(dot + 1) : fqn;
+    }
+
+    private static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        // PlantUML のラベルで問題になりやすい文字を最小限置換。
+        return s.replace("\"", "'");
+    }
+
+    private static void emitLegend(StringBuilder out, Options o) {
+        out.append("legend right\n");
+        out.append("== AndroidManifest 図 ==\n");
+        out.append("rectangle <<application>>       Application 要素\n");
+        out.append("component <<Activity>>          Activity\n");
+        out.append("component <<Service>>           Service\n");
+        out.append("component <<BroadcastReceiver>> Receiver\n");
+        out.append("component <<ContentProvider>>   Provider\n");
+        out.append("<<launcher>>                    ランチャー Activity\n");
+        out.append("#LightYellow                    exported=true\n");
+        out.append("<<src:flavor>>                  main 以外の sourceSet (debug 等)\n");
+        if (o.showPermissions) {
+            out.append("[X] <<permission>>              uses-permission\n");
+        }
+        if (o.showFeatures) {
+            out.append("usecase <<feature>>             uses-feature\n");
+        }
+        out.append("endlegend\n");
+    }
+
+    private PlantUmlManifestDiagram() {
+    }
+}

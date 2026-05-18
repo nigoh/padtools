@@ -1,5 +1,8 @@
 package padtools.app.uml;
 
+import padtools.core.formats.android.AndroidComponentInfo;
+import padtools.core.formats.android.AndroidManifestInfo;
+import padtools.core.formats.android.AndroidPermissionInfo;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.uml.ClassIndex;
 import padtools.core.formats.uml.JavaClassInfo;
@@ -58,6 +61,8 @@ public class ProjectTreePanel extends JPanel {
     private java.util.function.Consumer<JavaClassInfo> onClassSelected;
     private java.util.function.Consumer<MethodSelection> onMethodSelected;
     private java.util.function.Consumer<String> onPackageSelected;
+    private java.util.function.Consumer<AndroidManifestInfo> onManifestSelected;
+    private java.util.function.Consumer<AndroidComponentInfo> onComponentSelected;
 
     public ProjectTreePanel() {
         super(new BorderLayout());
@@ -109,6 +114,16 @@ public class ProjectTreePanel extends JPanel {
         this.onPackageSelected = listener;
     }
 
+    /** Manifest ノード選択時のコールバック。Manifest 図への切り替え等に使う。 */
+    public void setOnManifestSelected(java.util.function.Consumer<AndroidManifestInfo> listener) {
+        this.onManifestSelected = listener;
+    }
+
+    /** Manifest 配下の Activity / Service / Receiver / Provider ノード選択時のコールバック。 */
+    public void setOnComponentSelected(java.util.function.Consumer<AndroidComponentInfo> listener) {
+        this.onComponentSelected = listener;
+    }
+
     /** モジュール紐付けなしの簡易 populate (既存呼び出しの互換維持)。 */
     public void populate(AndroidProjectAnalysis analysis, List<JavaClassInfo> classes,
                           String projectName) {
@@ -128,9 +143,23 @@ public class ProjectTreePanel extends JPanel {
         // モジュール → パッケージ → クラスを集計
         Map<String, Map<String, List<JavaClassInfo>>> byModule
                 = groupByModule(analysis, classes, classToModule);
+        // どのモジュールに manifest があるかは analysis から取り出す
+        Map<String, List<AndroidManifestInfo>> manifestsByModule = analysis != null
+                ? analysis.getManifestsByModule() : java.util.Collections.emptyMap();
+        // クラスが何もないモジュールでも manifest があれば表示する
+        for (String mod : manifestsByModule.keySet()) {
+            byModule.computeIfAbsent(mod, k -> new TreeMap<>());
+        }
         for (Map.Entry<String, Map<String, List<JavaClassInfo>>> me : byModule.entrySet()) {
             DefaultMutableTreeNode moduleNode = new DefaultMutableTreeNode(
                     new ModuleEntry(me.getKey()));
+            // Manifest を先頭に出す (アプリ視点で目立ちやすいように)
+            List<AndroidManifestInfo> manifests = manifestsByModule.get(me.getKey());
+            if (manifests != null) {
+                for (AndroidManifestInfo m : manifests) {
+                    moduleNode.add(buildManifestNode(m));
+                }
+            }
             for (Map.Entry<String, List<JavaClassInfo>> pe : me.getValue().entrySet()) {
                 PackageEntry pkgEntry = new PackageEntry(pe.getKey(), pe.getValue().size(),
                         pe.getValue());
@@ -149,6 +178,50 @@ public class ProjectTreePanel extends JPanel {
         for (int i = 0; i < root.getChildCount(); i++) {
             tree.expandRow(i);
         }
+    }
+
+    /**
+     * Manifest 1 件分のサブツリーを構築。
+     *
+     * <p>{@code [manifest] sourceSet} → Activities / Services / Receivers / Providers /
+     * Permissions / Features の順で展開可能なノードを並べる。</p>
+     */
+    private static DefaultMutableTreeNode buildManifestNode(AndroidManifestInfo m) {
+        DefaultMutableTreeNode mnode = new DefaultMutableTreeNode(new ManifestEntry(m));
+        addComponentGroup(mnode, "Activities", m.getActivities());
+        addComponentGroup(mnode, "Services", m.getServices());
+        addComponentGroup(mnode, "Receivers", m.getReceivers());
+        addComponentGroup(mnode, "Providers", m.getProviders());
+        if (!m.getPermissions().isEmpty()) {
+            DefaultMutableTreeNode g = new DefaultMutableTreeNode(
+                    new ComponentGroupEntry("Permissions", m.getPermissions().size()));
+            for (AndroidPermissionInfo p : m.getPermissions()) {
+                g.add(new DefaultMutableTreeNode(new PermissionEntry(p)));
+            }
+            mnode.add(g);
+        }
+        if (!m.getFeatures().isEmpty()) {
+            DefaultMutableTreeNode g = new DefaultMutableTreeNode(
+                    new ComponentGroupEntry("Features", m.getFeatures().size()));
+            for (String f : m.getFeatures()) {
+                g.add(new DefaultMutableTreeNode(new FeatureEntry(f)));
+            }
+            mnode.add(g);
+        }
+        return mnode;
+    }
+
+    private static void addComponentGroup(DefaultMutableTreeNode mnode, String label,
+                                           List<AndroidComponentInfo> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        DefaultMutableTreeNode g = new DefaultMutableTreeNode(
+                new ComponentGroupEntry(label, list.size()));
+        for (AndroidComponentInfo c : list) {
+            g.add(new DefaultMutableTreeNode(new ComponentEntry(c)));
+        }
+        mnode.add(g);
     }
 
     /** ツリーをクリアして空状態に戻す。 */
@@ -175,6 +248,26 @@ public class ProjectTreePanel extends JPanel {
             if (u instanceof ClassEntry) {
                 if (onClassSelected != null) {
                     onClassSelected.accept(((ClassEntry) u).info);
+                }
+                return;
+            }
+            if (u instanceof ManifestEntry) {
+                if (onManifestSelected != null) {
+                    onManifestSelected.accept(((ManifestEntry) u).info);
+                }
+                return;
+            }
+            if (u instanceof ComponentEntry) {
+                if (onComponentSelected != null) {
+                    onComponentSelected.accept(((ComponentEntry) u).info);
+                }
+                return;
+            }
+            // ComponentGroupEntry / PermissionEntry / FeatureEntry も Manifest 図に切替
+            if (u instanceof ComponentGroupEntry || u instanceof PermissionEntry
+                    || u instanceof FeatureEntry) {
+                if (onManifestSelected != null) {
+                    onManifestSelected.accept(null);
                 }
                 return;
             }
@@ -365,6 +458,108 @@ public class ProjectTreePanel extends JPanel {
         @Override
         public String toString() {
             return "...";
+        }
+    }
+
+    /** AndroidManifest.xml 単位のノード値。表示は sourceSet とパッケージ名。 */
+    private static final class ManifestEntry {
+        final AndroidManifestInfo info;
+
+        ManifestEntry(AndroidManifestInfo info) {
+            this.info = info;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder sb = new StringBuilder("[manifest] AndroidManifest.xml");
+            if (info.getSourceSet() != null) {
+                sb.append(" (").append(info.getSourceSet()).append(")");
+            }
+            if (info.getPackageName() != null && !info.getPackageName().isEmpty()) {
+                sb.append(" — ").append(info.getPackageName());
+            }
+            return sb.toString();
+        }
+    }
+
+    /** Activities/Services/Receivers/Providers/Permissions/Features のグループ見出し。 */
+    private static final class ComponentGroupEntry {
+        final String label;
+        final int count;
+
+        ComponentGroupEntry(String label, int count) {
+            this.label = label;
+            this.count = count;
+        }
+
+        @Override
+        public String toString() {
+            return label + " (" + count + ")";
+        }
+    }
+
+    /** Manifest 配下の Activity / Service / Receiver / Provider ノード値。 */
+    private static final class ComponentEntry {
+        final AndroidComponentInfo info;
+
+        ComponentEntry(AndroidComponentInfo info) {
+            this.info = info;
+        }
+
+        @Override
+        public String toString() {
+            String name = info.getName() == null || info.getName().isEmpty()
+                    ? "(unnamed)" : info.getName();
+            int dot = name.lastIndexOf('.');
+            String shortName = dot >= 0 ? name.substring(dot + 1) : name;
+            StringBuilder sb = new StringBuilder();
+            sb.append(kindBadge(info.getKind())).append(' ').append(shortName);
+            if (info.isLauncher()) {
+                sb.append(" [launcher]");
+            }
+            if (Boolean.TRUE.equals(info.getExported())) {
+                sb.append(" [exported]");
+            }
+            return sb.toString();
+        }
+
+        private static String kindBadge(AndroidComponentInfo.Kind k) {
+            switch (k) {
+                case ACTIVITY: return "[A]";
+                case SERVICE: return "[S]";
+                case RECEIVER: return "[R]";
+                case PROVIDER: return "[P]";
+                default: return "[?]";
+            }
+        }
+    }
+
+    /** uses-permission ノード値。 */
+    private static final class PermissionEntry {
+        final AndroidPermissionInfo info;
+
+        PermissionEntry(AndroidPermissionInfo info) {
+            this.info = info;
+        }
+
+        @Override
+        public String toString() {
+            return info.getShortName();
+        }
+    }
+
+    /** uses-feature ノード値。 */
+    private static final class FeatureEntry {
+        final String name;
+
+        FeatureEntry(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            int dot = name.lastIndexOf('.');
+            return dot >= 0 ? name.substring(dot + 1) : name;
         }
     }
 

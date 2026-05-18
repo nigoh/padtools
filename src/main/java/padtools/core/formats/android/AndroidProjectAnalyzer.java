@@ -26,12 +26,25 @@ public final class AndroidProjectAnalyzer {
     /** リスナー付き解析。個別ファイルの IO 失敗は listener に通知して継続。 */
     public static AndroidProjectAnalysis analyze(File projectRoot,
                                                   ErrorListener listener) throws IOException {
+        return analyze(projectRoot, listener, null);
+    }
+
+    /**
+     * Scanner オプションを指定して解析する。AOSP モードで {@code includeBp = true} を
+     * 渡すと Android.bp も読み込んで {@link AndroidProjectAnalysis#getSoongModules()}
+     * に結果を入れる。{@code scannerOpts} が null の場合はデフォルト
+     * ({@code includeGradle=true}, {@code includeManifest=true}) で動作する。
+     */
+    public static AndroidProjectAnalysis analyze(File projectRoot,
+                                                  ErrorListener listener,
+                                                  AndroidProjectScanner.Options scannerOpts) throws IOException {
         if (projectRoot == null) {
             throw new IllegalArgumentException("projectRoot is null");
         }
         ErrorListener l = listener != null ? listener : ErrorListener.silent();
         AndroidProjectAnalysis analysis = new AndroidProjectAnalysis();
-        AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
+        AndroidProjectScanner.Options opts = scannerOpts != null
+                ? scannerOpts : new AndroidProjectScanner.Options();
         opts.includeGradle = true;
         opts.includeManifest = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
@@ -91,6 +104,18 @@ public final class AndroidProjectAnalyzer {
                 analysis.getManifestsByModule()
                         .computeIfAbsent(moduleName, k -> new ArrayList<>())
                         .add(info);
+            } else if (name.endsWith(".bp")) {
+                String content = safeRead(f, l);
+                if (content == null) {
+                    continue;
+                }
+                try {
+                    List<SoongModuleInfo> mods = SoongBpParser.parse(content,
+                            f.getAbsolutePath());
+                    analysis.getSoongModules().addAll(mods);
+                } catch (RuntimeException ex) {
+                    l.onError(f.getName(), -1, "soong parse failed: " + ex.getMessage());
+                }
             }
         }
 

@@ -70,6 +70,10 @@ public final class AndroidProjectScanner {
         public boolean includeGradle = false;
         /** AndroidManifest.xml を含める。 */
         public boolean includeManifest = false;
+        /** Soong ビルドスクリプト (Android.bp) を含める。AOSP 解析時のみ意味を持つ。 */
+        public boolean includeBp = false;
+        /** SELinux ポリシー (.te) を含める。AOSP 解析時のみ意味を持つ。 */
+        public boolean includeTe = false;
         /** 除外ディレクトリ名のセット。 */
         public Set<String> excludedDirs = DEFAULT_EXCLUDED_DIRS;
         /** AOSP 級プロジェクト向けの追加除外名 ({@link #AOSP_EXTRA_EXCLUDED_DIRS}) も合成する。 */
@@ -203,6 +207,12 @@ public final class AndroidProjectScanner {
             return true;
         }
         if (opts.includeManifest && name.equals("androidmanifest.xml")) {
+            return true;
+        }
+        if (opts.includeBp && name.endsWith(".bp")) {
+            return true;
+        }
+        if (opts.includeTe && name.endsWith(".te")) {
             return true;
         }
         return false;

@@ -16,6 +16,7 @@ public class AndroidProjectAnalysis {
     private GradleProjectInfo rootSettings;
     private final Map<String, GradleProjectInfo> gradleByModule = new LinkedHashMap<>();
     private final Map<String, List<AndroidManifestInfo>> manifestsByModule = new LinkedHashMap<>();
+    private final List<SoongModuleInfo> soongModules = new ArrayList<>();
 
     public GradleProjectInfo getRootSettings() {
         return rootSettings;
@@ -49,6 +50,14 @@ public class AndroidProjectAnalysis {
             all.addAll(m.allComponents());
         }
         return all;
+    }
+
+    /**
+     * Soong (Android.bp) パーサで取り込んだモジュール一覧。
+     * AOSP モードで {@code includeBp} を有効にしたときのみ非空。
+     */
+    public List<SoongModuleInfo> getSoongModules() {
+        return soongModules;
     }
 
     /** FQN でコンポーネントを検索。 */

@@ -16,6 +16,12 @@ public final class PlantUmlGradleDependencyGraph {
         public boolean includeTestScopes = false;
         public boolean includeExternalLibs = true;
         public String title;
+        /**
+         * Soong (Android.bp) で取り込まれたモジュールも依存グラフに含める。
+         * AOSP モードで {@code AndroidProjectAnalysis.getSoongModules()} が非空のときに有効。
+         * partition (system/vendor/product/odm/system_ext) でステレオタイプ色分け。
+         */
+        public boolean includeSoongModules = true;
     }
 
     /** デフォルト Options で生成。 */
@@ -33,6 +39,16 @@ public final class PlantUmlGradleDependencyGraph {
         out.append("@startuml\n");
         if (o.title != null && !o.title.isEmpty()) {
             out.append("title ").append(o.title).append('\n');
+        }
+        boolean withSoong = o.includeSoongModules
+                && !analysis.getSoongModules().isEmpty();
+        if (withSoong) {
+            // partition ステレオタイプ用の skinparam (色分け)
+            out.append("skinparam component<<system>> { BackgroundColor #E0EFFF }\n");
+            out.append("skinparam component<<vendor>> { BackgroundColor #FFE4B5 }\n");
+            out.append("skinparam component<<product>> { BackgroundColor #E0FFE0 }\n");
+            out.append("skinparam component<<odm>> { BackgroundColor #FFD6E0 }\n");
+            out.append("skinparam component<<system_ext>> { BackgroundColor #F0E0FF }\n");
         }
         Map<String, String> moduleAlias = new LinkedHashMap<>();
         int seq = 0;
@@ -104,11 +120,54 @@ public final class PlantUmlGradleDependencyGraph {
                 }
             }
         }
+        // Soong モジュールノード
+        Map<String, String> soongAlias = new LinkedHashMap<>();
+        if (withSoong) {
+            for (SoongModuleInfo m : analysis.getSoongModules()) {
+                if (m.getName() == null || m.getName().isEmpty()) {
+                    continue;
+                }
+                if (soongAlias.containsKey(m.getName())) {
+                    continue;
+                }
+                String alias = "S" + (seq++);
+                soongAlias.put(m.getName(), alias);
+                String stereo = " <<" + partitionStereotype(m.getPartition()) + ">>";
+                out.append("component \"").append(m.getName())
+                        .append("\\n[").append(m.getModuleType()).append("]\" as ")
+                        .append(alias).append(stereo).append('\n');
+            }
+            // Soong エッジ
+            for (SoongModuleInfo m : analysis.getSoongModules()) {
+                String from = soongAlias.get(m.getName());
+                if (from == null) {
+                    continue;
+                }
+                for (String dep : m.getDeps()) {
+                    String to = soongAlias.get(dep);
+                    if (to != null) {
+                        out.append(from).append(" --> ").append(to).append('\n');
+                    }
+                }
+            }
+        }
         if (o.includeLegend) {
-            emitLegend(out, o);
+            emitLegend(out, o, withSoong);
         }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    /** Partition → PlantUML ステレオタイプ名。 */
+    private static String partitionStereotype(Partition p) {
+        switch (p) {
+            case SYSTEM: return "system";
+            case VENDOR: return "vendor";
+            case PRODUCT: return "product";
+            case ODM: return "odm";
+            case SYSTEM_EXT: return "system_ext";
+            default: return "module";
+        }
     }
 
     private static boolean isTestScope(String scope) {
@@ -131,7 +190,7 @@ public final class PlantUmlGradleDependencyGraph {
         return "-->";
     }
 
-    private static void emitLegend(StringBuilder out, Options o) {
+    private static void emitLegend(StringBuilder out, Options o, boolean withSoong) {
         out.append("legend right\n");
         out.append("== Gradle 依存グラフ ==\n");
         out.append("component <<application>>  com.android.application\n");
@@ -139,6 +198,13 @@ public final class PlantUmlGradleDependencyGraph {
         out.append("component <<module>>       上記以外のモジュール\n");
         if (o.includeExternalLibs) {
             out.append("component <<external>>     外部 Maven 依存\n");
+        }
+        if (withSoong) {
+            out.append("component <<system>>       AOSP system partition\n");
+            out.append("component <<vendor>>       AOSP vendor partition\n");
+            out.append("component <<product>>      AOSP product partition\n");
+            out.append("component <<odm>>          AOSP odm partition\n");
+            out.append("component <<system_ext>>   AOSP system_ext partition\n");
         }
         out.append("A --> B                    implementation/api 依存\n");
         if (o.includeTestScopes) {

@@ -100,4 +100,45 @@ public class PlantUmlGradleDependencyGraphTest {
         String puml = PlantUmlGradleDependencyGraph.generate(build(), o);
         assertFalse(puml, puml.contains("legend right"));
     }
+
+    @Test
+    public void testSoongModulesAreRenderedWithPartitionStereotype() {
+        AndroidProjectAnalysis a = build();
+        SoongModuleInfo m = new SoongModuleInfo();
+        m.setName("libfoo");
+        m.setModuleType("cc_library_shared");
+        m.setPartition(Partition.VENDOR);
+        a.getSoongModules().add(m);
+
+        SoongModuleInfo m2 = new SoongModuleInfo();
+        m2.setName("libfooclient");
+        m2.setModuleType("cc_library_shared");
+        m2.setPartition(Partition.SYSTEM);
+        m2.getDeps().add("libfoo");
+        a.getSoongModules().add(m2);
+
+        String puml = PlantUmlGradleDependencyGraph.generate(a);
+        assertTrue(puml, puml.contains("<<vendor>>"));
+        assertTrue(puml, puml.contains("<<system>>"));
+        // Soong モジュール用の skinparam が出力される
+        assertTrue(puml, puml.contains("skinparam component<<vendor>>"));
+        // legend にも partition 行が出る
+        assertTrue(puml, puml.contains("AOSP vendor partition"));
+    }
+
+    @Test
+    public void testSoongModulesCanBeDisabled() {
+        AndroidProjectAnalysis a = build();
+        SoongModuleInfo m = new SoongModuleInfo();
+        m.setName("libfoo");
+        m.setModuleType("cc_library_shared");
+        m.setPartition(Partition.VENDOR);
+        a.getSoongModules().add(m);
+
+        PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
+        o.includeSoongModules = false;
+        String puml = PlantUmlGradleDependencyGraph.generate(a, o);
+        assertFalse(puml, puml.contains("libfoo"));
+        assertFalse(puml, puml.contains("<<vendor>>"));
+    }
 }

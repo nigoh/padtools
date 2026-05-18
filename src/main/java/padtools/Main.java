@@ -97,6 +97,8 @@ public class Main {
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
         final Option optJetpack = new Option(null, "jetpack", false);
         final Option optPerFolder = new Option("P", "per-folder", false);
+        final Option optAosp = new Option(null, "aosp", false);
+        final Option optMultiUserReport = new Option(null, "multiuser-report", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -108,7 +110,8 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams, optJetpack, optPerFolder});
+                optSequenceDiagrams, optJetpack, optPerFolder,
+                optAosp, optMultiUserReport});
 
         try {
             optParser.parse(args, 1);
@@ -183,7 +186,8 @@ public class Main {
             return;
         }
         if (optDepGraph.isSet()) {
-            handleDependencyGraph(file_in, file_out, listener, legendOverride);
+            handleDependencyGraph(file_in, file_out, listener, legendOverride,
+                    optAosp.isSet());
             return;
         }
         if (optSummary.isSet()) {
@@ -521,13 +525,20 @@ public class Main {
     /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
     private static void handleDependencyGraph(File fileIn, File fileOut,
                                                 ErrorListener listener,
-                                                Boolean legendOverride) throws IOException {
+                                                Boolean legendOverride,
+                                                boolean aospMode) throws IOException {
         if (fileIn == null || !fileIn.isDirectory()) {
             System.err.println("Dependency graph requires a project directory.");
             System.exit(1);
             return;
         }
-        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
+        AndroidProjectScanner.Options scanOpts = new AndroidProjectScanner.Options();
+        if (aospMode) {
+            scanOpts.useAospDefaults = true;
+            scanOpts.includeBp = true;
+        }
+        AndroidProjectAnalysis analysis =
+                AndroidProjectAnalyzer.analyze(fileIn, listener, scanOpts);
         PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;

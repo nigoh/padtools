@@ -27,6 +27,10 @@ Change log
 1.6
 --------
 
+* PlantUML シーケンス図の出力機能を強化
+    * `-Q` / `--sequence-diagrams` を追加: Android プロジェクトを入力に、Activity/Service/Receiver/Provider のライフサイクル起点シーケンス図を `.puml` と `.svg` の両方で `-o` ディレクトリへ一括出力
+    * `--all` の `sequence-diagrams/` も `.puml` と `.svg` を併出力 (従来は SVG のみ)
+    * エディタの「シーケンス図を一括出力 (ライフサイクル, .puml + .svg)」メニューから GUI でも実行可能
 * UML 系 (クラス図 / シーケンス図 / コンポーネント図 / Gradle 依存グラフ) を
   SVG として直接書き出せるようにした
     * PlantUML (`net.sourceforge.plantuml:plantuml`) を同梱

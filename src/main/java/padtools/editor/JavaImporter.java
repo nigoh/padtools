@@ -7,7 +7,9 @@ import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.java.JavaSourceConverter;
+import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
+import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.util.ErrorListener;
@@ -359,37 +361,67 @@ public class JavaImporter {
             }
             writeIfMissing(new java.io.File(dstDir, "methods.txt"), methodsBuf.toString());
 
-            // Android ライフサイクルメソッド起点のシーケンス図
+            // Android ライフサイクルメソッド起点のシーケンス図 (.puml + .svg を併出力)
             java.io.File seqDir = new java.io.File(dstDir, "sequence-diagrams");
             if (seqDir.exists() || seqDir.mkdirs()) {
-                java.util.Map<String, java.util.List<String>> entryByType = new java.util.LinkedHashMap<>();
-                entryByType.put("Activity", java.util.Arrays.asList(
-                        "onCreate", "onStart", "onResume", "onPause", "onStop", "onDestroy"));
-                entryByType.put("Service", java.util.Arrays.asList(
-                        "onStartCommand", "onCreate", "onBind", "onDestroy"));
-                entryByType.put("BroadcastReceiver", java.util.Arrays.asList("onReceive"));
-                entryByType.put("ContentProvider", java.util.Arrays.asList(
-                        "onCreate", "query", "insert", "update", "delete"));
-                for (padtools.core.formats.uml.JavaClassInfo c : infos) {
-                    String compType = c.getAndroidComponentType();
-                    if (compType == null) continue;
-                    java.util.List<String> methodNames = entryByType.get(compType);
-                    if (methodNames == null) continue;
-                    for (String mn : methodNames) {
-                        padtools.core.formats.uml.JavaMethodInfo m = null;
-                        for (padtools.core.formats.uml.JavaMethodInfo cand : c.getMethods()) {
-                            if (mn.equals(cand.getName()) && !cand.isAbstract()) {
-                                m = cand;
-                                break;
-                            }
-                        }
-                        if (m == null || m.getStatements().isEmpty()) continue;
-                        String puml = PlantUmlSequenceDiagram.generate(
-                                infos, c.getSimpleName(), m.getName(), null);
-                        writeIfMissing(new java.io.File(seqDir,
-                                c.getSimpleName() + "." + m.getName() + ".puml"), puml);
-                    }
+                for (LifecycleSequenceDiagrams.Entry e :
+                        LifecycleSequenceDiagrams.generateAll(infos, null)) {
+                    writeIfMissing(new java.io.File(seqDir, e.baseName() + ".puml"), e.puml);
+                    PlantUmlRenderer.renderSvg(e.puml,
+                            new java.io.File(seqDir, e.baseName() + ".svg"));
                 }
+            }
+        } catch (IOException ex) {
+            showError(ex.getMessage());
+            return null;
+        }
+        showWarnings(warnings);
+        return dstDir;
+    }
+
+    /**
+     * Android プロジェクトディレクトリと出力先ディレクトリを選択し、
+     * Activity/Service/Receiver/Provider のライフサイクルメソッドを起点とする
+     * PlantUML シーケンス図を {@code Class.method.puml} と {@code Class.method.svg} の
+     * 両方で一括出力する。戻り値は書き出した先のパス (成功時) もしくは null。
+     */
+    public java.io.File chooseProjectAndGenerateSequenceDiagrams() {
+        JFileChooser src = new JFileChooser(".");
+        src.setDialogTitle(Messages.get("dialog.sequenceDiagramAll.srcTitle"));
+        src.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (src.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        JFileChooser dst = new JFileChooser(".");
+        dst.setDialogTitle(Messages.get("dialog.sequenceDiagramAll.dstTitle"));
+        dst.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (dst.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        java.io.File srcDir = src.getSelectedFile();
+        java.io.File dstDir = dst.getSelectedFile();
+        if (!dstDir.exists() && !dstDir.mkdirs()) {
+            showError("Cannot create directory: " + dstDir);
+            return null;
+        }
+        List<String> warnings = new ArrayList<>();
+        ErrorListener l = ErrorListener.collecting(warnings);
+        try {
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
+                    UmlGenerator.extractFromProject(srcDir, null, l, true);
+            java.util.List<LifecycleSequenceDiagrams.Entry> entries =
+                    LifecycleSequenceDiagrams.generateAll(infos, null);
+            if (entries.isEmpty()) {
+                JOptionPane.showMessageDialog(parent,
+                        Messages.get("dialog.sequenceDiagramAll.noEntries"),
+                        Messages.get("menu.file.sequenceDiagramAll"),
+                        JOptionPane.WARNING_MESSAGE);
+                return null;
+            }
+            for (LifecycleSequenceDiagrams.Entry e : entries) {
+                writeIfMissing(new java.io.File(dstDir, e.baseName() + ".puml"), e.puml);
+                PlantUmlRenderer.renderSvg(e.puml,
+                        new java.io.File(dstDir, e.baseName() + ".svg"));
             }
         } catch (IOException ex) {
             showError(ex.getMessage());

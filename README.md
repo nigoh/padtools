@@ -134,6 +134,10 @@ java -jar PadTools.jar --list-methods ~/AOSP/Car
 
 # 再帰トレースの深さを変更 (デフォルト 5、0 = 無制限)
 java -jar PadTools.jar -q "MainActivity.onCreate" --seq-depth 10 -o seq.svg ~/AndroidStudioProjects/MyApp
+
+# Android ライフサイクル (Activity/Service/Receiver/Provider) を起点とする
+# シーケンス図を .puml + .svg 両方で一括出力 (-Q / --sequence-diagrams)
+java -jar PadTools.jar -Q -o ./seq-out ~/AndroidStudioProjects/MyApp
 ```
 
 メソッド本体内の `receiver.method()` 呼び出しを participant 間の同期メッセージとして描画。
@@ -209,7 +213,7 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `dependency-graph.svg` | Gradle 依存グラフ |
 | `pad.svg` | Java → PAD 図 (統合) |
 | `methods.txt` | シーケンス図の起点候補一覧 (`Class.method`) |
-| `sequence-diagrams/` | Android ライフサイクル (Activity の `onCreate`/`onResume` 等、Service の `onStartCommand` 等) を起点とした SVG シーケンス図群 |
+| `sequence-diagrams/` | Android ライフサイクル (Activity の `onCreate`/`onResume` 等、Service の `onStartCommand` 等) を起点としたシーケンス図群 (起点ごとに `.puml` と `.svg` を併出力) |
 
 SVG は同梱ライブラリのみで描画するため、PlantUML や graphviz の追加インストールは不要です。
 ライフサイクル外のメソッドからシーケンス図を作りたい場合は `methods.txt` を参考に
@@ -233,6 +237,7 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 * **Gradle プロジェクトから作成** — プロジェクトディレクトリを選択して PAD 化
 * **クラス図を生成** — Java/AIDL ファイルまたはディレクトリから PlantUML クラス図
 * **シーケンス図を生成** — Class.method を入力して PlantUML シーケンス図
+* **シーケンス図を一括出力 (ライフサイクル)** — Android プロジェクトを選んで、Activity/Service 等のライフサイクル起点シーケンス図を `.puml` + `.svg` で書き出す
 * **Android コンポーネント図を生成** (Ctrl+D) — Android プロジェクトから
 * **Gradle 依存グラフを生成** — Android プロジェクトから
 * **プロジェクトサマリーを生成** — Markdown レポート
@@ -248,6 +253,7 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 | `-J` / `--java-project` | 入力を Gradle/Android プロジェクトディレクトリとして扱う |
 | `-c` / `--class-diagram` | PlantUML クラス図を生成 |
 | `-q CLASS.METHOD` / `--sequence-diagram CLASS.METHOD` | PlantUML シーケンス図を生成 |
+| `-Q` / `--sequence-diagrams` | Android プロジェクトのライフサイクル起点シーケンス図を `-o` ディレクトリへ一括出力 (`.puml` + `.svg`) |
 | `-d` / `--component-diagram` | PlantUML Android コンポーネント図を生成 |
 | `-G` / `--dependency-graph` | PlantUML Gradle 依存グラフを生成 |
 | `-g` / `--gradle` | Gradle ファイル単体を Markdown サマリー化 |

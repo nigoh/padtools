@@ -1,5 +1,6 @@
 package padtools.core.formats.android;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -34,10 +35,18 @@ public final class PlantUmlGradleDependencyGraph {
         if (o.title != null && !o.title.isEmpty()) {
             out.append("title ").append(o.title).append('\n');
         }
+        // 同梱 PlantUML の Smetana レイアウトは孤立ノード (in/out エッジを 1 本も
+        // 持たないコンポーネント) を含むグラフで qsort 内 IllegalStateException を
+        // 起こすことがある。集約用ルートプロジェクト (`:root` 等) や依存を持たない
+        // モジュールは情報量も小さいため、出力前に除外する。
+        Set<String> connectedModules = collectConnectedModules(analysis, o);
         Map<String, String> moduleAlias = new LinkedHashMap<>();
         int seq = 0;
         // モジュールノード
         for (String module : analysis.getGradleByModule().keySet()) {
+            if (!connectedModules.contains(module)) {
+                continue;
+            }
             String alias = "M" + (seq++);
             moduleAlias.put(module, alias);
             GradleProjectInfo info = analysis.getGradleByModule().get(module);
@@ -82,6 +91,9 @@ public final class PlantUmlGradleDependencyGraph {
         for (Map.Entry<String, GradleProjectInfo> e
                 : analysis.getGradleByModule().entrySet()) {
             String from = moduleAlias.get(e.getKey());
+            if (from == null) {
+                continue;
+            }
             for (GradleDependency d : e.getValue().getDependencies()) {
                 if (!o.includeTestScopes && isTestScope(d.getScope())) {
                     continue;
@@ -109,6 +121,36 @@ public final class PlantUmlGradleDependencyGraph {
         }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    /**
+     * 後段の出力ロジックと同じフィルタ条件で「少なくとも 1 本のエッジに参加する」
+     * モジュール集合を求める。孤立ノードを diagram から除外して Smetana の qsort
+     * バグを回避するために使う。
+     */
+    private static Set<String> collectConnectedModules(
+            AndroidProjectAnalysis analysis, Options o) {
+        Set<String> connected = new HashSet<>();
+        for (Map.Entry<String, GradleProjectInfo> e
+                : analysis.getGradleByModule().entrySet()) {
+            String from = e.getKey();
+            for (GradleDependency d : e.getValue().getDependencies()) {
+                if (!o.includeTestScopes && isTestScope(d.getScope())) {
+                    continue;
+                }
+                if (d.isModuleReference()) {
+                    String to = d.getModuleRef();
+                    if (analysis.getGradleByModule().containsKey(to)) {
+                        connected.add(from);
+                        connected.add(to);
+                    }
+                } else if (o.includeExternalLibs) {
+                    // 外部ライブラリへの依存もモジュール側の「接続あり」と見なす
+                    connected.add(from);
+                }
+            }
+        }
+        return connected;
     }
 
     private static boolean isTestScope(String scope) {

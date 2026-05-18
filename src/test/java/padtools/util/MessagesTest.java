@@ -36,9 +36,7 @@ public class MessagesTest {
 
     @Test
     public void testNewFeatureKeys() {
-        // Phase 6-8 で追加したキー
-        assertNotEquals("menu.help.syntaxRef", Messages.get("menu.help.syntaxRef"));
-        assertNotEquals("menu.file.newFromTemplate", Messages.get("menu.file.newFromTemplate"));
+        // UML 専用 GUI でも再利用するキー
         assertNotEquals("menu.file.print", Messages.get("menu.file.print"));
         assertNotEquals("menu.edit.copyDiagram", Messages.get("menu.edit.copyDiagram"));
         assertNotEquals("menu.output.pdf", Messages.get("menu.output.pdf"));
@@ -46,40 +44,6 @@ public class MessagesTest {
         assertNotEquals("menu.view.zoomOut", Messages.get("menu.view.zoomOut"));
         assertNotEquals("menu.view.zoomFit", Messages.get("menu.view.zoomFit"));
         assertNotEquals("menu.view.zoomReset", Messages.get("menu.view.zoomReset"));
-    }
-
-    @Test
-    public void testTemplateKeys() {
-        assertNotEquals("template.basic.name", Messages.get("template.basic.name"));
-        assertNotEquals("template.ifelse.name", Messages.get("template.ifelse.name"));
-        assertNotEquals("template.loop.name", Messages.get("template.loop.name"));
-        assertNotEquals("template.switch.name", Messages.get("template.switch.name"));
-    }
-
-    @Test
-    public void testTemplateContent() {
-        // テンプレート内容にSPDコマンドが含まれることを確認
-        String basic = Messages.get("template.basic");
-        assertTrue(basic.contains(":terminal"));
-        assertTrue(basic.contains(":if"));
-
-        String loop = Messages.get("template.loop");
-        assertTrue(loop.contains(":while"));
-        assertTrue(loop.contains(":dowhile"));
-
-        String sw = Messages.get("template.switch");
-        assertTrue(sw.contains(":switch"));
-        assertTrue(sw.contains(":case"));
-    }
-
-    @Test
-    public void testHelpContent() {
-        String help = Messages.get("help.spd.content");
-        assertNotNull(help);
-        assertTrue(help.contains("<html>"));
-        assertTrue(help.contains(":if"));
-        assertTrue(help.contains(":while"));
-        assertTrue(help.contains(":switch"));
     }
 
     @Test

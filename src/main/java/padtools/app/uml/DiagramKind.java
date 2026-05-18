@@ -18,7 +18,9 @@ public enum DiagramKind {
     /** Gradle 依存図 — モジュール間 / ライブラリ依存。 */
     DEPENDENCY("Dependency Graph"),
     /** Manifest 図 — AndroidManifest.xml のアプリ構造 (Application + 配下コンポーネント) を可視化。 */
-    MANIFEST("Manifest Diagram");
+    MANIFEST("Manifest Diagram"),
+    /** Layout 図 — res/layout XML 1 つの View 階層を可視化。 */
+    LAYOUT("Layout View Hierarchy");
 
     private final String displayName;
 

@@ -2,6 +2,8 @@ package padtools.app.uml;
 
 import org.junit.Test;
 import padtools.core.formats.android.AndroidComponentInfo;
+import padtools.core.formats.android.AndroidLayoutInfo;
+import padtools.core.formats.android.AndroidLayoutParser;
 import padtools.core.formats.android.AndroidManifestInfo;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.GradleDependency;
@@ -124,5 +126,74 @@ public class DiagramServiceTest {
     public void testCacheNotLoaded() {
         DiagramService.generatePuml(
                 new DiagramRequest(DiagramKind.CLASS), new ProjectAnalysisCache());
+    }
+
+    @Test
+    public void testManifestDiagram() {
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.MANIFEST),
+                sampleAnalysis(), sampleClasses());
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+    }
+
+    // --- LAYOUT 図 (新機能) ---
+
+    private AndroidProjectAnalysis analysisWithLayout() {
+        AndroidProjectAnalysis a = sampleAnalysis();
+        AndroidLayoutInfo layout = AndroidLayoutParser.parse(
+                "<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " android:id=\"@+id/root\""
+                        + " android:layout_width=\"match_parent\""
+                        + " android:layout_height=\"match_parent\">"
+                        + "<TextView android:id=\"@+id/t\""
+                        + " android:layout_width=\"wrap_content\""
+                        + " android:layout_height=\"wrap_content\""
+                        + " android:text=\"hi\"/>"
+                        + "</LinearLayout>");
+        layout.setModuleName("app");
+        layout.setSourceSet("main");
+        layout.setConfigQualifier("");
+        layout.setFileName("activity_main.xml");
+        List<AndroidLayoutInfo> list = new ArrayList<>();
+        list.add(layout);
+        a.getLayoutsByModule().put("app", list);
+        return a;
+    }
+
+    @Test
+    public void testLayoutDiagram() {
+        AndroidProjectAnalysis a = analysisWithLayout();
+        DiagramRequest req = DiagramRequest.forLayout(
+                "app::main::::activity_main.xml", true);
+        String puml = DiagramService.generatePuml(req, a, sampleClasses());
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("LinearLayout"));
+        assertTrue(puml, puml.contains("TextView"));
+        assertTrue(puml, puml.contains("id: root"));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testLayoutDiagramRequiresKey() {
+        AndroidProjectAnalysis a = analysisWithLayout();
+        DiagramService.generatePuml(new DiagramRequest(DiagramKind.LAYOUT),
+                a, sampleClasses());
+    }
+
+    @Test
+    public void testLayoutDiagramWithUnknownKeyFails() {
+        AndroidProjectAnalysis a = analysisWithLayout();
+        try {
+            DiagramService.generatePuml(
+                    DiagramRequest.forLayout("nope::::::missing.xml", true),
+                    a, sampleClasses());
+            fail("Expected IllegalArgumentException for unknown layout key");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage(),
+                    expected.getMessage().contains("Layout not found"));
+        }
     }
 }

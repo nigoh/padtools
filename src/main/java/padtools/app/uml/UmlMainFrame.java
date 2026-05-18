@@ -47,7 +47,6 @@ import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaMethodInfo;
-import padtools.util.ErrorListener;
 
 /**
  * UML 専用のメインウィンドウ。
@@ -95,6 +94,8 @@ public class UmlMainFrame extends JFrame {
     private String currentPuml;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
     private String sequenceEntry;
+    /** 現在選択されている Layout 図のキー ({@link AndroidLayoutInfo#getKey()})。null なら未設定。 */
+    private String currentLayoutKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
@@ -223,6 +224,9 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
         pickEntry.addActionListener(e -> pickSequenceEntry());
         m.add(pickEntry);
+        JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
+        pickLayout.addActionListener(e -> pickLayoutFile());
+        m.add(pickLayout);
         JMenuItem scope = new JMenuItem("Scope...");
         scope.addActionListener(e -> openScopeDialog());
         m.add(scope);
@@ -744,6 +748,20 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
+    private void pickLayoutFile() {
+        String picked = LayoutFileChooserDialog.chooseLayoutKey(this, cache);
+        if (picked == null) {
+            return;
+        }
+        currentLayoutKey = picked;
+        currentKind = DiagramKind.LAYOUT;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.LAYOUT);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        refreshDiagram();
+    }
+
     private void refreshDiagram() {
         refreshTimer.restart();
     }
@@ -760,8 +778,16 @@ public class UmlMainFrame extends JFrame {
             status.setText("Choose a sequence entry from Diagram menu.");
             return;
         }
+        if (kind == DiagramKind.LAYOUT
+                && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
+            previewPanel.setSvgGraphicsNode(null, 0, 0);
+            sourcePanel.setText("");
+            status.setText("Choose a layout file from Diagram menu.");
+            return;
+        }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
         final String entry = sequenceEntry;
+        final String layoutKey = currentLayoutKey;
         final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
@@ -770,9 +796,14 @@ public class UmlMainFrame extends JFrame {
             protected RenderResult doInBackground() {
                 try {
                     boolean wantLinks = (kind == DiagramKind.CLASS);
-                    DiagramRequest req = (kind == DiagramKind.SEQUENCE && entry != null)
-                            ? buildSequenceRequest(entry)
-                            : new DiagramRequest(kind, null, null, true, scope, wantLinks);
+                    DiagramRequest req;
+                    if (kind == DiagramKind.SEQUENCE && entry != null) {
+                        req = buildSequenceRequest(entry);
+                    } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
+                        req = DiagramRequest.forLayout(layoutKey, true);
+                    } else {
+                        req = new DiagramRequest(kind, null, null, true, scope, wantLinks);
+                    }
                     String puml = DiagramService.generatePuml(req, cache);
                     // ベクター SVG として描画して、PlantUML の PNG 4096x4096
                     // キャンバス上限による切り詰めを回避する。

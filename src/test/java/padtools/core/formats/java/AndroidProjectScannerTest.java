@@ -274,4 +274,88 @@ public class AndroidProjectScannerTest {
         }
     }
 
+    // --- res/layout 走査 (includeLayout) ---
+
+    private void prepareLayoutFiles() throws IOException {
+        // res/layout/, res/layout-land/, res/layout-v21/ の 3 ファイル
+        File mainLayout = new File(root, "app/src/main/res/layout");
+        assertTrue(mainLayout.mkdirs());
+        writeFile(new File(mainLayout, "activity_main.xml"),
+                "<LinearLayout/>");
+        writeFile(new File(mainLayout, "fragment_list.xml"),
+                "<FrameLayout/>");
+
+        File landLayout = new File(root, "app/src/main/res/layout-land");
+        assertTrue(landLayout.mkdirs());
+        writeFile(new File(landLayout, "activity_main.xml"),
+                "<LinearLayout/>");
+
+        File v21Layout = new File(root, "app/src/main/res/layout-sw600dp-v21");
+        assertTrue(v21Layout.mkdirs());
+        writeFile(new File(v21Layout, "wide_only.xml"),
+                "<FrameLayout/>");
+
+        // res/drawable/, res/values/ のノイズ XML (拾わせない)
+        File drawable = new File(root, "app/src/main/res/drawable");
+        assertTrue(drawable.mkdirs());
+        writeFile(new File(drawable, "ic_launcher.xml"), "<vector/>");
+        File values = new File(root, "app/src/main/res/values");
+        assertTrue(values.mkdirs());
+        writeFile(new File(values, "strings.xml"),
+                "<resources/>");
+        // res/layout/ 直下の非 XML (拾わせない)
+        writeFile(new File(mainLayout, "thumb.png"), "PNG");
+    }
+
+    @Test
+    public void testLayoutNotIncludedByDefault() throws IOException {
+        prepareLayoutFiles();
+        // includeLayout デフォルト false なので従来通り Java のみ
+        List<File> files = AndroidProjectScanner.scan(root);
+        for (File f : files) {
+            assertFalse("layout xml should not be returned by default: " + f,
+                    f.getName().endsWith(".xml"));
+        }
+    }
+
+    @Test
+    public void testIncludeLayoutPicksUpVariants() throws IOException {
+        prepareLayoutFiles();
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeLayout = true;
+        List<File> files = AndroidProjectScanner.scan(root, o);
+
+        int layoutCount = 0;
+        boolean foundMain = false;
+        boolean foundLand = false;
+        boolean foundV21 = false;
+        for (File f : files) {
+            String p = f.getPath().replace(File.separatorChar, '/');
+            if (p.endsWith(".xml") && (p.contains("/res/layout/")
+                    || p.contains("/res/layout-"))) {
+                layoutCount++;
+                if (p.contains("/res/layout/activity_main.xml")) {
+                    foundMain = true;
+                }
+                if (p.contains("/res/layout-land/activity_main.xml")) {
+                    foundLand = true;
+                }
+                if (p.contains("/res/layout-sw600dp-v21/wide_only.xml")) {
+                    foundV21 = true;
+                }
+            }
+            // res/drawable/, res/values/ の XML は拾われない
+            assertFalse("drawable xml leaked: " + p,
+                    p.contains("/res/drawable/") && p.endsWith(".xml"));
+            assertFalse("values xml leaked: " + p,
+                    p.contains("/res/values/") && p.endsWith(".xml"));
+            // PNG は拾われない
+            assertFalse("png leaked: " + p, p.endsWith(".png"));
+        }
+        assertEquals("layout 配下の xml 数", 4, layoutCount);
+        assertTrue(foundMain);
+        assertTrue(foundLand);
+        assertTrue(foundV21);
+    }
+
 }

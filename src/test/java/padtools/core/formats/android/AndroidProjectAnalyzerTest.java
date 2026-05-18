@@ -219,4 +219,106 @@ public class AndroidProjectAnalyzerTest {
         File stray = new File("/somewhere/else/AndroidManifest.xml");
         assertEquals("main", AndroidProjectAnalyzer.inferSourceSet(stray));
     }
+
+    // --- layout 解析 (新機能) ---
+
+    @Test
+    public void testLayoutsByModuleIsAlwaysInitialized() throws IOException {
+        // layout ファイルを置かない既存セットアップでも null にならず空 Map を返す
+        AndroidProjectAnalysis a = AndroidProjectAnalyzer.analyze(root);
+        assertNotNull("layoutsByModule must not be null", a.getLayoutsByModule());
+        assertTrue("既存 allManifests は従来通り動く", a.allManifests().size() >= 2);
+        assertTrue("layout 無しでも allLayouts は空リスト", a.allLayouts().isEmpty());
+    }
+
+    @Test
+    public void testLayoutsParsedFromResLayoutDir() throws IOException {
+        File mainLayout = new File(appDir, "src/main/res/layout");
+        assertTrue(mainLayout.mkdirs());
+        write(new File(mainLayout, "activity_main.xml"),
+                "<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " android:id=\"@+id/root\""
+                        + " android:layout_width=\"match_parent\""
+                        + " android:layout_height=\"match_parent\">"
+                        + "<TextView android:id=\"@+id/t\""
+                        + " android:layout_width=\"wrap_content\""
+                        + " android:layout_height=\"wrap_content\""
+                        + " android:text=\"hi\"/>"
+                        + "</LinearLayout>");
+
+        File landLayout = new File(appDir, "src/main/res/layout-land");
+        assertTrue(landLayout.mkdirs());
+        write(new File(landLayout, "activity_main.xml"),
+                "<FrameLayout xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " android:layout_width=\"match_parent\""
+                        + " android:layout_height=\"match_parent\"/>");
+
+        AndroidProjectAnalysis a = AndroidProjectAnalyzer.analyze(root);
+        List<AndroidLayoutInfo> appLayouts = a.getLayoutsByModule().get("app");
+        assertNotNull(appLayouts);
+        assertEquals(2, appLayouts.size());
+
+        boolean foundPortrait = false;
+        boolean foundLandscape = false;
+        for (AndroidLayoutInfo l : appLayouts) {
+            assertEquals("app", l.getModuleName());
+            assertEquals("main", l.getSourceSet());
+            assertNotNull(l.getRoot());
+            if ("activity_main.xml".equals(l.getFileName())
+                    && l.getConfigQualifier().isEmpty()) {
+                foundPortrait = true;
+                assertEquals("LinearLayout", l.getRoot().getTag());
+                assertEquals(1, l.getRoot().getChildren().size());
+            }
+            if ("activity_main.xml".equals(l.getFileName())
+                    && "land".equals(l.getConfigQualifier())) {
+                foundLandscape = true;
+                assertEquals("FrameLayout", l.getRoot().getTag());
+            }
+        }
+        assertTrue("default layout found", foundPortrait);
+        assertTrue("land layout found", foundLandscape);
+    }
+
+    @Test
+    public void testLayoutsBuildStableKeys() throws IOException {
+        File mainLayout = new File(appDir, "src/main/res/layout");
+        assertTrue(mainLayout.mkdirs());
+        write(new File(mainLayout, "screen.xml"),
+                "<FrameLayout xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                        + " android:layout_width=\"match_parent\""
+                        + " android:layout_height=\"match_parent\"/>");
+        AndroidProjectAnalysis a = AndroidProjectAnalyzer.analyze(root);
+        AndroidLayoutInfo info = a.getLayoutsByModule().get("app").get(0);
+        // key は module::sourceSet::qualifier::fileName 形式
+        assertEquals("app::main::::screen.xml", info.getKey());
+        AndroidLayoutInfo found = a.findLayoutByKey("app::main::::screen.xml");
+        assertSame(info, found);
+        assertNull(a.findLayoutByKey("not::a::real::key.xml"));
+        assertNull(a.findLayoutByKey(null));
+    }
+
+    @Test
+    public void testInferLayoutConfigQualifier() {
+        File def = new File("/p/app/src/main/res/layout/x.xml");
+        assertEquals("", AndroidProjectAnalyzer.inferLayoutConfigQualifier(def));
+        File land = new File("/p/app/src/main/res/layout-land/x.xml");
+        assertEquals("land", AndroidProjectAnalyzer.inferLayoutConfigQualifier(land));
+        File multi = new File("/p/app/src/main/res/layout-sw600dp-v21/x.xml");
+        assertEquals("sw600dp-v21",
+                AndroidProjectAnalyzer.inferLayoutConfigQualifier(multi));
+    }
+
+    @Test
+    public void testInferLayoutSourceSet() {
+        File main = new File("/p/app/src/main/res/layout/x.xml");
+        assertEquals("main", AndroidProjectAnalyzer.inferLayoutSourceSet(main));
+        File debug = new File("/p/app/src/debug/res/layout-land/x.xml");
+        assertEquals("debug", AndroidProjectAnalyzer.inferLayoutSourceSet(debug));
+        File flavor = new File("/p/app/src/prod/res/layout/x.xml");
+        assertEquals("prod", AndroidProjectAnalyzer.inferLayoutSourceSet(flavor));
+        // 想定外パスは main フォールバック
+        File stray = new File("/somewhere/x.xml");
+        assertEquals("main", AndroidProjectAnalyzer.inferLayoutSourceSet(stray));
+    }
 }

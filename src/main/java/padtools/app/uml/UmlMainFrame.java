@@ -166,6 +166,8 @@ public class UmlMainFrame extends JFrame {
         JMenuItem save = new JMenuItem("Save Diagram As...");
         save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK));
         save.addActionListener(e -> chooseAndExport());
+        JMenuItem perFolder = new JMenuItem("Export Class Diagrams Per Folder...");
+        perFolder.addActionListener(e -> exportClassDiagramsPerFolder());
         JMenuItem refresh = new JMenuItem("Refresh");
         refresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
         refresh.addActionListener(e -> refreshDiagram());
@@ -183,6 +185,7 @@ public class UmlMainFrame extends JFrame {
         });
         m.add(open);
         m.add(save);
+        m.add(perFolder);
         m.addSeparator();
         m.add(refresh);
         m.add(cancelLoadingItem);
@@ -459,6 +462,30 @@ public class UmlMainFrame extends JFrame {
             currentScope = picked.isEmpty() ? null : picked;
             refreshDiagram();
         }
+    }
+
+    /**
+     * 現在ロード中のプロジェクトを再帰的に走査し、ソースファイルを含むフォルダごとに
+     * 1 枚ずつ PlantUML クラス図 ({@code classes.puml} + {@code classes.svg}) を
+     * 出力する。実処理は {@link PerFolderExporter} に委譲。
+     */
+    private void exportClassDiagramsPerFolder() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        File projectRoot = cache.getProjectRoot();
+        if (projectRoot == null || !projectRoot.isDirectory()) {
+            JOptionPane.showMessageDialog(this,
+                    "Loaded project root is unavailable.",
+                    "No project", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        PerFolderExporter.choose(this, projectRoot,
+                cache.getClasses(), cache.getIndex(),
+                loadProgress, status);
     }
 
     /** Manifest Summary タブのテキストを最新の解析結果で更新する。 */

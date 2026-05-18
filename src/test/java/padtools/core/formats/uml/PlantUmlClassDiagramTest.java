@@ -519,4 +519,33 @@ public class PlantUmlClassDiagramTest {
                 JavaStructureExtractor.extract(src), o);
         assertFalse(puml, puml.contains("{final}"));
     }
+
+    @Test
+    public void testJetpackStereotypeOffByDefault() {
+        // ソース直接抽出経路 (JavaStructureExtractor.extract) では Jetpack 分類が走らないので、
+        // 明示的にステレオタイプを設定して --jetpack の Options ゲートだけを検証する。
+        JavaClassInfo c = new JavaClassInfo();
+        c.setPackageName("com.x");
+        c.setSimpleName("Home");
+        c.setKind(JavaClassInfo.Kind.CLASS);
+        c.getJetpackStereotypes().add("Fragment");
+        String puml = PlantUmlClassDiagram.generate(java.util.Collections.singletonList(c));
+        assertFalse(puml, puml.contains("<<Fragment>>"));
+        assertFalse(puml, puml.contains("Jetpack ステレオタイプ"));
+    }
+
+    @Test
+    public void testJetpackStereotypeWhenEnabled() {
+        JavaClassInfo c = new JavaClassInfo();
+        c.setPackageName("com.x");
+        c.setSimpleName("Home");
+        c.setKind(JavaClassInfo.Kind.CLASS);
+        c.getJetpackStereotypes().add("Fragment");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.jetpack.enabled = true;
+        String puml = PlantUmlClassDiagram.generate(
+                java.util.Collections.singletonList(c), o);
+        assertTrue(puml, puml.contains("<<Fragment>>"));
+        assertTrue(puml, puml.contains("Jetpack ステレオタイプ"));
+    }
 }

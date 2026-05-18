@@ -95,6 +95,7 @@ public class Main {
         final Option optListMethods = new Option(null, "list-methods", false);
         final Option optSeqDepth = new Option(null, "seq-depth", true);
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
+        final Option optJetpack = new Option(null, "jetpack", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -106,7 +107,7 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams});
+                optSequenceDiagrams, optJetpack});
 
         try {
             optParser.parse(args, 1);
@@ -146,7 +147,7 @@ public class Main {
         boolean mergeManifest = !optNoManifestMerge.isSet();
         UmlOverrides umlOverrides = UmlOverrides.build(
                 optNoComments, optNoAnnotations, optNoEnumConstants,
-                optNoFinal, optCommentStyle, optSeqDepth);
+                optNoFinal, optCommentStyle, optSeqDepth, optJetpack);
         if (umlOverrides == null) {
             return; // 引数エラー: UmlOverrides.build 内で System.exit 済み
         }
@@ -726,6 +727,8 @@ public class Main {
         System.err.println("  --seq-depth N: Sequence trace depth limit (default 5, 0=unlimited).");
         System.err.println("  -Q --sequence-diagrams: Output PlantUML sequence diagrams"
                 + " (.puml + .svg) for Android lifecycle entry points to the directory specified by -o.");
+        System.err.println("  --jetpack: Enable Jetpack stereotypes (Fragment / ViewModel /"
+                + " Hilt etc.) on class diagram (-c / -A).");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

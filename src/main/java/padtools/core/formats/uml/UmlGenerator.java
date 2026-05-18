@@ -84,6 +84,7 @@ public final class UmlGenerator {
             if (cat != null) {
                 info.setAaosCategory(cat);
             }
+            info.getJetpackStereotypes().addAll(JetpackPattern.classify(info));
         }
         return infos;
     }
@@ -113,6 +114,9 @@ public final class UmlGenerator {
             if (cat != null) {
                 info.setAaosCategory(cat);
             }
+            // ヘッダのみでも extends と class アノテーションは取れるので Jetpack 判定は走らせる。
+            // コンストラクタ @Inject のような members を見る判定はヘッダ段階では空振りする。
+            info.getJetpackStereotypes().addAll(JetpackPattern.classify(info));
         }
         return infos;
     }
@@ -129,6 +133,7 @@ public final class UmlGenerator {
         h.setEnclosingClass(c.getEnclosingClass());
         h.setAaosCategory(c.getAaosCategory());
         h.setAndroidComponentType(c.getAndroidComponentType());
+        h.getJetpackStereotypes().addAll(c.getJetpackStereotypes());
         h.setDetailed(false);
         return h;
     }

@@ -16,4 +16,11 @@
     <!-- PlantUmlSequenceDiagram の内部ヘルパは PlantUML テキスト・呼び出しスタック・visited
          セットなどを多数受け渡す必要があり、パラメータ数 8 を超える。外部 API は維持。 -->
     <suppress checks="ParameterNumber" files="PlantUmlSequenceDiagram\.java" />
+
+    <!-- Main.java は CLI 引数パースと全 出力モード (UML / Gradle / Manifest / Deep Link /
+         Component / Dependency / Summary / All / Sequence) のディスパッチャを兼ねるため、
+         出力モードが増えるたびに main 内 dispatch とファイル全体が比例して伸びる。
+         CLI の入口として凝集しており、機能単位での分割は反って関連性を失わせるため許可。 -->
+    <suppress checks="FileLength" files="Main\.java" />
+    <suppress checks="MethodLength" files="Main\.java" />
 </suppressions>

@@ -36,8 +36,11 @@ public class AndroidComponentInfo {
     private String process;
     private String permission;
     private String authorities;
+    private String targetActivity;
+    private String foregroundServiceType;
     private final List<AndroidIntentFilter> intentFilters = new ArrayList<>();
     private final Map<String, String> metaData = new LinkedHashMap<>();
+    private final List<AndroidPropertyInfo> properties = new ArrayList<>();
 
     public AndroidComponentInfo(Kind kind, String name) {
         this.kind = kind;
@@ -105,12 +108,55 @@ public class AndroidComponentInfo {
         this.authorities = authorities;
     }
 
+    /**
+     * {@code <activity-alias>} の {@code targetActivity} 属性 (FQN 解決済み)。
+     * 通常の Activity / Service / Receiver / Provider では null。
+     */
+    public String getTargetActivity() {
+        return targetActivity;
+    }
+
+    public void setTargetActivity(String targetActivity) {
+        this.targetActivity = targetActivity;
+    }
+
+    /** alias として宣言されたかどうか。 */
+    public boolean isActivityAlias() {
+        return targetActivity != null && !targetActivity.isEmpty();
+    }
+
+    /**
+     * {@code <service>} の {@code foregroundServiceType} 属性。
+     * Android 14 以降の foreground service では必須宣言で、
+     * {@code "camera|microphone"} のように {@code |} 区切りで複数指定可能。
+     */
+    public String getForegroundServiceType() {
+        return foregroundServiceType;
+    }
+
+    public void setForegroundServiceType(String foregroundServiceType) {
+        this.foregroundServiceType = foregroundServiceType;
+    }
+
     public List<AndroidIntentFilter> getIntentFilters() {
         return intentFilters;
     }
 
     public Map<String, String> getMetaData() {
         return metaData;
+    }
+
+    /** コンポーネント直下の {@code <property>} 宣言。 */
+    public List<AndroidPropertyInfo> getProperties() {
+        return properties;
+    }
+
+    /**
+     * {@code foregroundServiceType} 文字列に含まれる種別を要求 API レベルの大きい順に分解する。
+     * 例: {@code "shortService|dataSync"} → {@code [shortService(34), dataSync(29)]}。
+     */
+    public List<String> getForegroundServiceTypeList() {
+        return ForegroundServiceTypeCatalog.split(foregroundServiceType);
     }
 
     /** ランチャー Activity か判定 (Activity 限定)。 */

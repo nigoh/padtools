@@ -69,13 +69,43 @@ public final class AndroidManifestParser {
             return info;
         }
         info.setPackageName(attr(root, "package", ""));
+        parseUsesSdk(root, info);
         parseUsesPermissions(root, info);
         parseUsesFeatures(root, info);
+        parseCustomPermissions(root, info);
         Element application = firstChildElement(root, "application");
         if (application != null) {
             parseApplication(application, info);
         }
         return info;
+    }
+
+    private static void parseUsesSdk(Element root, AndroidManifestInfo info) {
+        // 通常は manifest 直下に 1 つだけ。複数あっても最初の宣言を採用する。
+        Element sdk = firstChildElement(root, "uses-sdk");
+        if (sdk == null) {
+            return;
+        }
+        info.setMinSdkVersion(parseInt(attr(sdk, "minSdkVersion", null)));
+        info.setTargetSdkVersion(parseInt(attr(sdk, "targetSdkVersion", null)));
+        info.setMaxSdkVersion(parseInt(attr(sdk, "maxSdkVersion", null)));
+    }
+
+    private static void parseCustomPermissions(Element root, AndroidManifestInfo info) {
+        // <permission> はアプリ自身が宣言する独自パーミッション。
+        // <uses-permission> (要求側) とは別物として保持する。
+        for (Element e : childElements(root, "permission")) {
+            String name = attr(e, "name", "");
+            if (name.isEmpty()) {
+                continue;
+            }
+            AndroidCustomPermission p = new AndroidCustomPermission(info.resolveClassName(name));
+            p.setProtectionLevel(attr(e, "protectionLevel", null));
+            p.setPermissionGroup(attr(e, "permissionGroup", null));
+            p.setLabel(attr(e, "label", null));
+            p.setDescription(attr(e, "description", null));
+            info.getCustomPermissions().add(p);
+        }
     }
 
     private static DocumentBuilder createSecureBuilder() throws ParserConfigurationException {
@@ -131,6 +161,16 @@ public final class AndroidManifestParser {
         info.setApplicationTheme(attr(app, "theme", null));
         info.setApplicationDebuggable(parseBool(attr(app, "debuggable", null)));
         info.setApplicationAllowBackup(parseBool(attr(app, "allowBackup", null)));
+        // Android 10+ / 12+ / 13+ で重要になった application 属性。
+        info.setApplicationUsesCleartextTraffic(parseBool(attr(app, "usesCleartextTraffic", null)));
+        info.setApplicationNetworkSecurityConfig(attr(app, "networkSecurityConfig", null));
+        info.setApplicationEnableOnBackInvokedCallback(
+                parseBool(attr(app, "enableOnBackInvokedCallback", null)));
+        info.setApplicationLocaleConfig(attr(app, "localeConfig", null));
+        info.setApplicationDataExtractionRules(attr(app, "dataExtractionRules", null));
+        info.setApplicationHardwareAccelerated(parseBool(attr(app, "hardwareAccelerated", null)));
+        info.setApplicationLargeHeap(parseBool(attr(app, "largeHeap", null)));
+        info.setApplicationAppCategory(attr(app, "appCategory", null));
         // application 直下の meta-data
         for (Element md : childElements(app, "meta-data")) {
             String name = attr(md, "name", "");
@@ -139,15 +179,32 @@ public final class AndroidManifestParser {
                 info.getApplicationMetaData().put(name, value);
             }
         }
+        // application 直下の <property> (Android 12+)
+        for (Element prop : childElements(app, "property")) {
+            AndroidPropertyInfo p = buildProperty(prop);
+            if (p != null) {
+                info.getApplicationProperties().add(p);
+            }
+        }
         // 各コンポーネント
         for (Element a : childElements(app, "activity")) {
             info.getActivities().add(buildComponent(a, AndroidComponentInfo.Kind.ACTIVITY, info));
         }
         for (Element a : childElements(app, "activity-alias")) {
-            info.getActivities().add(buildComponent(a, AndroidComponentInfo.Kind.ACTIVITY, info));
+            AndroidComponentInfo alias = buildComponent(a, AndroidComponentInfo.Kind.ACTIVITY, info);
+            // activity-alias は targetActivity 必須属性で別 Activity を指す。
+            // FQN 解決して保持し、isActivityAlias() で区別できるようにする。
+            String target = attr(a, "targetActivity", null);
+            if (target != null) {
+                alias.setTargetActivity(info.resolveClassName(target));
+            }
+            info.getActivities().add(alias);
         }
         for (Element s : childElements(app, "service")) {
-            info.getServices().add(buildComponent(s, AndroidComponentInfo.Kind.SERVICE, info));
+            AndroidComponentInfo svc = buildComponent(s, AndroidComponentInfo.Kind.SERVICE, info);
+            // Android 14 以降は foreground service 用に必須化された属性。
+            svc.setForegroundServiceType(attr(s, "foregroundServiceType", null));
+            info.getServices().add(svc);
         }
         for (Element r : childElements(app, "receiver")) {
             info.getReceivers().add(buildComponent(r, AndroidComponentInfo.Kind.RECEIVER, info));
@@ -178,12 +235,32 @@ public final class AndroidManifestParser {
                 c.getMetaData().put(name, value);
             }
         }
+        // コンポーネント直下の <property> (Android 12+)
+        for (Element prop : childElements(e, "property")) {
+            AndroidPropertyInfo p = buildProperty(prop);
+            if (p != null) {
+                c.getProperties().add(p);
+            }
+        }
         return c;
+    }
+
+    private static AndroidPropertyInfo buildProperty(Element e) {
+        String name = attr(e, "name", "");
+        if (name.isEmpty()) {
+            return null;
+        }
+        AndroidPropertyInfo p = new AndroidPropertyInfo(name);
+        p.setValue(emptyToNull(attr(e, "value", "")));
+        p.setResource(emptyToNull(attr(e, "resource", "")));
+        return p;
     }
 
     private static AndroidIntentFilter buildIntentFilter(Element e) {
         AndroidIntentFilter f = new AndroidIntentFilter();
         f.setPriority(parseInt(attr(e, "priority", null)));
+        f.setOrder(parseInt(attr(e, "order", null)));
+        f.setAutoVerify(parseBool(attr(e, "autoVerify", null)));
         for (Element a : childElements(e, "action")) {
             String name = attr(a, "name", "");
             if (!name.isEmpty()) {
@@ -197,16 +274,35 @@ public final class AndroidManifestParser {
             }
         }
         for (Element d : childElements(e, "data")) {
-            String scheme = attr(d, "scheme", "");
-            String mime = attr(d, "mimeType", "");
-            if (!scheme.isEmpty()) {
-                f.getDataSchemes().add(scheme);
+            AndroidDataSpec spec = buildDataSpec(d);
+            // 既存 API (dataSchemes / dataMimeTypes) も並行で埋めて互換を保つ。
+            if (spec.getScheme() != null) {
+                f.getDataSchemes().add(spec.getScheme());
             }
-            if (!mime.isEmpty()) {
-                f.getDataMimeTypes().add(mime);
+            if (spec.getMimeType() != null) {
+                f.getDataMimeTypes().add(spec.getMimeType());
             }
+            f.getDataSpecs().add(spec);
         }
         return f;
+    }
+
+    private static AndroidDataSpec buildDataSpec(Element d) {
+        AndroidDataSpec spec = new AndroidDataSpec();
+        spec.setScheme(emptyToNull(attr(d, "scheme", "")));
+        spec.setHost(emptyToNull(attr(d, "host", "")));
+        spec.setPort(emptyToNull(attr(d, "port", "")));
+        spec.setPath(emptyToNull(attr(d, "path", "")));
+        spec.setPathPrefix(emptyToNull(attr(d, "pathPrefix", "")));
+        spec.setPathPattern(emptyToNull(attr(d, "pathPattern", "")));
+        spec.setPathSuffix(emptyToNull(attr(d, "pathSuffix", "")));
+        spec.setPathAdvancedPattern(emptyToNull(attr(d, "pathAdvancedPattern", "")));
+        spec.setMimeType(emptyToNull(attr(d, "mimeType", "")));
+        return spec;
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isEmpty() ? null : s;
     }
 
     // --- DOM ヘルパ ---

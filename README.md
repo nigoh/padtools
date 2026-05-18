@@ -79,9 +79,10 @@ java -jar PadTools.jar --list-methods ~/AOSP/Car
 # Android ライフサイクル起点のシーケンス図を一括出力 (.puml + .svg)
 java -jar PadTools.jar -Q -o ./seq-out ~/AndroidStudioProjects/MyApp
 
-# コンポーネント図 / Manifest 図 / 依存グラフ
+# コンポーネント図 / Manifest 図 / Deep Link 図 / 依存グラフ
 java -jar PadTools.jar -d -o components.svg ~/AndroidStudioProjects/MyApp
 java -jar PadTools.jar -M -o manifest.svg ~/AndroidStudioProjects/MyApp
+java -jar PadTools.jar -D -o deeplinks.svg ~/AndroidStudioProjects/MyApp
 java -jar PadTools.jar -G -o deps.svg ~/AndroidStudioProjects/MyApp
 
 # Markdown プロジェクトサマリー
@@ -99,6 +100,7 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `class-diagram.svg` | UML クラス図 (manifest 自動マージ) |
 | `component-diagram.svg` | Android コンポーネント図 |
 | `manifest-diagram.svg` | AndroidManifest 図 (Application + 配下コンポーネント) |
+| `deeplink-diagram.svg` | Deep Link / App Links 図 (`VIEW + BROWSABLE` intent-filter の URI 入口) |
 | `dependency-graph.svg` | Gradle 依存グラフ |
 | `methods.txt` | シーケンス図の起点候補一覧 (`Class.method`) |
 | `sequence-diagrams/` | Android ライフサイクル起点のシーケンス図群 (`Class.method.puml` + `.svg` を併出力) |
@@ -113,6 +115,7 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 | `-Q` / `--sequence-diagrams` | Android プロジェクトのライフサイクル起点シーケンス図を `-o` ディレクトリへ一括出力 (`.puml` + `.svg`) |
 | `-d` / `--component-diagram` | PlantUML Android コンポーネント図を生成 |
 | `-M` / `--manifest-diagram` | PlantUML AndroidManifest 図を生成 (Application + 配下コンポーネント + permissions + features) |
+| `-D` / `--deeplink-diagram` | PlantUML Deep Link / App Links 図を生成 (`VIEW + BROWSABLE` intent-filter の URI 入口) |
 | `-G` / `--dependency-graph` | PlantUML Gradle 依存グラフを生成 |
 | `-g` / `--gradle` | Gradle ファイル単体を Markdown サマリー化 |
 | `-m` / `--manifest` | AndroidManifest.xml 単体を Markdown サマリー化 |

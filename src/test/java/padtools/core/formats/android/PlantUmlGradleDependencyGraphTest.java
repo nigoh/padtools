@@ -100,4 +100,46 @@ public class PlantUmlGradleDependencyGraphTest {
         String puml = PlantUmlGradleDependencyGraph.generate(build(), o);
         assertFalse(puml, puml.contains("legend right"));
     }
+
+    /**
+     * 集約用ルートプロジェクト (`:root`) のようにエッジを 1 本も持たない
+     * 孤立モジュールは {@code component} 宣言から除外される。
+     *
+     * <p>同梱 PlantUML の Smetana レイアウトが孤立ノードを含むグラフで
+     * {@code IllegalStateException} (qsort 内部) を起こすため。</p>
+     */
+    @Test
+    public void testIsolatedRootModuleOmitted() {
+        AndroidProjectAnalysis a = build();
+        GradleProjectInfo root = new GradleProjectInfo();
+        root.setModuleName(":root");
+        a.getGradleByModule().put(":root", root);
+
+        String puml = PlantUmlGradleDependencyGraph.generate(a);
+        assertFalse("isolated :root module must not appear: " + puml,
+                puml.contains("component \":root\""));
+        assertTrue(puml, puml.contains("component \"app\""));
+        assertTrue(puml, puml.contains("component \"lib\""));
+    }
+
+    /**
+     * 外部ライブラリ非表示オプション下では、外部依存しか持たないモジュールも
+     * 孤立扱いになり {@code component} 宣言から除外される。
+     */
+    @Test
+    public void testExternalOnlyModuleOmittedWhenExternalsDisabled() {
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        GradleProjectInfo solo = new GradleProjectInfo();
+        solo.setModuleName("solo");
+        solo.getPlugins().add("com.android.library");
+        solo.getDependencies().add(new GradleDependency("implementation",
+                "androidx.appcompat:appcompat:1.6.1"));
+        a.getGradleByModule().put("solo", solo);
+
+        PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
+        o.includeExternalLibs = false;
+        String puml = PlantUmlGradleDependencyGraph.generate(a, o);
+        assertFalse("module with only filtered-out deps must not appear: " + puml,
+                puml.contains("component \"solo\""));
+    }
 }

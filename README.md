@@ -127,8 +127,9 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 * Gradle DSL は `android { ... }` 直下の代表的な宣言と `dependencies` ブロックを正規表現で
   抽出します。動的構文 (関数呼び出し / 条件分岐) は best-effort 扱いです。
 * AIDL は `interface` 宣言とそのメソッドを抽出します。`parcelable` 前方宣言は読み飛ばします。
-* PlantUML のキャンバスサイズ上限 (既定 4096×4096) を超える巨大なクラス図は切り詰められる
-  ことがあります。これは PlantUML 側の制約で、本ツールのテキスト出力自体は完全です。
+* PlantUML のキャンバスサイズ上限 (既定 4096×4096) は PNG 出力にのみ作用します。
+  GUI プレビューおよび SVG 出力はベクターで描画されるため、この上限の影響を受けません。
+  PNG エクスポート時に巨大な図が切り詰められる場合は、SVG エクスポートを利用してください。
 * 同梱 PlantUML での SVG 描画は Smetana レイアウトを自動指定するため、Graphviz 不要で
   動作します。Smetana が苦手な巨大グラフは `-o foo.puml` で書き出して、Graphviz を
   別途インストールした上で `plantuml -tsvg foo.puml` を試してください。

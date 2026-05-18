@@ -23,6 +23,17 @@ public final class PlantUmlComponentDiagram {
         public boolean showIntentFilters = true;
         public boolean showPermissions = true;
         public String title;
+        /**
+         * AOSP モードで取り込んだ SELinux ポリシー (.te) の domain と allow ルールを
+         * 同じ図に描画する。{@code AndroidProjectAnalysis.getSepolicies()} が空の
+         * 場合は何も追加されない。
+         */
+        public boolean showSepolicyDomains = true;
+        /**
+         * sepolicy 関連ノードを描画する際に表示する allow ルールの最大本数 (図の爆発防止)。
+         * 0 以下なら無制限。
+         */
+        public int maxSepolicyRules = 80;
     }
 
     /** デフォルト Options で生成。 */
@@ -97,11 +108,85 @@ public final class PlantUmlComponentDiagram {
         if (o.showPermissions) {
             emitPermissions(out, analysis);
         }
+        if (o.showSepolicyDomains && !analysis.getSepolicies().isEmpty()) {
+            emitSepolicyDomains(out, analysis, o);
+        }
         if (o.includeLegend) {
             emitLegend(out, analysis, o);
         }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    /**
+     * sepolicy の domain 型をコンポーネントとして配置し、{@code allow} ルールを
+     * {@code <<allow>>} 矢印で描画する。同じ src→tgt の組は集約して 1 本の矢印にする。
+     */
+    private static void emitSepolicyDomains(StringBuilder out,
+                                              AndroidProjectAnalysis analysis,
+                                              Options o) {
+        Map<String, String> domainAlias = new LinkedHashMap<>();
+        int seq = 0;
+        out.append("package \"sepolicy\" {\n");
+        for (SepolicyInfo te : analysis.getSepolicies()) {
+            for (SepolicyType t : te.getTypes()) {
+                if (!t.isDomain()) {
+                    continue;
+                }
+                if (domainAlias.containsKey(t.getName())) {
+                    continue;
+                }
+                String alias = "D" + (seq++);
+                domainAlias.put(t.getName(), alias);
+                out.append("  component \"").append(t.getName())
+                        .append("\" as ").append(alias)
+                        .append(" <<domain>>\n");
+            }
+        }
+        out.append("}\n");
+        // 集約した allow ルール (src,tgt) → 件数
+        Map<String, int[]> edgeKey = new LinkedHashMap<>();
+        for (SepolicyInfo te : analysis.getSepolicies()) {
+            for (SepolicyRule rule : te.getAllowRules()) {
+                String src = rule.getSourceType();
+                String tgt = rule.getTargetType();
+                if (!domainAlias.containsKey(src)) {
+                    continue;
+                }
+                String key = src + "\t" + tgt;
+                edgeKey.computeIfAbsent(key, k -> new int[]{0})[0]++;
+            }
+        }
+        int emitted = 0;
+        for (Map.Entry<String, int[]> e : edgeKey.entrySet()) {
+            if (o.maxSepolicyRules > 0 && emitted >= o.maxSepolicyRules) {
+                out.append("note as SNOMORE\n  (")
+                        .append(edgeKey.size() - emitted)
+                        .append(" more allow rules truncated)\nend note\n");
+                break;
+            }
+            String[] parts = e.getKey().split("\t", -1);
+            String src = parts[0];
+            String tgt = parts[1];
+            String srcAlias = domainAlias.get(src);
+            String tgtAlias = domainAlias.get(tgt);
+            if (tgtAlias == null) {
+                // target が domain でない場合は別名コンポーネントを暗黙生成
+                tgtAlias = "T" + (seq++);
+                domainAlias.put(tgt, tgtAlias);
+                out.append("component \"").append(tgt)
+                        .append("\" as ").append(tgtAlias)
+                        .append(" <<sepolicy_type>>\n");
+            }
+            int count = e.getValue()[0];
+            out.append(srcAlias).append(" ..> ").append(tgtAlias)
+                    .append(" : <<allow>>");
+            if (count > 1) {
+                out.append(" x").append(count);
+            }
+            out.append('\n');
+            emitted++;
+        }
     }
 
     private static void emitIntentFilters(StringBuilder out,

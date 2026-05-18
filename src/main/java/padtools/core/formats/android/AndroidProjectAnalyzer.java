@@ -116,6 +116,18 @@ public final class AndroidProjectAnalyzer {
                 } catch (RuntimeException ex) {
                     l.onError(f.getName(), -1, "soong parse failed: " + ex.getMessage());
                 }
+            } else if (name.endsWith(".te")) {
+                String content = safeRead(f, l);
+                if (content == null) {
+                    continue;
+                }
+                try {
+                    SepolicyInfo te = SepolicyTeParser.parse(content,
+                            f.getAbsolutePath());
+                    analysis.getSepolicies().add(te);
+                } catch (RuntimeException ex) {
+                    l.onError(f.getName(), -1, "sepolicy parse failed: " + ex.getMessage());
+                }
             }
         }
 

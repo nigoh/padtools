@@ -17,6 +17,7 @@ public class AndroidProjectAnalysis {
     private final Map<String, GradleProjectInfo> gradleByModule = new LinkedHashMap<>();
     private final Map<String, List<AndroidManifestInfo>> manifestsByModule = new LinkedHashMap<>();
     private final List<SoongModuleInfo> soongModules = new ArrayList<>();
+    private final List<SepolicyInfo> sepolicies = new ArrayList<>();
 
     public GradleProjectInfo getRootSettings() {
         return rootSettings;
@@ -58,6 +59,14 @@ public class AndroidProjectAnalysis {
      */
     public List<SoongModuleInfo> getSoongModules() {
         return soongModules;
+    }
+
+    /**
+     * SELinux ポリシー (.te) パーサで取り込んだファイル単位の解析結果。
+     * AOSP モードで {@code includeTe} を有効にしたときのみ非空。
+     */
+    public List<SepolicyInfo> getSepolicies() {
+        return sepolicies;
     }
 
     /** FQN でコンポーネントを検索。 */

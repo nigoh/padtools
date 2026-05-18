@@ -7,6 +7,7 @@ import padtools.core.formats.android.AndroidManifestInfo;
 import padtools.core.formats.android.AndroidManifestParser;
 import padtools.core.formats.android.GradleProjectInfo;
 import padtools.core.formats.android.GradleScriptParser;
+import padtools.core.formats.android.MultiUserRoleReport;
 import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.PlantUmlManifestDiagram;
@@ -188,6 +189,10 @@ public class Main {
         if (optDepGraph.isSet()) {
             handleDependencyGraph(file_in, file_out, listener, legendOverride,
                     optAosp.isSet());
+            return;
+        }
+        if (optMultiUserReport.isSet()) {
+            handleMultiUserReport(file_in, file_out, listener);
             return;
         }
         if (optSummary.isSet()) {
@@ -536,6 +541,7 @@ public class Main {
         if (aospMode) {
             scanOpts.useAospDefaults = true;
             scanOpts.includeBp = true;
+            scanOpts.includeTe = true;
         }
         AndroidProjectAnalysis analysis =
                 AndroidProjectAnalyzer.analyze(fileIn, listener, scanOpts);
@@ -544,6 +550,26 @@ public class Main {
             o.includeLegend = false;
         }
         writeUmlOutput(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
+    }
+
+    /**
+     * {@code --multiuser-report}: manifest と sepolicy から MultiUser ロール分離レポートを
+     * Markdown で生成する。AOSP 級のソースツリーに対して使うことを想定。
+     */
+    private static void handleMultiUserReport(File fileIn, File fileOut,
+                                                ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--multiuser-report requires a project directory.");
+            System.exit(1);
+            return;
+        }
+        AndroidProjectScanner.Options scanOpts = new AndroidProjectScanner.Options();
+        scanOpts.useAospDefaults = true;
+        scanOpts.includeBp = true;
+        scanOpts.includeTe = true;
+        AndroidProjectAnalysis analysis =
+                AndroidProjectAnalyzer.analyze(fileIn, listener, scanOpts);
+        writeText(fileOut, MultiUserRoleReport.generateMarkdown(analysis));
     }
 
     /** {@code --summary}: プロジェクト全体の Markdown サマリーを生成。 */

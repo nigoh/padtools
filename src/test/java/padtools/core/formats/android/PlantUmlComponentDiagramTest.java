@@ -164,4 +164,36 @@ public class PlantUmlComponentDiagramTest {
         String puml = PlantUmlComponentDiagram.generate(a);
         assertFalse(puml, puml.contains("<<src:main>>"));
     }
+
+    @Test
+    public void testSepolicyDomainsAreRendered() {
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        SepolicyInfo te = SepolicyTeParser.parse(
+                "type carservice, domain;\n"
+                        + "type vehicle_hal_server, domain;\n"
+                        + "allow carservice vehicle_hal_server:binder call;\n",
+                "carservice.te");
+        a.getSepolicies().add(te);
+        String puml = PlantUmlComponentDiagram.generate(a);
+        assertTrue(puml, puml.contains("package \"sepolicy\""));
+        assertTrue(puml, puml.contains("<<domain>>"));
+        assertTrue(puml, puml.contains("<<allow>>"));
+        assertTrue(puml, puml.contains("carservice"));
+        assertTrue(puml, puml.contains("vehicle_hal_server"));
+    }
+
+    @Test
+    public void testSepolicyDomainsCanBeDisabled() {
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        SepolicyInfo te = SepolicyTeParser.parse(
+                "type carservice, domain;\n"
+                        + "allow carservice vehicle_hal:binder call;\n",
+                "carservice.te");
+        a.getSepolicies().add(te);
+        PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
+        o.showSepolicyDomains = false;
+        String puml = PlantUmlComponentDiagram.generate(a, o);
+        assertFalse(puml, puml.contains("<<domain>>"));
+        assertFalse(puml, puml.contains("<<allow>>"));
+    }
 }

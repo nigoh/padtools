@@ -47,6 +47,13 @@ public final class PlantUmlClassDiagram {
         public CommentStyle commentStyle = CommentStyle.INLINE;
         /** インライン表示時のコメント 1 件あたり最大文字数。超過分は ... で省略。 */
         public int commentMaxLength = 80;
+        /**
+         * コメント文字列の色 (PlantUML の {@code <color:#RRGGBB>} に渡す値)。
+         * INLINE 表示時はテキストを {@code <color:...>...</color>} で囲み、
+         * NOTE 表示時は note の枠線/文字色 skinparam に適用する。
+         * null または空文字を指定すると色付けを行わない。
+         */
+        public String commentColor = "#008800";
         /** フィールド/メソッドのアノテーションを出力する。 */
         public boolean showAnnotations = true;
         /** {@link #showAnnotations} が true でも表示しないアノテーション名 (ノイズ抑制)。 */
@@ -82,6 +89,15 @@ public final class PlantUmlClassDiagram {
             out.append("title ").append(o.title).append('\n');
         }
         out.append("skinparam classAttributeIconSize 0\n");
+        // NOTE 表示時のコメント色 (枠線・文字) を skinparam で指定する。
+        // INLINE 表示時は <color:...> タグで個別に色付けするためここでは出力しない。
+        if (o.showComments
+                && o.commentStyle == CommentStyle.NOTE
+                && o.commentColor != null
+                && !o.commentColor.isEmpty()) {
+            out.append("skinparam noteBorderColor ").append(o.commentColor).append('\n');
+            out.append("skinparam noteFontColor ").append(o.commentColor).append('\n');
+        }
         // クラスごとに一意のエイリアスを発行する。PlantUML は "a.b.c" 形式の識別子を
         // ネスト/名前空間として解釈してしまうため、引用符付き名 + as エイリアスで切り離す。
         Set<String> knownNames = new HashSet<>();
@@ -249,7 +265,15 @@ public final class PlantUmlClassDiagram {
             return;
         }
         line = sanitizeInlineComment(line, o.commentMaxLength);
-        out.append(indent).append(".. ").append(line).append(" ..\n");
+        out.append(indent).append(".. ");
+        if (o.commentColor != null && !o.commentColor.isEmpty()) {
+            out.append("<color:").append(o.commentColor).append('>')
+                    .append(line)
+                    .append("</color>");
+        } else {
+            out.append(line);
+        }
+        out.append(" ..\n");
     }
 
     /** PlantUML の {@code ..} セパレータと干渉する文字を抑止し、長さも制限する。 */

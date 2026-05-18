@@ -141,11 +141,14 @@ public class JavaImporter {
     }
 
     /**
-     * Java ファイルを選択し、指定された Class.method からシーケンス図 PlantUML を生成する。
+     * Java ファイルを選択し、指定された Class.method からシーケンス図 PlantUML を生成して
+     * {@code .puml} と {@code .svg} の両方をディスクに書き出す。
      * entry が null/空なら、入力ソースを解析して候補リストから選ばせる
      * (前段の "Class.method を手入力" ダイアログから置き換え)。
+     * 出力先は保存ダイアログで尋ねる。
+     * @return 書き出した {@code .puml} ファイル (キャンセル/失敗時は null)
      */
-    public String chooseAndGenerateSequenceDiagram(String entry) {
+    public File chooseAndGenerateSequenceDiagram(String entry) {
         JFileChooser fc = new JFileChooser(".");
         fc.setDialogTitle(Messages.get("dialog.sequenceDiagram.title"));
         fc.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
@@ -187,13 +190,50 @@ public class JavaImporter {
             }
             String entryClass = chosen.substring(0, dot);
             String entryMethod = chosen.substring(dot + 1);
-            String result = PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
+            String puml = PlantUmlSequenceDiagram.generate(infos, entryClass, entryMethod, null);
+
+            // 出力先 .puml を尋ねる
+            File pumlFile = chooseSequenceOutputFile(entryClass + "." + entryMethod);
+            if (pumlFile == null) {
+                return null;
+            }
+            writeIfMissing(pumlFile, puml);
+            File svgFile = withExtension(pumlFile, ".svg");
+            PlantUmlRenderer.renderSvg(puml, svgFile);
             showWarnings(warnings);
-            return result;
+            return pumlFile;
         } catch (IOException ex) {
             showError(ex.getMessage());
             return null;
         }
+    }
+
+    /**
+     * シーケンス図 .puml の保存先を尋ねる。拡張子が無ければ {@code .puml} を自動付与する。
+     */
+    private File chooseSequenceOutputFile(String defaultBaseName) {
+        JFileChooser fc = new JFileChooser(".");
+        fc.setDialogTitle(Messages.get("dialog.sequenceDiagram.saveTitle"));
+        fc.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        fc.setFileFilter(new FileNameExtensionFilter("PlantUML(*.puml)", "puml"));
+        fc.setSelectedFile(new File(defaultBaseName + ".puml"));
+        if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return null;
+        }
+        File chosen = fc.getSelectedFile();
+        String name = chosen.getName();
+        if (!name.toLowerCase(Locale.ROOT).endsWith(".puml")) {
+            chosen = new File(chosen.getParentFile(), name + ".puml");
+        }
+        return chosen;
+    }
+
+    /** 同じディレクトリで指定された拡張子に差し替えたファイル名を返す。 */
+    private static File withExtension(File file, String newExt) {
+        String name = file.getName();
+        int dot = name.lastIndexOf('.');
+        String base = dot >= 0 ? name.substring(0, dot) : name;
+        return new File(file.getParentFile(), base + newExt);
     }
 
     /**

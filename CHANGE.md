@@ -28,6 +28,10 @@ Unreleased
         * キャッシュキー = プロジェクトルート + (path/mtime/size) 列の SHA-256。ファイルが 1 件でも変われば別ディレクトリで自動無効化
         * `lazyDetails=true` + `useDiskCache=true` (デフォルト) で利用
     * **追加テスト**: `AndroidProjectScannerScaleTest`, `UmlGeneratorParallelTest`, `ClassIndexTest`, `DiagramScopeTest`, `DiagramServiceScopeTest`, `JavaClassInfoCodecTest`, `PersistentAnalysisCacheTest`, `CacheKeyTest`, `CancelTokenTest`, `ProgressListenerTest`, `SyntheticAospScaleTest` (`-DrunPerfTests=true` でのみ実行)
+    * **ブラウザ E2E / Swing GUI テスト** (`com.microsoft.playwright:playwright` + `org.assertj:assertj-swing-junit`)
+        * `PlantUmlSvgPlaywrightTest` — 生成 SVG を Chromium (Playwright) でレンダリングし、クラス名がページに現れること・スコープ適用時にクラスが消えることを検証。`build/playwright/class-diagram.png` に PNG スクリーンショットを保存
+        * `UmlMainFrameSwingTest` — `UmlMainFrame` を AssertJ-Swing で起動し、最小プロジェクトをロードしてツリーが構築されることを検証
+        * ヘッドレス CI/サンドボックスでは `Assume.assumeNoException` (Playwright) / `Assume.assumeFalse(isHeadless())` (Swing) で自動 skip。DISPLAY が無ければ `xvfb-run -a ./gradlew test` でラップ
 * **クラス図コメントの色付け** (`PlantUmlClassDiagram`)
     * インラインコメント (`.. text ..`) を `<color:#008800>...</color>` で囲み、クラス本体のメンバーと視覚的に区別できるようにした
     * NOTE スタイルでは `skinparam noteBorderColor` / `skinparam noteFontColor` を自動付与し、注釈ブロックの枠線と文字色を同色に揃える

@@ -91,6 +91,7 @@ public class UmlMainFrame extends JFrame {
 
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
+        treePanel.setOnMethodSelected(this::onTreeMethodSelected);
 
         setJMenuBar(buildMenuBar());
 
@@ -269,6 +270,23 @@ public class UmlMainFrame extends JFrame {
                 refreshDiagram();
             }
         }.execute();
+    }
+
+    /**
+     * 左ペインのツリーでメソッドが選択された際のハンドラ。
+     * シーケンス図モードへ切り替えてその起点メソッドで再描画する。
+     */
+    private void onTreeMethodSelected(ProjectTreePanel.MethodSelection sel) {
+        if (sel == null) {
+            return;
+        }
+        sequenceEntry = sel.getEntry();
+        currentKind = DiagramKind.SEQUENCE;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        refreshDiagram();
     }
 
     private void pickSequenceEntry() {

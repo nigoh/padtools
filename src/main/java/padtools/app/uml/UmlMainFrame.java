@@ -116,7 +116,9 @@ public class UmlMainFrame extends JFrame {
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
+        treePanel.setOnClassSelected(this::onTreeClassSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
+        treePanel.setOnModuleSelected(this::onTreeModuleSelected);
         treePanel.setOnManifestSelected(this::onTreeManifestSelected);
         treePanel.setOnComponentSelected(this::onTreeComponentSelected);
 
@@ -464,6 +466,50 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: package " + pkg);
+        refreshDiagram();
+    }
+
+    /**
+     * 左ペインのツリーでクラスノードが選択された際のハンドラ。
+     * クラス図モードへ切り替え、当該クラスを seed として 1 ホップ近傍に絞ったスコープで再描画する。
+     */
+    private void onTreeClassSelected(JavaClassInfo cls) {
+        if (cls == null) {
+            return;
+        }
+        String fqn = cls.getQualifiedName();
+        if (fqn == null || fqn.isEmpty()) {
+            return;
+        }
+        currentScope = DiagramScope.builder()
+                .seed(fqn)
+                .neighborHops(1)
+                .build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
+        refreshDiagram();
+    }
+
+    /**
+     * 左ペインのツリーでモジュールノードが選択された際のハンドラ。
+     * クラス図モードへ切り替え、当該モジュールに含まれるクラスだけに絞って再描画する。
+     * <p>"(other)" のようなプレースホルダ名は無視する。</p>
+     */
+    private void onTreeModuleSelected(String module) {
+        if (module == null || module.isEmpty() || "(other)".equals(module)) {
+            return;
+        }
+        currentScope = DiagramScope.builder().includeModule(module).build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Scope: module " + module);
         refreshDiagram();
     }
 

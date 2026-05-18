@@ -5,21 +5,30 @@ import padtools.Setting;
 import padtools.util.ErrorListener;
 
 import javax.swing.BorderFactory;
-import javax.swing.ImageIcon;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
+import javax.swing.ButtonGroup;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
+import java.awt.Toolkit;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -28,84 +37,190 @@ import java.io.File;
 /**
  * UML 専用のメインウィンドウ。
  *
- * <p>レイアウトは {@link JSplitPane} の左ペインに「プロジェクト選択 + 図種選択」、
- * 右ペインに PlantUML レンダリング結果を表示するシンプルな構成。
- * PR1 ではスケルトン (最低限のクラス図表示のみ動く) で、PR2 以降で
- * 各図種の詳細な UI / ツリー / シーケンス図起点選択を充実させる。</p>
+ * <p>左ペインに {@link ProjectTreePanel}、右ペインに {@link SvgPreviewPanel}
+ * と {@link PumlSourcePanel} をタブで切り替え表示する。
+ * メニューから図種選択・ズーム操作・エクスポートを行える。</p>
+ *
+ * <p>図の生成と PNG レンダリングは {@link SwingWorker} でバックグラウンド実行し、
+ * 図種/オプション変更時の再描画は {@link Timer} で 300ms デバウンスする。</p>
  */
 public class UmlMainFrame extends JFrame {
 
     private static final String WINDOW_TITLE = "PadTools UML";
+    private static final int MENU_MASK = computeMenuShortcutMask();
+
+    private static int computeMenuShortcutMask() {
+        try {
+            return Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        } catch (java.awt.HeadlessException ex) {
+            return InputEvent.CTRL_DOWN_MASK;
+        }
+    }
 
     private final ProjectAnalysisCache cache = new ProjectAnalysisCache();
-    private final JComboBox<DiagramKind> diagramCombo = new JComboBox<>(DiagramKind.values());
-    private final JLabel projectLabel = new JLabel("(no project loaded)");
-    private final JLabel imageLabel = new JLabel();
+    private final ProjectTreePanel treePanel = new ProjectTreePanel();
+    private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
+    private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
     private final JLabel status = new JLabel(" ");
+    private final JLabel zoomLabel = new JLabel("100%");
+    private final ButtonGroup diagramGroup = new ButtonGroup();
+    private final java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems
+            = new java.util.EnumMap<>(DiagramKind.class);
+
+    private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
+
+    private DiagramKind currentKind = DiagramKind.CLASS;
+    private String currentPuml;
+    /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
+    private String sequenceEntry;
 
     public UmlMainFrame(File initialProject) {
         super(WINDOW_TITLE);
-        setLayout(new BorderLayout(8, 8));
+        setLayout(new BorderLayout());
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                saveWindowState();
                 dispose();
             }
         });
 
-        // 左ペイン: プロジェクト選択 + 図種選択
-        JPanel leftPanel = new JPanel(new BorderLayout(4, 4));
-        leftPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
-        JButton openBtn = new JButton("Open Project...");
-        openBtn.addActionListener(e -> chooseProject());
-        JButton refreshBtn = new JButton("Refresh");
-        refreshBtn.addActionListener(e -> refreshDiagram());
+        refreshTimer.setRepeats(false);
+        previewPanel.setZoomChangeListener(this::updateZoomLabel);
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        top.add(openBtn);
-        top.add(refreshBtn);
+        setJMenuBar(buildMenuBar());
 
-        JPanel labels = new JPanel(new BorderLayout());
-        labels.add(new JLabel("Project:"), BorderLayout.WEST);
-        labels.add(projectLabel, BorderLayout.CENTER);
-
-        diagramCombo.addActionListener(e -> refreshDiagram());
-
-        leftPanel.add(top, BorderLayout.NORTH);
-        JPanel center = new JPanel(new BorderLayout(4, 4));
-        center.add(labels, BorderLayout.NORTH);
-        JPanel form = new JPanel(new BorderLayout(4, 4));
-        form.add(new JLabel("Diagram type:"), BorderLayout.NORTH);
-        form.add(diagramCombo, BorderLayout.CENTER);
-        center.add(form, BorderLayout.CENTER);
-        leftPanel.add(center, BorderLayout.CENTER);
-
-        // 右ペイン: 画像表示
-        imageLabel.setHorizontalAlignment(JLabel.CENTER);
-        imageLabel.setVerticalAlignment(JLabel.CENTER);
-        JScrollPane previewScroll = new JScrollPane(imageLabel);
+        // 右側: プレビュー (画像) と PlantUML ソースのタブ
+        JTabbedPane rightTabs = new JTabbedPane();
+        rightTabs.addTab("Preview", new JScrollPane(previewPanel));
+        rightTabs.addTab("PlantUML Source", sourcePanel);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                leftPanel, previewScroll);
-        split.setResizeWeight(0.25);
+                treePanel, rightTabs);
+        split.setResizeWeight(0.22);
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
 
-        status.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
-        add(status, BorderLayout.SOUTH);
+        add(buildStatusBar(), BorderLayout.SOUTH);
 
         Setting setting = Main.getSetting();
-        int w = setting.getWindowWidth() > 0 ? setting.getWindowWidth() : 1100;
-        int h = setting.getWindowHeight() > 0 ? setting.getWindowHeight() : 700;
+        int w = setting.getWindowWidth() > 0 ? setting.getWindowWidth() : 1200;
+        int h = setting.getWindowHeight() > 0 ? setting.getWindowHeight() : 800;
         setPreferredSize(new Dimension(w, h));
         pack();
-        setLocationRelativeTo(null);
+        restoreWindowLocation(setting);
 
         if (initialProject != null && initialProject.isDirectory()) {
-            loadProject(initialProject);
+            SwingUtilities.invokeLater(() -> loadProject(initialProject));
         }
     }
+
+    // --- メニュー -------------------------------------------------------------
+
+    private JMenuBar buildMenuBar() {
+        JMenuBar bar = new JMenuBar();
+        bar.add(buildFileMenu());
+        bar.add(buildDiagramMenu());
+        bar.add(buildViewMenu());
+        bar.add(buildHelpMenu());
+        return bar;
+    }
+
+    private JMenu buildFileMenu() {
+        JMenu m = new JMenu("File");
+        m.setMnemonic(KeyEvent.VK_F);
+        JMenuItem open = new JMenuItem("Open Project...");
+        open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, MENU_MASK));
+        open.addActionListener(e -> chooseProject());
+        JMenuItem save = new JMenuItem("Save Diagram As...");
+        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK));
+        save.addActionListener(e -> chooseAndExport());
+        JMenuItem refresh = new JMenuItem("Refresh");
+        refresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
+        refresh.addActionListener(e -> refreshDiagram());
+        JMenuItem exit = new JMenuItem("Exit");
+        exit.addActionListener(e -> {
+            saveWindowState();
+            dispose();
+        });
+        m.add(open);
+        m.add(save);
+        m.addSeparator();
+        m.add(refresh);
+        m.addSeparator();
+        m.add(exit);
+        return m;
+    }
+
+    private JMenu buildDiagramMenu() {
+        JMenu m = new JMenu("Diagram");
+        m.setMnemonic(KeyEvent.VK_D);
+        for (DiagramKind k : DiagramKind.values()) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(k.getDisplayName());
+            if (k == DiagramKind.CLASS) {
+                item.setSelected(true);
+            }
+            item.addActionListener(e -> {
+                currentKind = k;
+                refreshDiagram();
+            });
+            diagramGroup.add(item);
+            diagramItems.put(k, item);
+            m.add(item);
+        }
+        m.addSeparator();
+        JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
+        pickEntry.addActionListener(e -> pickSequenceEntry());
+        m.add(pickEntry);
+        return m;
+    }
+
+    private JMenu buildViewMenu() {
+        JMenu m = new JMenu("View");
+        m.setMnemonic(KeyEvent.VK_V);
+        JMenuItem zoomIn = new JMenuItem("Zoom In");
+        zoomIn.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, MENU_MASK));
+        zoomIn.addActionListener(e -> previewPanel.zoomIn());
+        JMenuItem zoomOut = new JMenuItem("Zoom Out");
+        zoomOut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, MENU_MASK));
+        zoomOut.addActionListener(e -> previewPanel.zoomOut());
+        JMenuItem zoomReset = new JMenuItem("Zoom 100%");
+        zoomReset.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, MENU_MASK));
+        zoomReset.addActionListener(e -> previewPanel.zoomReset());
+        JMenuItem zoomFit = new JMenuItem("Zoom to Fit");
+        zoomFit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, MENU_MASK));
+        zoomFit.addActionListener(e -> previewPanel.zoomToFit());
+        m.add(zoomIn);
+        m.add(zoomOut);
+        m.add(zoomReset);
+        m.add(zoomFit);
+        return m;
+    }
+
+    private JMenu buildHelpMenu() {
+        JMenu m = new JMenu("Help");
+        m.setMnemonic(KeyEvent.VK_H);
+        JMenuItem about = new JMenuItem("About");
+        about.addActionListener(e -> JOptionPane.showMessageDialog(this,
+                "PadTools UML\n\n"
+                        + "Java + Android + Gradle UML diagram generator.\n"
+                        + "Bundled PlantUML for rendering.",
+                "About PadTools UML",
+                JOptionPane.INFORMATION_MESSAGE));
+        m.add(about);
+        return m;
+    }
+
+    private JComponent buildStatusBar() {
+        JPanel bar = new JPanel(new BorderLayout(8, 0));
+        bar.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        bar.add(status, BorderLayout.CENTER);
+        bar.add(zoomLabel, BorderLayout.EAST);
+        return bar;
+    }
+
+    // --- イベント処理 ---------------------------------------------------------
 
     private void chooseProject() {
         JFileChooser fc = new JFileChooser();
@@ -119,12 +234,14 @@ public class UmlMainFrame extends JFrame {
 
     private void loadProject(File root) {
         status.setText("Analyzing " + root.getName() + " ...");
+        treePanel.clear();
         new SwingWorker<Void, Void>() {
             private Throwable error;
 
             @Override
             protected Void doInBackground() {
                 try {
+                    cache.clear();
                     cache.load(root, ErrorListener.silent());
                 } catch (Exception ex) {
                     error = ex;
@@ -141,38 +258,73 @@ public class UmlMainFrame extends JFrame {
                     status.setText(" ");
                     return;
                 }
-                projectLabel.setText(root.getAbsolutePath());
-                status.setText("Analyzed " + cache.getClasses().size() + " class(es)");
+                treePanel.populate(cache.getAnalysis(), cache.getClasses(),
+                        root.getName());
+                sequenceEntry = null;
+                status.setText("Analyzed " + cache.getClasses().size() + " class(es)"
+                        + " from " + root.getAbsolutePath());
                 refreshDiagram();
             }
         }.execute();
     }
 
+    private void pickSequenceEntry() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
+        if (dlg.getCandidateCount() == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No methods found in this project.",
+                    "Sequence diagram", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        dlg.setVisible(true);
+        String picked = dlg.getSelectedEntry();
+        if (picked != null) {
+            sequenceEntry = picked;
+            currentKind = DiagramKind.SEQUENCE;
+            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
+            if (item != null) {
+                item.setSelected(true);
+            }
+            refreshDiagram();
+        }
+    }
+
     private void refreshDiagram() {
+        refreshTimer.restart();
+    }
+
+    private void refreshDiagramNow() {
         if (!cache.isLoaded()) {
             return;
         }
-        DiagramKind kind = (DiagramKind) diagramCombo.getSelectedItem();
-        if (kind == null) {
-            return;
-        }
-        if (kind == DiagramKind.SEQUENCE) {
-            // PR1 ではシーケンス図の起点選択 UI 未実装。詳細は PR4 で対応。
-            imageLabel.setIcon(null);
-            imageLabel.setText("Sequence diagram entry selection coming soon.");
-            status.setText("Sequence diagram requires entry method (PR4)");
+        final DiagramKind kind = currentKind;
+        if (kind == DiagramKind.SEQUENCE
+                && (sequenceEntry == null || sequenceEntry.isEmpty())) {
+            previewPanel.setImage(null);
+            sourcePanel.setText("");
+            status.setText("Choose a sequence entry from Diagram menu.");
             return;
         }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
-        new SwingWorker<BufferedImage, Void>() {
+        final String entry = sequenceEntry;
+        new SwingWorker<RenderResult, Void>() {
             private Throwable error;
 
             @Override
-            protected BufferedImage doInBackground() {
+            protected RenderResult doInBackground() {
                 try {
-                    String puml = DiagramService.generatePuml(
-                            new DiagramRequest(kind), cache);
-                    return PlantUmlImageRenderer.toBufferedImage(puml);
+                    DiagramRequest req = (kind == DiagramKind.SEQUENCE && entry != null)
+                            ? buildSequenceRequest(entry)
+                            : new DiagramRequest(kind);
+                    String puml = DiagramService.generatePuml(req, cache);
+                    BufferedImage img = PlantUmlImageRenderer.toBufferedImage(puml);
+                    return new RenderResult(puml, img);
                 } catch (Throwable ex) {
                     error = ex;
                     return null;
@@ -189,16 +341,18 @@ public class UmlMainFrame extends JFrame {
                     return;
                 }
                 try {
-                    BufferedImage img = get();
-                    if (img == null) {
-                        imageLabel.setIcon(null);
-                        imageLabel.setText("(no image)");
+                    RenderResult r = get();
+                    if (r == null || r.image == null) {
+                        previewPanel.setImage(null);
+                        sourcePanel.setText(r != null ? r.puml : "");
+                        status.setText(kind.getDisplayName() + ": (no image)");
                         return;
                     }
-                    imageLabel.setText(null);
-                    imageLabel.setIcon(new ImageIcon(img));
+                    currentPuml = r.puml;
+                    previewPanel.setImage(r.image);
+                    sourcePanel.setText(r.puml);
                     status.setText(kind.getDisplayName() + " rendered ("
-                            + img.getWidth() + "x" + img.getHeight() + ")");
+                            + r.image.getWidth() + "x" + r.image.getHeight() + ")");
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(UmlMainFrame.this,
                             "Failed to display: " + ex.getMessage(),
@@ -206,6 +360,99 @@ public class UmlMainFrame extends JFrame {
                 }
             }
         }.execute();
+    }
+
+    private DiagramRequest buildSequenceRequest(String entry) {
+        int dot = entry.lastIndexOf('.');
+        if (dot < 0) {
+            throw new IllegalArgumentException(
+                    "Sequence entry must be in 'Class.method' format: " + entry);
+        }
+        return new DiagramRequest(DiagramKind.SEQUENCE,
+                entry.substring(0, dot), entry.substring(dot + 1), true);
+    }
+
+    private void chooseAndExport() {
+        if (currentPuml == null || currentPuml.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No diagram to export yet.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Save diagram as");
+        fc.setAcceptAllFileFilterUsed(false);
+        FileNameExtensionFilter svg = new FileNameExtensionFilter("SVG (*.svg)", "svg");
+        FileNameExtensionFilter png = new FileNameExtensionFilter("PNG (*.png)", "png");
+        FileNameExtensionFilter puml = new FileNameExtensionFilter(
+                "PlantUML source (*.puml)", "puml");
+        fc.addChoosableFileFilter(svg);
+        fc.addChoosableFileFilter(png);
+        fc.addChoosableFileFilter(puml);
+        fc.setFileFilter(svg);
+        int r = fc.showSaveDialog(this);
+        if (r != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File chosen = fc.getSelectedFile();
+        UmlExporter.Format fmt = UmlExporter.Format.fromFileName(chosen.getName());
+        if (fmt == null) {
+            // フィルタ選択に応じて拡張子を補完
+            String ext = "svg";
+            if (fc.getFileFilter() == png) {
+                ext = "png";
+            } else if (fc.getFileFilter() == puml) {
+                ext = "puml";
+            }
+            chosen = new File(chosen.getAbsolutePath() + "." + ext);
+            fmt = UmlExporter.Format.fromFileName(chosen.getName());
+        }
+        try {
+            UmlExporter.export(fmt, chosen, currentPuml, previewPanel.getImage());
+            status.setText("Saved: " + chosen.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Export failed: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // --- 状態管理 -------------------------------------------------------------
+
+    private void updateZoomLabel() {
+        int pct = (int) Math.round(previewPanel.getZoomLevel() * 100);
+        zoomLabel.setText(pct + "%");
+    }
+
+    private void restoreWindowLocation(Setting setting) {
+        if (setting.getWindowX() >= 0 && setting.getWindowY() >= 0) {
+            setLocation(setting.getWindowX(), setting.getWindowY());
+        } else {
+            setLocationRelativeTo(null);
+        }
+    }
+
+    private void saveWindowState() {
+        try {
+            Setting setting = Main.getSetting();
+            setting.setWindowX(getX());
+            setting.setWindowY(getY());
+            setting.setWindowWidth(getWidth());
+            setting.setWindowHeight(getHeight());
+            Main.saveSetting();
+        } catch (RuntimeException ignored) {
+            // 設定保存はベストエフォート
+        }
+    }
+
+    private static final class RenderResult {
+        final String puml;
+        final BufferedImage image;
+
+        RenderResult(String puml, BufferedImage image) {
+            this.puml = puml;
+            this.image = image;
+        }
     }
 
     /** GUI を EDT で起動する。 */

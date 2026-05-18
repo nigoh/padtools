@@ -12,7 +12,7 @@ Markdown サマリーを自動生成する機能を追加しました。
 
 動作環境
 ------------------------------------------------
-* Java 11 以上 (JRE / JDK)
+* Java 17 以上 (JRE / JDK)
 * 動作確認: Windows / macOS / Linux
 
 PlantUML 形式の出力 (`.puml`) は別途 [PlantUML](https://plantuml.com/) で PNG / SVG / PDF 化できます。
@@ -222,6 +222,21 @@ java -jar PadTools.jar -m -o manifest.md ./app/src/main/AndroidManifest.xml
 * AIDL は `interface` 宣言とそのメソッドを抽出します。`parcelable` 前方宣言は読み飛ばします。
 * PlantUML のキャンバスサイズ上限 (既定 4096×4096) を超える巨大なクラス図は切り詰められる
   ことがあります。これは PlantUML 側の制約で、本ツールのテキスト出力自体は完全です。
+
+ビルド (開発者向け)
+------------------------------------------------
+
+リポジトリ同梱の Gradle Wrapper (`./gradlew`) を使うと、ローカルに Gradle が
+入っていなくても適切なバージョン (9.4.1) を自動取得してビルドできます。
+必要環境は Java 17 以上のみです。
+
+```sh
+./gradlew check        # テスト + Checkstyle
+./gradlew jar          # build/libs/PadTools.jar を生成
+./gradlew makeZip      # 配布用 zip (jar + 依存 libs/) を生成
+```
+
+Gradle 8.x (8.14+) でも同じ `build.gradle` で動作します。
 
 ライセンス
 ------------------------------------------------

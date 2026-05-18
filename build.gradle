@@ -1,73 +1,67 @@
-group 'com.padtools'
-version '1.5'
+plugins {
+    id 'java'
+    id 'checkstyle'
+}
 
-apply plugin: 'java'
-apply plugin: 'checkstyle'
+group = 'com.padtools'
+version = '1.5'
 
-sourceCompatibility = 11
-targetCompatibility = 11
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
 
 repositories {
     mavenCentral()
-    maven { url 'https://oss.sonatype.org/service/local/repositories/releases/content/' }
-}
-dependencies {
-    implementation 'org.apache.xmlgraphics:batik-svggen:1.14'
-    implementation 'org.apache.xmlgraphics:batik-dom:1.14'
-    implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
-    implementation group: 'org.jfree', name: 'jfreesvg', version: '3.3'
-    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
+    maven { url = uri('https://oss.sonatype.org/service/local/repositories/releases/content/') }
 }
 
+dependencies {
+    implementation 'org.apache.xmlgraphics:batik-svggen:1.17'
+    implementation 'org.apache.xmlgraphics:batik-dom:1.17'
+    implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
+    testImplementation 'junit:junit:4.13.2'
+}
 
 def defaultEncoding = 'UTF-8'
-
-compileJava {
-    options.encoding = defaultEncoding
-}
-
-compileTestJava {
+tasks.withType(JavaCompile).configureEach {
     options.encoding = defaultEncoding
 }
 
 test {
     useJUnit()
     testLogging {
-        events "passed", "skipped", "failed"
+        events 'passed', 'skipped', 'failed'
         showStandardStreams = false
     }
 }
 
 jar {
-    archiveFileName = "PadTools.jar"
+    archiveFileName = 'PadTools.jar'
     manifest {
-        attributes 'Main-Class' : "padtools.Main"
-        attributes 'Class-Path' : configurations.runtimeClasspath.collect{'libs/' + it.name}.join(' ')
+        attributes 'Main-Class': 'padtools.Main'
+        attributes 'Class-Path': configurations.runtimeClasspath.collect { 'libs/' + it.name }.join(' ')
     }
 }
 
 checkstyle {
-    toolVersion = '10.12.5'
+    toolVersion = '10.21.1'
     configFile = file("${projectDir}/config/checkstyle/checkstyle.xml")
     ignoreFailures = false
     maxWarnings = 0
 }
 
-checkstyleMain {
-    source = 'src/main/java'
-}
+tasks.named('checkstyleMain') { source = 'src/main/java' }
+tasks.named('checkstyleTest') { source = 'src/test/java' }
 
-checkstyleTest {
-    source = 'src/test/java'
-}
-
-task makeZip(type : Zip, dependsOn: ['jar']) {
+tasks.register('makeZip', Zip) {
+    dependsOn 'jar'
     outputs.upToDateWhen { false }
 
     from 'bundle'
     from 'build/libs/PadTools.jar'
 
-    into ('libs') {
+    into('libs') {
         from configurations.runtimeClasspath
     }
 }

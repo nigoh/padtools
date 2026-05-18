@@ -14,6 +14,7 @@ public class JavaFieldInfo {
     private boolean isStatic;
     private boolean isFinal;
     private final List<String> annotations = new ArrayList<>();
+    private String comment;
 
     public String getName() {
         return name;
@@ -57,5 +58,14 @@ public class JavaFieldInfo {
 
     public List<String> getAnnotations() {
         return annotations;
+    }
+
+    /** JavaDoc / 直前コメントを整形した文字列。未取得時は null。 */
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 }

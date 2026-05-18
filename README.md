@@ -100,9 +100,22 @@ java -jar PadTools.jar -c -J -o app.puml ~/AndroidStudioProjects/MyApp
 java -jar PadTools.jar -c -J --no-manifest-merge -o app.svg ~/AndroidStudioProjects/MyApp
 ```
 
-可視性 `+ - # ~`、`{static}` / `{abstract}` 修飾、継承 `<|--` / 実装 `<|..` / 利用 `-->` 関係、
+可視性 `+ - # ~`、`{static}` / `{abstract}` / `{final}` 修飾、継承 `<|--` / 実装 `<|..` / 利用 `-->` 関係、
 AAOS パターン (`<<CarManager>>` 等)、AndroidManifest 連携 (`<<Activity>>` `<<Service>>` 等)、
 凡例ブロックがデフォルトで出力されます。
+
+JavaDoc / 直前コメント・メンバーアノテーション (`@Nullable` 等)・enum 定数も
+デフォルトで描画されます。コメントは既定でインライン形式 (`.. text ..` セパレータ) で、
+クラス本体の中に埋め込まれます。
+
+```sh
+# コメントを吹き出し (note) 形式に切替
+java -jar PadTools.jar -c --comment-style note -o my.svg MyClass.java
+
+# 個別に抑制 (それぞれ単独で指定可能)
+java -jar PadTools.jar -c --no-comments --no-annotations \
+    --no-enum-constants --no-final -o my.svg MyClass.java
+```
 
 ### UML シーケンス図 (PlantUML)
 

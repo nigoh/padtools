@@ -39,6 +39,7 @@ public class JavaMethodInfo {
     private boolean isConstructor;
     private final List<String> annotations = new ArrayList<>();
     private final List<Call> calls = new ArrayList<>();
+    private String comment;
 
     public String getName() {
         return name;
@@ -102,5 +103,14 @@ public class JavaMethodInfo {
 
     public List<Call> getCalls() {
         return calls;
+    }
+
+    /** JavaDoc / 直前コメントを整形した文字列。未取得時は null。 */
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 }

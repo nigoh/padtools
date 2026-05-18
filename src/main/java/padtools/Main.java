@@ -89,13 +89,20 @@ public class Main {
         final Option optSummary = new Option(null, "summary", false);
         final Option optAll = new Option("A", "all", false);
         final Option optNoManifestMerge = new Option(null, "no-manifest-merge", false);
+        final Option optNoComments = new Option(null, "no-comments", false);
+        final Option optCommentStyle = new Option(null, "comment-style", true);
+        final Option optNoAnnotations = new Option(null, "no-annotations", false);
+        final Option optNoEnumConstants = new Option(null, "no-enum-constants", false);
+        final Option optNoFinal = new Option(null, "no-final", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut, optScale, optJava, optJavaProject,
                 optClassDiagram, optSequenceDiagram, optVerbose,
                 optLegend, optNoLegend,
                 optGradle, optManifest, optComponent, optDepGraph, optSummary,
-                optAll, optNoManifestMerge});
+                optAll, optNoManifestMerge,
+                optNoComments, optCommentStyle, optNoAnnotations,
+                optNoEnumConstants, optNoFinal});
 
         try {
             optParser.parse(args, 1);
@@ -146,8 +153,15 @@ public class Main {
             legendOverride = Boolean.FALSE;
         }
         boolean mergeManifest = !optNoManifestMerge.isSet();
+        ClassDiagramOverrides clsOverrides = buildClassDiagramOverrides(
+                optNoComments, optNoAnnotations, optNoEnumConstants,
+                optNoFinal, optCommentStyle);
+        if (clsOverrides == null) {
+            return; // 引数エラー: buildClassDiagramOverrides 内で System.exit 済み
+        }
         if (optAll.isSet()) {
-            handleAll(file_in, file_out, listener, legendOverride, mergeManifest);
+            handleAll(file_in, file_out, listener, legendOverride, mergeManifest,
+                    clsOverrides);
             return;
         }
         if (optGradle.isSet()) {
@@ -175,7 +189,7 @@ public class Main {
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
                             ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener, legendOverride, mergeManifest);
+                    listener, legendOverride, mergeManifest, clsOverrides);
             return;
         }
         if (optJava.isSet() || optJavaProject.isSet()) {
@@ -285,12 +299,65 @@ public class Main {
      * @param classDiagram true でクラス図モード
      * @param sequenceEntry "Class.method" 形式のエントリ。null/空ならシーケンス図モードを無効化
      */
+    /**
+     * CLI 引数から {@link ClassDiagramOverrides} を組み立てる。
+     * --comment-style が不正値の場合は {@code System.exit(1)} で終了して null を返す。
+     */
+    private static ClassDiagramOverrides buildClassDiagramOverrides(
+            Option optNoComments, Option optNoAnnotations,
+            Option optNoEnumConstants, Option optNoFinal,
+            Option optCommentStyle) {
+        ClassDiagramOverrides o = new ClassDiagramOverrides();
+        o.showComments = !optNoComments.isSet();
+        o.showAnnotations = !optNoAnnotations.isSet();
+        o.showEnumConstants = !optNoEnumConstants.isSet();
+        o.showFinal = !optNoFinal.isSet();
+        if (!optCommentStyle.getArguments().isEmpty()) {
+            String style = optCommentStyle.getArguments().getLast().toLowerCase();
+            if ("note".equals(style)) {
+                o.commentStyle =
+                        padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.NOTE;
+            } else if ("inline".equals(style)) {
+                o.commentStyle =
+                        padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
+            } else {
+                System.err.println("Invalid --comment-style: " + style
+                        + " (expected: inline | note)");
+                System.exit(1);
+                return null;
+            }
+        }
+        return o;
+    }
+
+    /**
+     * CLI から指定された、クラス図の出力で上書きするオプション値の束。
+     * {@code -A}/{@code -c} 双方の経路から共通で使う。
+     */
+    static final class ClassDiagramOverrides {
+        boolean showComments = true;
+        boolean showAnnotations = true;
+        boolean showEnumConstants = true;
+        boolean showFinal = true;
+        padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle commentStyle =
+                padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
+
+        void applyTo(padtools.core.formats.uml.PlantUmlClassDiagram.Options o) {
+            o.showComments = showComments;
+            o.showAnnotations = showAnnotations;
+            o.showEnumConstants = showEnumConstants;
+            o.showFinal = showFinal;
+            o.commentStyle = commentStyle;
+        }
+    }
+
     private static void handleUmlInput(File fileIn, File fileOut,
                                         boolean classDiagram,
                                         String sequenceEntry,
                                         ErrorListener listener,
                                         Boolean legendOverride,
-                                        boolean mergeManifest) throws IOException {
+                                        boolean mergeManifest,
+                                        ClassDiagramOverrides clsOverrides) throws IOException {
         if (fileIn == null) {
             System.err.println("UML generation requires an input file or directory.");
             System.exit(1);
@@ -327,6 +394,9 @@ public class Main {
                     = new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
             if (Boolean.FALSE.equals(legendOverride)) {
                 clOpts.includeLegend = false;
+            }
+            if (clsOverrides != null) {
+                clsOverrides.applyTo(clOpts);
             }
             output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
@@ -437,7 +507,8 @@ public class Main {
     private static void handleAll(File fileIn, File fileOut,
                                     ErrorListener listener,
                                     Boolean legendOverride,
-                                    boolean mergeManifest) throws IOException {
+                                    boolean mergeManifest,
+                                    ClassDiagramOverrides clsOverrides) throws IOException {
         if (fileIn == null || !fileIn.isDirectory()) {
             System.err.println("--all requires a project directory.");
             System.exit(1);
@@ -507,6 +578,9 @@ public class Main {
                 new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
         if (Boolean.FALSE.equals(legendOverride)) {
             clsOpts.includeLegend = false;
+        }
+        if (clsOverrides != null) {
+            clsOverrides.applyTo(clsOpts);
         }
         File clsFile = new File(fileOut, "class-diagram.svg");
         PlantUmlRenderer.renderSvg(
@@ -600,6 +674,12 @@ public class Main {
         System.err.println("  -A --all: Output ALL artifacts as SVG "
                 + "(summary.md + 4 svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
+        System.err.println("  --no-comments: Disable JavaDoc/comment rendering in class diagram.");
+        System.err.println("  --comment-style inline|note: "
+                + "Choose comment placement (default: inline).");
+        System.err.println("  --no-annotations: Disable @annotation rendering in class diagram.");
+        System.err.println("  --no-enum-constants: Disable enum constant rendering.");
+        System.err.println("  --no-final: Disable {final} marker on final fields.");
         System.err.println("  input: SPD by default, or Java/AIDL/dir with -j/-J/-c/-q/-g/-m/-d/-G/--summary/-A.");
     }
 }

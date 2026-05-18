@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -17,6 +18,14 @@ import java.util.regex.Pattern;
  */
 public final class PlantUmlClassDiagram {
 
+    /** コメント表示スタイル。 */
+    public enum CommentStyle {
+        /** クラス本体内に {@code .. text ..} セパレータでコメントを埋め込む (コンパクト)。 */
+        INLINE,
+        /** クラス・メンバーに対して {@code note ...} ブロックを発行する (詳細)。 */
+        NOTE
+    }
+
     /** 出力オプション。 */
     public static class Options {
         public boolean showVisibility = true;
@@ -32,6 +41,21 @@ public final class PlantUmlClassDiagram {
         public int maxUsagePerClass = 30;
         /** タイトル文字列 (null で省略)。 */
         public String title;
+        /** JavaDoc / 直前コメントを出力する。 */
+        public boolean showComments = true;
+        /** コメント表示スタイル。 */
+        public CommentStyle commentStyle = CommentStyle.INLINE;
+        /** インライン表示時のコメント 1 件あたり最大文字数。超過分は ... で省略。 */
+        public int commentMaxLength = 80;
+        /** フィールド/メソッドのアノテーションを出力する。 */
+        public boolean showAnnotations = true;
+        /** {@link #showAnnotations} が true でも表示しないアノテーション名 (ノイズ抑制)。 */
+        public Set<String> hiddenAnnotations = new HashSet<>(
+                Arrays.asList("Override", "SuppressWarnings"));
+        /** enum 定数を表示する。 */
+        public boolean showEnumConstants = true;
+        /** {@code final} フィールドに {@code &#123;final&#125;} マーカーを付ける。 */
+        public boolean showFinal = true;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -114,164 +138,30 @@ public final class PlantUmlClassDiagram {
             }
         }
         if (o.includeLegend) {
-            emitLegend(out, classes, o);
+            PlantUmlClassLegend.emit(out, classes, o);
         }
         out.append("@enduml\n");
         return out.toString();
     }
 
-    /**
-     * ダイアグラム末尾に凡例ブロックを書き出す。実際に出現するステレオタイプや関係のみを
-     * 列挙して、不要な行を増やさないようにする。
-     */
-    private static void emitLegend(StringBuilder out, List<JavaClassInfo> classes,
-                                    Options o) {
-        // 利用関係を実際に発行するかは emit ロジックと同じフィルタで判定
-        Set<String> known = new HashSet<>();
-        for (JavaClassInfo c : classes) {
-            known.add(c.getQualifiedName());
+    static boolean hasVisibleAnnotation(List<String> annotations, Options o) {
+        if (annotations == null || annotations.isEmpty()) {
+            return false;
         }
-        // 出現するステレオタイプを収集
-        Set<String> stereos = new LinkedHashSet<>();
-        boolean hasAbstractClass = false;
-        boolean hasInterface = false;
-        boolean hasEnum = false;
-        boolean hasAnnotation = false;
-        boolean hasStatic = false;
-        boolean hasAbstractMember = false;
-        boolean hasInheritance = false;
-        boolean hasImplements = false;
-        boolean hasUsage = false;
-        for (JavaClassInfo c : classes) {
-            if (o.markAaosCategories) {
-                String cat = c.getAaosCategory();
-                if (cat == null) {
-                    cat = AaosPattern.categorize(c);
-                }
-                if (cat != null) {
-                    stereos.add(cat);
-                }
+        for (String a : annotations) {
+            if (a == null || a.isEmpty()) {
+                continue;
             }
-            if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
-                stereos.add("aidl");
+            String name = annotationName(a);
+            if (o.hiddenAnnotations != null && o.hiddenAnnotations.contains(name)) {
+                continue;
             }
-            switch (c.getKind()) {
-                case INTERFACE:
-                case AIDL_INTERFACE:
-                    hasInterface = true;
-                    break;
-                case ENUM:
-                    hasEnum = true;
-                    break;
-                case ANNOTATION:
-                    hasAnnotation = true;
-                    break;
-                case CLASS:
-                default:
-                    if (c.isAbstract()) {
-                        hasAbstractClass = true;
-                    }
-                    break;
-            }
-            if (c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
-                hasInheritance = true;
-            }
-            if (!c.getInterfaces().isEmpty()) {
-                hasImplements = true;
-            }
-            for (JavaFieldInfo f : c.getFields()) {
-                if (f.isStatic()) {
-                    hasStatic = true;
-                }
-                // emitUsage と同じ条件で「実際に矢印を引くか」を判定する
-                if (!hasUsage) {
-                    String tgt = pickUsageTarget(f.getType(), known);
-                    if (tgt != null && !tgt.equals(c.getQualifiedName())
-                            && !tgt.equals(c.getSimpleName())) {
-                        hasUsage = true;
-                    }
-                }
-            }
-            for (JavaMethodInfo m : c.getMethods()) {
-                if (m.isStatic()) {
-                    hasStatic = true;
-                }
-                if (m.isAbstract()) {
-                    hasAbstractMember = true;
-                }
-            }
+            return true;
         }
-
-        out.append("legend right\n");
-        if (o.showVisibility) {
-            out.append("== 可視性 ==\n");
-            out.append("+ public\n");
-            out.append("- private\n");
-            out.append("# protected\n");
-            out.append("~ package-private\n");
-        }
-        if (hasStatic || hasAbstractMember) {
-            out.append("== メンバー修飾 ==\n");
-            if (hasStatic) {
-                out.append("{static}    静的 (static)\n");
-            }
-            if (hasAbstractMember) {
-                out.append("{abstract}  抽象 (abstract)\n");
-            }
-        }
-        if (hasAbstractClass || hasInterface || hasEnum || hasAnnotation) {
-            out.append("== クラス種別 ==\n");
-            out.append("class        通常クラス\n");
-            if (hasAbstractClass) {
-                out.append("abstract     抽象クラス\n");
-            }
-            if (hasInterface) {
-                out.append("interface    インタフェース\n");
-            }
-            if (hasEnum) {
-                out.append("enum         列挙型\n");
-            }
-            if (hasAnnotation) {
-                out.append("annotation   アノテーション型\n");
-            }
-        }
-        if (!stereos.isEmpty()) {
-            out.append("== AAOS ステレオタイプ ==\n");
-            for (String s : stereos) {
-                out.append("<<").append(s).append(">> ").append(stereoDesc(s)).append('\n');
-            }
-        }
-        Set<String> androidStereos = new LinkedHashSet<>();
-        for (JavaClassInfo c : classes) {
-            String t = c.getAndroidComponentType();
-            if (t != null && !t.isEmpty()) {
-                androidStereos.add(t);
-            }
-        }
-        if (!androidStereos.isEmpty()) {
-            out.append("== Android コンポーネント ==\n");
-            for (String s : androidStereos) {
-                out.append("<<").append(s).append(">> ").append(androidStereoDesc(s)).append('\n');
-            }
-        }
-        boolean anyRelation = (o.showInheritance && (hasInheritance || hasImplements))
-                || (o.showUsageRelations && hasUsage);
-        if (anyRelation) {
-            out.append("== 関係 ==\n");
-            if (o.showInheritance && hasInheritance) {
-                out.append("A <|-- B  : B extends A (継承)\n");
-            }
-            if (o.showInheritance && hasImplements) {
-                out.append("A <|.. B  : B implements A (実装)\n");
-            }
-            if (o.showUsageRelations && hasUsage) {
-                out.append("A --> B   : A uses B (利用関係)\n");
-            }
-        }
-        out.append("endlegend\n");
+        return false;
     }
 
-    private static String stereoDesc(String stereo) {
+    static String stereoDesc(String stereo) {
         switch (stereo) {
             case "CarManager": return "AAOS の Car*Manager クラス";
             case "CarService": return "AAOS の Car*Service クラス";
@@ -283,7 +173,7 @@ public final class PlantUmlClassDiagram {
         }
     }
 
-    private static String androidStereoDesc(String stereo) {
+    static String androidStereoDesc(String stereo) {
         switch (stereo) {
             case "Activity": return "AndroidManifest.xml の <activity>";
             case "Service": return "AndroidManifest.xml の <service>";
@@ -308,17 +198,119 @@ public final class PlantUmlClassDiagram {
             out.append(' ').append(stereo);
         }
         out.append(" {\n");
+        // INLINE 表示時はクラスコメントを本体の先頭に置く
+        if (o.showComments && o.commentStyle == CommentStyle.INLINE) {
+            emitInlineComment(out, c.getComment(), o, indent + "  ");
+        }
+        if (o.showEnumConstants
+                && c.getKind() == JavaClassInfo.Kind.ENUM
+                && !c.getEnumConstants().isEmpty()) {
+            for (String name : c.getEnumConstants()) {
+                out.append(indent).append("  ").append(name).append('\n');
+            }
+            // 定数と他メンバーの区切り (PlantUML の区切り線)
+            boolean hasOtherMembers = (o.showFields && !c.getFields().isEmpty())
+                    || (o.showMethods && !c.getMethods().isEmpty());
+            if (hasOtherMembers) {
+                out.append(indent).append("  --\n");
+            }
+        }
         if (o.showFields) {
             for (JavaFieldInfo f : c.getFields()) {
+                if (o.showComments && o.commentStyle == CommentStyle.INLINE) {
+                    emitInlineComment(out, f.getComment(), o, indent + "  ");
+                }
                 emitField(out, f, o, indent + "  ");
             }
         }
         if (o.showMethods) {
             for (JavaMethodInfo m : c.getMethods()) {
+                if (o.showComments && o.commentStyle == CommentStyle.INLINE) {
+                    emitInlineComment(out, m.getComment(), o, indent + "  ");
+                }
                 emitMethod(out, m, o, indent + "  ");
             }
         }
         out.append(indent).append("}\n");
+        // NOTE 表示時はクラスの外に note ブロックを発行
+        if (o.showComments && o.commentStyle == CommentStyle.NOTE && alias != null) {
+            emitNoteBlocks(out, c, alias, o, indent);
+        }
+    }
+
+    /** INLINE モード用のコメント行 {@code .. text ..} を 1 行発行する。空コメントは何もしない。 */
+    private static void emitInlineComment(StringBuilder out, String comment,
+                                           Options o, String indent) {
+        if (comment == null || comment.isEmpty()) {
+            return;
+        }
+        String line = JavaCommentScanner.firstLine(comment);
+        if (line.isEmpty()) {
+            return;
+        }
+        line = sanitizeInlineComment(line, o.commentMaxLength);
+        out.append(indent).append(".. ").append(line).append(" ..\n");
+    }
+
+    /** PlantUML の {@code ..} セパレータと干渉する文字を抑止し、長さも制限する。 */
+    private static String sanitizeInlineComment(String s, int maxLen) {
+        // PlantUML の class body 内でレイアウトを乱す制御文字を除去
+        String t = s.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ').trim();
+        // 末尾の '..' は区切りと干渉するためスペースに置換
+        t = t.replaceAll("\\.\\.+$", ".");
+        if (maxLen > 0 && t.length() > maxLen) {
+            t = t.substring(0, Math.max(1, maxLen - 1)) + "…";
+        }
+        return t;
+    }
+
+    /** NOTE モード: クラス・各メンバーの JavaDoc を {@code note ...} で出力。 */
+    private static void emitNoteBlocks(StringBuilder out, JavaClassInfo c,
+                                        String alias, Options o, String indent) {
+        if (c.getComment() != null && !c.getComment().isEmpty()) {
+            out.append(indent).append("note top of ").append(alias).append('\n');
+            appendNoteBody(out, c.getComment(), indent);
+            out.append(indent).append("end note\n");
+        }
+        if (o.showFields) {
+            for (JavaFieldInfo f : c.getFields()) {
+                if (f.getComment() == null || f.getComment().isEmpty()) {
+                    continue;
+                }
+                if (f.getName() == null || f.getName().isEmpty()) {
+                    continue;
+                }
+                out.append(indent).append("note right of ").append(alias).append("::")
+                        .append(f.getName()).append('\n');
+                appendNoteBody(out, f.getComment(), indent);
+                out.append(indent).append("end note\n");
+            }
+        }
+        if (o.showMethods) {
+            for (JavaMethodInfo m : c.getMethods()) {
+                if (m.getComment() == null || m.getComment().isEmpty()) {
+                    continue;
+                }
+                if (m.getName() == null || m.getName().isEmpty()) {
+                    continue;
+                }
+                out.append(indent).append("note right of ").append(alias).append("::")
+                        .append(m.getName()).append('\n');
+                appendNoteBody(out, m.getComment(), indent);
+                out.append(indent).append("end note\n");
+            }
+        }
+    }
+
+    private static void appendNoteBody(StringBuilder out, String comment, String indent) {
+        String[] lines = comment.split("\n", -1);
+        for (String line : lines) {
+            String t = line.replace('\r', ' ').replace('\t', ' ').trim();
+            if (t.isEmpty()) {
+                continue;
+            }
+            out.append(indent).append("  ").append(t).append('\n');
+        }
     }
 
     private static String classKeyword(JavaClassInfo c) {
@@ -377,6 +369,10 @@ public final class PlantUmlClassDiagram {
         if (f.isStatic()) {
             out.append("{static} ");
         }
+        if (o.showFinal && f.isFinal()) {
+            out.append("{final} ");
+        }
+        appendAnnotations(out, f.getAnnotations(), o);
         if (f.getName() != null && !f.getName().isEmpty()) {
             out.append(f.getName());
         }
@@ -384,6 +380,38 @@ public final class PlantUmlClassDiagram {
             out.append(": ").append(f.getType());
         }
         out.append('\n');
+    }
+
+    /** PlantUML 行に表示するアノテーションを {@code @Foo @Bar } 形式で追記する。 */
+    private static void appendAnnotations(StringBuilder out, List<String> annotations,
+                                           Options o) {
+        if (!o.showAnnotations || annotations == null || annotations.isEmpty()) {
+            return;
+        }
+        for (String raw : annotations) {
+            if (raw == null || raw.isEmpty()) {
+                continue;
+            }
+            String name = annotationName(raw);
+            if (o.hiddenAnnotations != null && o.hiddenAnnotations.contains(name)) {
+                continue;
+            }
+            out.append('@').append(name).append(' ');
+        }
+    }
+
+    /** {@code "Nullable"} や {@code "Retention(RetentionPolicy.RUNTIME)"} から名前部分を取り出す。 */
+    private static String annotationName(String raw) {
+        String s = raw.trim();
+        int paren = s.indexOf('(');
+        if (paren >= 0) {
+            s = s.substring(0, paren);
+        }
+        int dot = s.lastIndexOf('.');
+        if (dot >= 0) {
+            s = s.substring(dot + 1);
+        }
+        return s;
     }
 
     private static void emitMethod(StringBuilder out, JavaMethodInfo m,
@@ -398,6 +426,7 @@ public final class PlantUmlClassDiagram {
         if (m.isAbstract()) {
             out.append("{abstract} ");
         }
+        appendAnnotations(out, m.getAnnotations(), o);
         out.append(m.getName() == null ? "" : m.getName()).append('(');
         for (int i = 0; i < m.getParameterTypes().size(); i++) {
             if (i > 0) {
@@ -501,7 +530,7 @@ public final class PlantUmlClassDiagram {
     }
 
     /** 型参照 (たとえば {@code Map<String, Foo>}) から、利用対象となるユーザ定義型を推定する。 */
-    private static String pickUsageTarget(String type, Set<String> known) {
+    static String pickUsageTarget(String type, Set<String> known) {
         if (type == null || type.isEmpty()) {
             return null;
         }

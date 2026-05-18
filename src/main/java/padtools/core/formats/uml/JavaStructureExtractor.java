@@ -37,7 +37,8 @@ public final class JavaStructureExtractor {
             throw new IllegalArgumentException("source is null");
         }
         List<JavaToken> tokens = new JavaLexer(source).tokenize();
-        Extractor e = new Extractor(tokens, source,
+        List<JavaCommentScanner.Comment> comments = JavaCommentScanner.scan(source);
+        Extractor e = new Extractor(tokens, source, comments,
                 listener != null ? listener : ErrorListener.silent());
         e.parseFile();
         return Collections.unmodifiableList(e.results);
@@ -50,16 +51,24 @@ public final class JavaStructureExtractor {
     private static final class Extractor {
         private final List<JavaToken> tokens;
         private final String src;
+        private final List<JavaCommentScanner.Comment> comments;
         private final ErrorListener listener;
         private final List<JavaClassInfo> results = new ArrayList<>();
         private final List<JavaClassInfo> classStack = new ArrayList<>();
         private String packageName = "";
         private int idx;
 
-        Extractor(List<JavaToken> tokens, String src, ErrorListener listener) {
+        Extractor(List<JavaToken> tokens, String src,
+                  List<JavaCommentScanner.Comment> comments,
+                  ErrorListener listener) {
             this.tokens = tokens;
             this.src = src;
+            this.comments = comments;
             this.listener = listener;
+        }
+
+        private String findCommentBefore(int pos) {
+            return JavaCommentScanner.findCommentBefore(src, comments, pos);
         }
 
         private void warn(int line, String msg) {
@@ -104,26 +113,28 @@ public final class JavaStructureExtractor {
                     skipUntilSemicolon();
                     continue;
                 }
+                int declStart = atEnd() ? -1 : peek().start;
                 List<String> ann = readAnnotations();
                 List<String> mods = readModifiers();
                 if (atEnd()) {
                     break;
                 }
+                String comment = findCommentBefore(declStart);
                 if (peek().is("@") && peek(1).isKw("interface")) {
                     next(); // @
-                    parseClassDecl(JavaClassInfo.Kind.ANNOTATION, mods, ann);
+                    parseClassDecl(JavaClassInfo.Kind.ANNOTATION, mods, ann, comment);
                     continue;
                 }
                 if (peek().isKw("class")) {
-                    parseClassDecl(JavaClassInfo.Kind.CLASS, mods, ann);
+                    parseClassDecl(JavaClassInfo.Kind.CLASS, mods, ann, comment);
                     continue;
                 }
                 if (peek().isKw("interface")) {
-                    parseClassDecl(JavaClassInfo.Kind.INTERFACE, mods, ann);
+                    parseClassDecl(JavaClassInfo.Kind.INTERFACE, mods, ann, comment);
                     continue;
                 }
                 if (peek().isKw("enum")) {
-                    parseClassDecl(JavaClassInfo.Kind.ENUM, mods, ann);
+                    parseClassDecl(JavaClassInfo.Kind.ENUM, mods, ann, comment);
                     continue;
                 }
                 next();
@@ -131,7 +142,7 @@ public final class JavaStructureExtractor {
         }
 
         private void parseClassDecl(JavaClassInfo.Kind kind, List<String> mods,
-                                     List<String> annotations) {
+                                     List<String> annotations, String comment) {
             next(); // class/interface/enum
             String name = "Anonymous";
             if (peek().type == JavaToken.Type.IDENT) {
@@ -143,6 +154,7 @@ public final class JavaStructureExtractor {
             info.setPackageName(packageName);
             info.getModifiers().addAll(mods);
             info.getAnnotations().addAll(annotations);
+            info.setComment(comment);
             if (!classStack.isEmpty()) {
                 String outerName = buildEnclosingPath();
                 info.setEnclosingClass(outerName);
@@ -182,13 +194,46 @@ public final class JavaStructureExtractor {
             classStack.add(info);
             try {
                 if (kind == JavaClassInfo.Kind.ENUM) {
-                    skipEnumConstants();
+                    parseEnumConstants(info);
                 }
                 parseClassBody(info);
             } finally {
                 classStack.remove(classStack.size() - 1);
             }
             results.add(info);
+        }
+
+        /** enum 定数を ; or } まで読み取り、引数/無名サブクラス body は名前のみ拾って中身はスキップ。 */
+        private void parseEnumConstants(JavaClassInfo cls) {
+            while (!atEnd()) {
+                if (peek().is("}")) {
+                    return;
+                }
+                if (peek().is(";")) {
+                    next();
+                    return;
+                }
+                if (peek().is(",")) {
+                    next();
+                    continue;
+                }
+                readAnnotations();
+                if (atEnd()) {
+                    return;
+                }
+                if (peek().type != JavaToken.Type.IDENT) {
+                    next();
+                    continue;
+                }
+                String constName = next().text;
+                cls.getEnumConstants().add(constName);
+                if (peek().is("(")) {
+                    skipBalanced("(", ")");
+                }
+                if (peek().is("{")) {
+                    skipBalanced("{", "}");
+                }
+            }
         }
 
         private String buildEnclosingPath() {
@@ -202,27 +247,6 @@ public final class JavaStructureExtractor {
             return sb.toString();
         }
 
-        private void skipEnumConstants() {
-            // enum 定数列を ; or } まで読み飛ばす
-            int depth = 0;
-            while (!atEnd()) {
-                JavaToken t = peek();
-                if (depth == 0 && t.is(";")) {
-                    next();
-                    return;
-                }
-                if (depth == 0 && t.is("}")) {
-                    return;
-                }
-                if (t.is("(") || t.is("[") || t.is("{")) {
-                    depth++;
-                } else if (t.is(")") || t.is("]") || t.is("}")) {
-                    depth--;
-                }
-                next();
-            }
-        }
-
         private void parseClassBody(JavaClassInfo cls) {
             while (!atEnd()) {
                 if (peek().is("}")) {
@@ -233,41 +257,43 @@ public final class JavaStructureExtractor {
                     next();
                     continue;
                 }
+                int declStart = peek().start;
                 List<String> annotations = readAnnotations();
                 List<String> mods = readModifiers();
+                if (atEnd() || peek().is("}")) {
+                    continue;
+                }
+                String comment = findCommentBefore(declStart);
 
                 if (peek().isKw("class")) {
-                    parseClassDecl(JavaClassInfo.Kind.CLASS, mods, annotations);
+                    parseClassDecl(JavaClassInfo.Kind.CLASS, mods, annotations, comment);
                     continue;
                 }
                 if (peek().isKw("interface")) {
-                    parseClassDecl(JavaClassInfo.Kind.INTERFACE, mods, annotations);
+                    parseClassDecl(JavaClassInfo.Kind.INTERFACE, mods, annotations, comment);
                     continue;
                 }
                 if (peek().isKw("enum")) {
-                    parseClassDecl(JavaClassInfo.Kind.ENUM, mods, annotations);
+                    parseClassDecl(JavaClassInfo.Kind.ENUM, mods, annotations, comment);
                     continue;
                 }
                 if (peek().is("@") && peek(1).isKw("interface")) {
                     next();
-                    parseClassDecl(JavaClassInfo.Kind.ANNOTATION, mods, annotations);
+                    parseClassDecl(JavaClassInfo.Kind.ANNOTATION, mods, annotations, comment);
                     continue;
                 }
                 if (peek().is("{")) {
                     skipBalanced("{", "}");
                     continue;
                 }
-                if (atEnd() || peek().is("}")) {
-                    continue;
-                }
-                if (!parseMember(cls, mods, annotations)) {
+                if (!parseMember(cls, mods, annotations, comment)) {
                     next();
                 }
             }
         }
 
         private boolean parseMember(JavaClassInfo cls, List<String> mods,
-                                     List<String> annotations) {
+                                     List<String> annotations, String comment) {
             int save = idx;
             if (peek().is("<")) {
                 skipBalanced("<", ">");
@@ -279,17 +305,17 @@ public final class JavaStructureExtractor {
                 if (depth == 0) {
                     if (t.is(";")) {
                         idx = save;
-                        parseFieldDecl(cls, mods, annotations);
+                        parseFieldDecl(cls, mods, annotations, comment);
                         return true;
                     }
                     if (t.is("=")) {
                         idx = save;
-                        parseFieldDecl(cls, mods, annotations);
+                        parseFieldDecl(cls, mods, annotations, comment);
                         return true;
                     }
                     if (t.is("(")) {
                         idx = save;
-                        parseMethodDecl(cls, mods, annotations);
+                        parseMethodDecl(cls, mods, annotations, comment);
                         return true;
                     }
                     if (t.is("{") || t.is("}")) {
@@ -313,7 +339,7 @@ public final class JavaStructureExtractor {
         }
 
         private void parseFieldDecl(JavaClassInfo cls, List<String> mods,
-                                     List<String> annotations) {
+                                     List<String> annotations, String comment) {
             int startPos = peek().start;
             int lastIdentEnd = startPos;
             String fieldName = "";
@@ -348,13 +374,14 @@ public final class JavaStructureExtractor {
             f.setStatic(mods.contains("static"));
             f.setFinal(mods.contains("final"));
             f.getAnnotations().addAll(annotations);
+            f.setComment(comment);
             cls.getFields().add(f);
             // ; までスキップ
             skipUntilSemicolonRespectingBlocks();
         }
 
         private void parseMethodDecl(JavaClassInfo cls, List<String> mods,
-                                      List<String> annotations) {
+                                      List<String> annotations, String comment) {
             if (peek().is("<")) {
                 skipBalanced("<", ">");
             }
@@ -387,6 +414,7 @@ public final class JavaStructureExtractor {
                     || cls.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE);
             m.setConstructor(isConstructor);
             m.getAnnotations().addAll(annotations);
+            m.setComment(comment);
             // パラメータ
             parseParameters(m);
             // throws ...

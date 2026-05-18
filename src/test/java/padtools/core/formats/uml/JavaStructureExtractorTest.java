@@ -246,6 +246,96 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testJavadocAttachedToClass() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "/** クラスの説明 */\nclass A {}");
+        assertEquals("クラスの説明", cs.get(0).getComment());
+    }
+
+    @Test
+    public void testJavadocAttachedToFieldAndMethod() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  /** 数値フィールド */\n"
+                        + "  int x;\n"
+                        + "  /** 計算する */\n"
+                        + "  int calc() { return 0; }\n"
+                        + "}");
+        JavaClassInfo c = cs.get(0);
+        assertEquals("数値フィールド", c.getFields().get(0).getComment());
+        assertEquals("計算する", c.getMethods().get(0).getComment());
+    }
+
+    @Test
+    public void testLineCommentsMergedAndAttachedToMember() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  // 1 行目\n"
+                        + "  // 2 行目\n"
+                        + "  int x;\n"
+                        + "}");
+        // 連続行コメントが改行で結合されて取れる
+        assertEquals("1 行目\n2 行目", cs.get(0).getFields().get(0).getComment());
+    }
+
+    @Test
+    public void testCommentNotAttachedAcrossOtherDeclarations() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  /** doc for foo */\n"
+                        + "  int foo;\n"
+                        + "  int bar;\n"
+                        + "}");
+        assertEquals("doc for foo", cs.get(0).getFields().get(0).getComment());
+        // bar には付かない
+        assertNull(cs.get(0).getFields().get(1).getComment());
+    }
+
+    @Test
+    public void testJavadocStripsAtTagLines() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  /**\n"
+                        + "   * 引数を 2 倍にする。\n"
+                        + "   * @param x 入力値\n"
+                        + "   * @return 2 倍\n"
+                        + "   */\n"
+                        + "  int twice(int x) { return x * 2; }\n"
+                        + "}");
+        String c = cs.get(0).getMethods().get(0).getComment();
+        assertNotNull(c);
+        assertTrue(c, c.contains("引数を 2 倍にする。"));
+        assertFalse(c, c.contains("@param"));
+        assertFalse(c, c.contains("@return"));
+    }
+
+    @Test
+    public void testEnumConstantsCaptured() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "enum Color { RED, GREEN, BLUE }");
+        assertEquals(3, cs.get(0).getEnumConstants().size());
+        assertEquals("RED", cs.get(0).getEnumConstants().get(0));
+        assertEquals("GREEN", cs.get(0).getEnumConstants().get(1));
+        assertEquals("BLUE", cs.get(0).getEnumConstants().get(2));
+    }
+
+    @Test
+    public void testEnumConstantsWithArgsAndBody() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "enum Op {\n"
+                        + "  ADD(\"+\"),\n"
+                        + "  SUB(\"-\") { int apply(int a, int b) { return a - b; } };\n"
+                        + "  Op(String s) {}\n"
+                        + "}");
+        // 定数 2 つが取れる (引数や無名サブクラス body は読み飛ばす)
+        assertEquals(2, cs.get(0).getEnumConstants().size());
+        assertEquals("ADD", cs.get(0).getEnumConstants().get(0));
+        assertEquals("SUB", cs.get(0).getEnumConstants().get(1));
+        // 通常メンバー (コンストラクタ) も拾える
+        assertFalse(cs.get(0).getMethods().isEmpty());
+    }
+
+    @Test
     public void testStringWithBraces() {
         List<JavaClassInfo> cs = JavaStructureExtractor.extract(
                 "class A { String s = \"{foo}\"; void m() {} }");

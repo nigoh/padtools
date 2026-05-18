@@ -326,6 +326,56 @@ public class PlantUmlSequenceDiagramTest {
         assertEquals("A.zero", list.get(2).getEntry());
     }
 
+    // ------------ プロジェクト内クラスの色付け ------------
+
+    @Test
+    public void testProjectClassColoredByDefault() {
+        // A, B はプロジェクト内クラス、Service は外部クラス
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; Service s; void run() { b.act(); s.go(); } } "
+                        + "class B { void act() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        // 解析済みクラスは色付き
+        assertTrue(puml, puml.contains("participant \"A\" #LightSkyBlue"));
+        assertTrue(puml, puml.contains("participant \"B\" #LightSkyBlue"));
+        // 外部クラスと Caller は色なし
+        assertTrue(puml, puml.contains("participant \"Service\"\n"));
+        assertTrue(puml, puml.contains("participant \"Caller\"\n"));
+    }
+
+    @Test
+    public void testProjectClassColorDisabled() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.highlightProjectClasses = false;
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // 色は出さない
+        assertFalse(puml, puml.contains("#LightSkyBlue"));
+        assertTrue(puml, puml.contains("participant \"A\"\n"));
+    }
+
+    @Test
+    public void testProjectClassColorCustom() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.projectClassColor = "#FFE4B5";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertTrue(puml, puml.contains("participant \"A\" #FFE4B5"));
+    }
+
+    @Test
+    public void testProjectClassColorEmptyStringDisablesColoring() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.projectClassColor = "";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertFalse(puml, puml.contains("#LightSkyBlue"));
+        assertTrue(puml, puml.contains("participant \"A\"\n"));
+    }
+
     @Test
     public void testListCandidatesExcludesAbstract() {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(

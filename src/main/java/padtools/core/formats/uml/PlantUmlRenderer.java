@@ -18,7 +18,28 @@ import java.io.OutputStream;
  */
 public final class PlantUmlRenderer {
 
+    /**
+     * 現在のスタイル設定。{@link #injectLayout(String)} 経由で挿入される。
+     * 起動時に設定ファイルから読み込んだ値で上書きされる想定。GUI から変更可能。
+     */
+    private static volatile DiagramStyle currentStyle = DiagramStyle.defaults();
+
     private PlantUmlRenderer() {
+    }
+
+    /** 現在のスタイルを取得する。null 安全 (常に非 null を返す)。 */
+    public static DiagramStyle getStyle() {
+        DiagramStyle s = currentStyle;
+        return s != null ? s : DiagramStyle.defaults();
+    }
+
+    /**
+     * 現在のスタイルを更新する。以降の {@link #renderSvg} 系および
+     * {@link #injectLayout(String)} 呼び出しに即時反映される。
+     * null を渡すと既定スタイルにリセットする。
+     */
+    public static void setStyle(DiagramStyle style) {
+        currentStyle = style != null ? style.copy() : DiagramStyle.defaults();
     }
 
     /** PlantUML テキストを SVG として OutputStream に書き出す。 */
@@ -35,24 +56,45 @@ public final class PlantUmlRenderer {
     }
 
     /**
-     * {@code @startuml} の直後に {@code !pragma layout smetana} を挿入する。
+     * {@code @startuml} の直後に {@code !pragma layout smetana} と、現在の
+     * {@link #getStyle() スタイル} 由来の {@code !theme} / {@code skinparam} 行を挿入する。
      * Graphviz/dot 未インストール環境でもクラス図/コンポーネント図を描画できるようにする。
-     * 既に {@code !pragma layout} 指定があれば変更しない。
+     * 既に {@code !pragma layout} 指定があれば layout 行は重複追加しない (スタイル行は追加する)。
      */
     public static String injectLayout(String puml) {
-        if (puml == null || puml.contains("!pragma layout")) {
-            return puml;
+        return injectLayout(puml, getStyle());
+    }
+
+    /**
+     * スタイルを明示指定する {@link #injectLayout(String)} のオーバーロード (テスト用に公開)。
+     */
+    public static String injectLayout(String puml, DiagramStyle style) {
+        if (puml == null) {
+            return null;
         }
         int idx = puml.indexOf("@startuml");
         if (idx < 0) {
             return puml;
         }
+        boolean hasLayoutPragma = puml.contains("!pragma layout");
+        String prelude = style != null ? style.toPlantUmlPrelude() : "";
+        if (hasLayoutPragma && prelude.isEmpty()) {
+            return puml;
+        }
+        StringBuilder injected = new StringBuilder();
+        if (!hasLayoutPragma) {
+            injected.append("!pragma layout smetana\n");
+        }
+        injected.append(prelude);
+        if (injected.length() == 0) {
+            return puml;
+        }
         int nl = puml.indexOf('\n', idx);
         if (nl < 0) {
-            return puml + "\n!pragma layout smetana\n";
+            return puml + "\n" + injected.toString();
         }
         return puml.substring(0, nl + 1)
-                + "!pragma layout smetana\n"
+                + injected.toString()
                 + puml.substring(nl + 1);
     }
 }

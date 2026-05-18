@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Setting クラスのユニットテスト。
@@ -126,6 +128,45 @@ public class SettingTest {
         DiagramStyle s = loaded.getStyle();
         assertEquals("", s.getTheme());
         assertEquals(DiagramStyle.Direction.DEFAULT, s.getDirection());
+    }
+
+    @Test
+    public void testSequenceCommentDefaults() {
+        Setting s = new Setting();
+        assertTrue(s.isSequenceShowComments());
+        assertEquals("INLINE", s.getSequenceCommentStyle());
+    }
+
+    @Test
+    public void testSequenceCommentRoundTrip() throws IOException {
+        Setting original = new Setting();
+        original.setSequenceShowComments(false);
+        original.setSequenceCommentStyle("NOTE");
+
+        File file = tempFolder.newFile("settings-seq.xml");
+        original.saveToFile(file);
+
+        Setting loaded = Setting.loadFromFile(file);
+        assertFalse(loaded.isSequenceShowComments());
+        assertEquals("NOTE", loaded.getSequenceCommentStyle());
+    }
+
+    @Test
+    public void testSequenceCommentLegacyFallsBackToDefaults() throws IOException {
+        // sequence.* キーを持たない旧 XML を読んでも既定値で初期化される
+        File file = tempFolder.newFile("legacy-no-seq.xml");
+        String legacy = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<!DOCTYPE properties SYSTEM "
+                + "\"http://java.sun.com/dtd/properties.dtd\">"
+                + "<properties>"
+                + "<entry key=\"windowWidth\">1024</entry>"
+                + "</properties>";
+        java.nio.file.Files.write(file.toPath(),
+                legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        Setting loaded = Setting.loadFromFile(file);
+        assertTrue(loaded.isSequenceShowComments());
+        assertEquals("INLINE", loaded.getSequenceCommentStyle());
     }
 
     @Test

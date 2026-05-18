@@ -1,12 +1,14 @@
 package padtools.app.uml;
 
 import padtools.core.formats.uml.DiagramStyle;
+import padtools.core.formats.uml.PlantUmlClassDiagram;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
@@ -14,10 +16,12 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
 import javax.swing.JSpinner;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -54,19 +58,42 @@ public final class StyleSettingsDialog extends JDialog {
     private final JRadioButton dirLeftRight = new JRadioButton("Left to right");
     private final JRadioButton dirTopBottom = new JRadioButton("Top to bottom (explicit)");
     private final JTextArea customSkinparamArea = new JTextArea(6, 32);
+    private final JCheckBox sequenceShowCommentsCheckbox =
+            new JCheckBox("Show JavaDoc / source comments as notes");
+    private final JComboBox<String> sequenceCommentStyleCombo =
+            new JComboBox<>(new String[] { "INLINE", "NOTE" });
 
-    private DiagramStyle result;
+    private Result result;
 
-    private StyleSettingsDialog(Window owner, DiagramStyle initial) {
+    /** ダイアログの戻り値 (Style + シーケンス図コメント設定)。 */
+    public static final class Result {
+        public final DiagramStyle style;
+        public final boolean sequenceShowComments;
+        public final PlantUmlClassDiagram.CommentStyle sequenceCommentStyle;
+
+        public Result(DiagramStyle style, boolean sequenceShowComments,
+                      PlantUmlClassDiagram.CommentStyle sequenceCommentStyle) {
+            this.style = style;
+            this.sequenceShowComments = sequenceShowComments;
+            this.sequenceCommentStyle = sequenceCommentStyle;
+        }
+    }
+
+    private StyleSettingsDialog(Window owner, DiagramStyle initial,
+                                 boolean initialSeqShowComments,
+                                 PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle) {
         super(owner, "UML Style Settings", Dialog.ModalityType.APPLICATION_MODAL);
         setLayout(new BorderLayout());
-        add(buildForm(initial), BorderLayout.CENTER);
+        add(buildForm(initial, initialSeqShowComments, initialSeqCommentStyle),
+                BorderLayout.CENTER);
         add(buildButtons(), BorderLayout.SOUTH);
         pack();
         setLocationRelativeTo(owner);
     }
 
-    private JPanel buildForm(DiagramStyle initial) {
+    private JPanel buildForm(DiagramStyle initial,
+                              boolean initialSeqShowComments,
+                              PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle) {
         JPanel form = new JPanel(new GridBagLayout());
         form.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         GridBagConstraints c = new GridBagConstraints();
@@ -165,6 +192,53 @@ public final class StyleSettingsDialog extends JDialog {
         c.gridwidth = 2; c.fill = GridBagConstraints.BOTH;
         form.add(skinScroll, c);
         c.gridwidth = 1; c.fill = GridBagConstraints.HORIZONTAL; c.weighty = 0;
+        c.anchor = GridBagConstraints.WEST;
+        row++;
+
+        // 区切り線 (Sequence Diagram セクション)
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        c.insets = new Insets(10, 4, 4, 4);
+        form.add(new JSeparator(SwingConstants.HORIZONTAL), c);
+        c.insets = new Insets(4, 4, 4, 4);
+        c.gridwidth = 1;
+        row++;
+
+        // セクション見出し
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        JLabel seqHeading = new JLabel("Sequence Diagram");
+        seqHeading.setFont(seqHeading.getFont().deriveFont(java.awt.Font.BOLD));
+        form.add(seqHeading, c);
+        c.gridwidth = 1;
+        row++;
+
+        // コメント表示 ON/OFF
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Comments:"), c);
+        sequenceShowCommentsCheckbox.setSelected(initialSeqShowComments);
+        sequenceShowCommentsCheckbox.setToolTipText(
+                "Render class / method JavaDoc and body comments as notes "
+                        + "at the top of sequence diagrams.");
+        sequenceShowCommentsCheckbox.addActionListener(
+                e -> sequenceCommentStyleCombo.setEnabled(
+                        sequenceShowCommentsCheckbox.isSelected()));
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(sequenceShowCommentsCheckbox, c);
+        c.gridwidth = 1;
+        row++;
+
+        // コメントスタイル
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Comment style:"), c);
+        sequenceCommentStyleCombo.setSelectedItem(
+                initialSeqCommentStyle == PlantUmlClassDiagram.CommentStyle.NOTE
+                        ? "NOTE" : "INLINE");
+        sequenceCommentStyleCombo.setEnabled(initialSeqShowComments);
+        sequenceCommentStyleCombo.setToolTipText(
+                "INLINE: short single-line note per participant. "
+                        + "NOTE: multi-line note block grouping class & method JavaDoc.");
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(sequenceCommentStyleCombo, c);
+        c.gridwidth = 1;
 
         return form;
     }
@@ -198,6 +272,9 @@ public final class StyleSettingsDialog extends JDialog {
         fontSizeSpinner.setValue(d.getFontSize());
         dirDefault.setSelected(true);
         customSkinparamArea.setText(d.getCustomSkinparam());
+        sequenceShowCommentsCheckbox.setSelected(true);
+        sequenceCommentStyleCombo.setSelectedItem("INLINE");
+        sequenceCommentStyleCombo.setEnabled(true);
     }
 
     private void pickBackgroundColor() {
@@ -225,7 +302,7 @@ public final class StyleSettingsDialog extends JDialog {
         }
     }
 
-    private DiagramStyle collect() {
+    private Result collect() {
         DiagramStyle s = new DiagramStyle();
         Object themeSel = themeCombo.getSelectedItem();
         s.setTheme(themeSel != null ? themeSel.toString() : "");
@@ -240,19 +317,29 @@ public final class StyleSettingsDialog extends JDialog {
             s.setDirection(DiagramStyle.Direction.DEFAULT);
         }
         s.setCustomSkinparam(customSkinparamArea.getText());
-        return s;
+        Object styleSel = sequenceCommentStyleCombo.getSelectedItem();
+        PlantUmlClassDiagram.CommentStyle cs = "NOTE".equals(styleSel)
+                ? PlantUmlClassDiagram.CommentStyle.NOTE
+                : PlantUmlClassDiagram.CommentStyle.INLINE;
+        return new Result(s, sequenceShowCommentsCheckbox.isSelected(), cs);
     }
 
     /**
-     * モーダルダイアログを開き、編集された {@link DiagramStyle} を返す。
+     * モーダルダイアログを開き、編集された {@link Result} (Style + シーケンス図コメント設定) を返す。
      * キャンセル時は null を返す。
      */
-    public static DiagramStyle showDialog(Component parent, DiagramStyle current) {
+    public static Result showDialog(Component parent, DiagramStyle currentStyle,
+                                     boolean currentSeqShowComments,
+                                     PlantUmlClassDiagram.CommentStyle currentSeqCommentStyle) {
         Window owner = (parent instanceof Window)
                 ? (Window) parent
                 : javax.swing.SwingUtilities.getWindowAncestor(parent);
-        DiagramStyle initial = current != null ? current.copy() : DiagramStyle.defaults();
-        StyleSettingsDialog dlg = new StyleSettingsDialog(owner, initial);
+        DiagramStyle initial = currentStyle != null
+                ? currentStyle.copy() : DiagramStyle.defaults();
+        PlantUmlClassDiagram.CommentStyle initialSeqStyle = currentSeqCommentStyle != null
+                ? currentSeqCommentStyle : PlantUmlClassDiagram.CommentStyle.INLINE;
+        StyleSettingsDialog dlg = new StyleSettingsDialog(owner, initial,
+                currentSeqShowComments, initialSeqStyle);
         dlg.setVisible(true);
         return dlg.result;
     }

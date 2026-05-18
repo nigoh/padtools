@@ -158,7 +158,7 @@ public class Main {
         }
         if (optSequenceDiagrams.isSet()) {
             handleSequenceDiagrams(file_in, file_out, listener,
-                    legendOverride, mergeManifest, umlOverrides.seqDepth);
+                    legendOverride, mergeManifest, umlOverrides);
             return;
         }
         if (optAll.isSet()) {
@@ -282,8 +282,11 @@ public class Main {
             if (Boolean.FALSE.equals(legendOverride)) {
                 sqOpts.includeLegend = false;
             }
-            if (overrides != null && overrides.seqDepth != null) {
-                sqOpts.maxDepth = overrides.seqDepth;
+            if (overrides != null) {
+                overrides.applyTo(sqOpts);
+                if (overrides.seqDepth != null) {
+                    sqOpts.maxDepth = overrides.seqDepth;
+                }
             }
             output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
                     infos, entryClass, entryMethod, sqOpts);
@@ -342,7 +345,7 @@ public class Main {
                                                  ErrorListener listener,
                                                  Boolean legendOverride,
                                                  boolean mergeManifest,
-                                                 Integer seqDepth) throws IOException {
+                                                 UmlOverrides overrides) throws IOException {
         if (fileIn == null || !fileIn.isDirectory()) {
             System.err.println("--sequence-diagrams requires a project directory.");
             System.exit(1);
@@ -370,7 +373,7 @@ public class Main {
                 UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
         progress.step("Generating sequence diagrams (.puml + .svg)");
         int count = generateLifecycleSequenceDiagrams(infos, fileOut, legendOverride,
-                seqDepth, progress, listener);
+                overrides, progress, listener);
         progress.wrote(fileOut, "(" + count + " diagram(s))");
         progress.done(fileOut, System.currentTimeMillis() - startMs);
     }
@@ -680,7 +683,7 @@ public class Main {
             System.err.println("[padtools]     Skipping sequence-diagrams (cannot create dir)");
         } else {
             int seqCount = generateLifecycleSequenceDiagrams(infos, seqDir, legendOverride,
-                    overrides.seqDepth, progress, listener);
+                    overrides, progress, listener);
             progress.wrote(seqDir, "(" + seqCount + " diagram(s), .puml + .svg)");
         }
 
@@ -696,7 +699,7 @@ public class Main {
             java.util.List<padtools.core.formats.uml.JavaClassInfo> infos,
             File outDir,
             Boolean legendOverride,
-            Integer seqDepth,
+            UmlOverrides overrides,
             ProgressLogger progress,
             ErrorListener listener) throws IOException {
         padtools.core.formats.uml.PlantUmlSequenceDiagram.Options sqOpts
@@ -704,8 +707,11 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             sqOpts.includeLegend = false;
         }
-        if (seqDepth != null) {
-            sqOpts.maxDepth = seqDepth;
+        if (overrides != null) {
+            overrides.applyTo(sqOpts);
+            if (overrides.seqDepth != null) {
+                sqOpts.maxDepth = overrides.seqDepth;
+            }
         }
         java.util.List<LifecycleSequenceDiagrams.Entry> entries =
                 LifecycleSequenceDiagrams.generateAll(infos, sqOpts);
@@ -775,9 +781,10 @@ public class Main {
         System.err.println("  -A --all: Output ALL artifacts as SVG "
                 + "(summary.md + svg files) to the directory specified by -o.");
         System.err.println("  --no-manifest-merge: Disable manifest auto-merge in class diagram.");
-        System.err.println("  --no-comments: Disable JavaDoc/comment rendering in class diagram.");
+        System.err.println("  --no-comments: Disable JavaDoc/comment rendering"
+                + " in class & sequence diagrams.");
         System.err.println("  --comment-style inline|note: "
-                + "Choose comment placement (default: inline).");
+                + "Choose comment placement for class & sequence diagrams (default: inline).");
         System.err.println("  --no-annotations: Disable @annotation rendering in class diagram.");
         System.err.println("  --no-enum-constants: Disable enum constant rendering.");
         System.err.println("  --no-final: Disable {final} marker on final fields.");

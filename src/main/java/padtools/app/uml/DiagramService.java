@@ -110,6 +110,7 @@ public final class DiagramService {
                         ? promoteToDetailed(classes, index) : classes;
                 PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
+                applySequenceCommentSettings(o);
                 return PlantUmlSequenceDiagram.generate(source, cls, method, o);
             }
             case COMPONENT: {
@@ -130,6 +131,28 @@ public final class DiagramService {
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());
+        }
+    }
+
+    /**
+     * シーケンス図のコメント表示設定 ({@code showComments} / {@code commentStyle}) を
+     * {@link padtools.SettingManager} から読み出して {@link PlantUmlSequenceDiagram.Options} に反映する。
+     * SettingManager が利用できない場合 (テスト / 単体実行) は既定値のまま。
+     */
+    private static void applySequenceCommentSettings(PlantUmlSequenceDiagram.Options o) {
+        try {
+            padtools.Setting s = padtools.SettingManager.getInstance().getSetting();
+            if (s == null) {
+                return;
+            }
+            o.showComments = s.isSequenceShowComments();
+            if ("NOTE".equalsIgnoreCase(s.getSequenceCommentStyle())) {
+                o.commentStyle = padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.NOTE;
+            } else {
+                o.commentStyle = padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
+            }
+        } catch (RuntimeException ignored) {
+            // 設定取得失敗時は既定値のまま (showComments=true, INLINE)
         }
     }
 

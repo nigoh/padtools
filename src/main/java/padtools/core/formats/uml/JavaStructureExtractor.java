@@ -461,9 +461,34 @@ public final class JavaStructureExtractor {
                 cls.getMethods().add(m);
                 return;
             }
+            JavaToken openBrace = peek();
             next();
             extractCallsInBody(m);
+            // extractCallsInBody は対応する '}' を消費して戻る。
+            // 直前に消費したトークン (= '}') の start を本体終端とする。
+            int bodyStart = openBrace.end;
+            int bodyEnd = idx > 0 ? tokens.get(idx - 1).start : openBrace.end;
+            collectBodyComments(m, bodyStart, bodyEnd);
             cls.getMethods().add(m);
+        }
+
+        /** {@code [bodyStart, bodyEnd)} の範囲にあるコメントを {@link JavaMethodInfo#getBodyComments()} に追加する。 */
+        private void collectBodyComments(JavaMethodInfo m, int bodyStart, int bodyEnd) {
+            if (comments == null || comments.isEmpty() || bodyEnd <= bodyStart) {
+                return;
+            }
+            for (JavaCommentScanner.Comment c : comments) {
+                if (c.start >= bodyEnd) {
+                    break;
+                }
+                if (c.start < bodyStart) {
+                    continue;
+                }
+                String t = JavaCommentScanner.cleanText(c);
+                if (!t.isEmpty()) {
+                    m.getBodyComments().add(t);
+                }
+            }
         }
 
         private void parseParameters(JavaMethodInfo m) {

@@ -310,6 +310,29 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testMethodBodyCommentsExtracted() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  void run() {\n"
+                        + "    // step1: 前処理\n"
+                        + "    /* step2: 本処理 */\n"
+                        + "    doIt();\n"
+                        + "    // step3: 後処理\n"
+                        + "  }\n"
+                        + "  void doIt() {}\n"
+                        + "}");
+        JavaMethodInfo run = cs.get(0).getMethods().get(0);
+        List<String> bc = run.getBodyComments();
+        assertEquals(3, bc.size());
+        assertEquals("step1: 前処理", bc.get(0));
+        assertEquals("step2: 本処理", bc.get(1));
+        assertEquals("step3: 後処理", bc.get(2));
+        // 別メソッドの本体コメントは混ざらない
+        JavaMethodInfo doIt = cs.get(0).getMethods().get(1);
+        assertTrue(doIt.getBodyComments().isEmpty());
+    }
+
+    @Test
     public void testEnumConstantsCaptured() {
         List<JavaClassInfo> cs = JavaStructureExtractor.extract(
                 "enum Color { RED, GREEN, BLUE }");

@@ -30,6 +30,12 @@ final class UmlOverrides {
         }
     }
 
+    /** シーケンス図向けにコメント関連オプションを適用する。 */
+    void applyTo(padtools.core.formats.uml.PlantUmlSequenceDiagram.Options o) {
+        o.showComments = showComments;
+        o.commentStyle = commentStyle;
+    }
+
     /**
      * CLI 引数から {@link UmlOverrides} を組み立てる。
      * 不正値の場合は {@code System.exit(1)} で終了して null を返す。

@@ -35,6 +35,10 @@ public class Setting {
     private int styleFontSize = 0;
     private String styleDirection = DiagramStyle.Direction.DEFAULT.name();
     private String styleCustomSkinparam = "";
+    /** シーケンス図に JavaDoc / コメントを note として表示するか。 */
+    private boolean sequenceShowComments = true;
+    /** シーケンス図のコメント表示スタイル ("INLINE" | "NOTE")。 */
+    private String sequenceCommentStyle = "INLINE";
 
     public int getWindowX() { return windowX; }
     public void setWindowX(int windowX) { this.windowX = windowX; }
@@ -48,6 +52,13 @@ public class Setting {
     public void setMainSplitLocation(int mainSplitLocation) { this.mainSplitLocation = mainSplitLocation; }
     public int getLeftSplitLocation() { return leftSplitLocation; }
     public void setLeftSplitLocation(int leftSplitLocation) { this.leftSplitLocation = leftSplitLocation; }
+
+    public boolean isSequenceShowComments() { return sequenceShowComments; }
+    public void setSequenceShowComments(boolean v) { this.sequenceShowComments = v; }
+    public String getSequenceCommentStyle() { return sequenceCommentStyle; }
+    public void setSequenceCommentStyle(String v) {
+        this.sequenceCommentStyle = (v == null || v.isEmpty()) ? "INLINE" : v;
+    }
 
     /** 永続化済みの値から {@link DiagramStyle} を組み立てて返す。 */
     public DiagramStyle getStyle() {
@@ -93,6 +104,8 @@ public class Setting {
         props.setProperty("style.fontSize", Integer.toString(styleFontSize));
         props.setProperty("style.direction", styleDirection);
         props.setProperty("style.customSkinparam", styleCustomSkinparam);
+        props.setProperty("sequence.showComments", Boolean.toString(sequenceShowComments));
+        props.setProperty("sequence.commentStyle", sequenceCommentStyle);
 
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
             props.storeToXML(bos, "PadTools Settings");
@@ -126,8 +139,22 @@ public class Setting {
         s.styleDirection = stringOrDefault(props.getProperty("style.direction"),
                 DiagramStyle.Direction.DEFAULT.name());
         s.styleCustomSkinparam = stringOrEmpty(props.getProperty("style.customSkinparam"));
+        s.sequenceShowComments = parseBooleanSafe(
+                props.getProperty("sequence.showComments"), true);
+        s.sequenceCommentStyle = stringOrDefault(
+                props.getProperty("sequence.commentStyle"), "INLINE");
 
         return s;
+    }
+
+    private static boolean parseBooleanSafe(String value, boolean defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        String s = value.trim().toLowerCase();
+        if ("true".equals(s)) return true;
+        if ("false".equals(s)) return false;
+        return defaultValue;
     }
 
     private static int parseIntSafe(String value, int defaultValue) {

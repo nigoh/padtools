@@ -2,8 +2,10 @@ package padtools.core.formats.uml;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +47,25 @@ public final class PlantUmlSequenceDiagram {
          * null または空文字を指定すると色付けを行わない。
          */
         public String projectClassColor = "#LightSkyBlue";
+        /**
+         * クラス/メソッドの JavaDoc・直前コメントを {@code note} として出力する。
+         * 図の冒頭 (participant 宣言の直後) に participant ごとに集約表示する。
+         */
+        public boolean showComments = true;
+        /** コメント表示スタイル (クラス図と共通)。INLINE は 1 行 note、NOTE は複数行ブロック。 */
+        public PlantUmlClassDiagram.CommentStyle commentStyle =
+                PlantUmlClassDiagram.CommentStyle.INLINE;
+        /** INLINE 時の 1 行最大文字数。NOTE 時の本体内コメント 1 行制限にも使用。0 以下で無制限。 */
+        public int commentMaxLength = 80;
+        /**
+         * コメント文字列の色 (PlantUML の {@code <color:#RRGGBB>} 値)。
+         * INLINE 表示時はテキストを {@code <color:...>...</color>} で囲み、
+         * NOTE 表示時は {@code skinparam noteBorderColor / noteFontColor} に適用する。
+         * null または空文字で色付け無効。
+         */
+        public String commentColor = "#008800";
+        /** NOTE モードでメソッド本体内のコメントも note 内に列挙する。 */
+        public boolean showMethodBodyComments = true;
     }
 
     /** クラス・メソッドを指定して 1 本のシーケンス図を生成する。 */
@@ -76,9 +97,22 @@ public final class PlantUmlSequenceDiagram {
             out.append("title ").append(cls.getSimpleName()).append('.')
                     .append(method.getName()).append('\n');
         }
+        // NOTE モードでコメント色が指定されていれば、note の枠線・文字色を skinparam で設定
+        if (o.showComments
+                && o.commentStyle == PlantUmlClassDiagram.CommentStyle.NOTE
+                && o.commentColor != null
+                && !o.commentColor.isEmpty()) {
+            out.append("skinparam noteBorderColor ").append(o.commentColor).append('\n');
+            out.append("skinparam noteFontColor ").append(o.commentColor).append('\n');
+        }
         Set<String> participants = new LinkedHashSet<>();
         participants.add(o.callerName);
         participants.add(cls.getSimpleName());
+        // participant ごとに「シーケンス内で登場したメソッド名」を順序付きで記録する。
+        // 冒頭の note 集約 (emitCommentNotes) で JavaDoc を表示するメソッドを決めるのに使う。
+        Map<String, LinkedHashSet<String>> participantMethods = new LinkedHashMap<>();
+        participantMethods.computeIfAbsent(cls.getSimpleName(),
+                k -> new LinkedHashSet<>()).add(method.getName());
 
         StringBuilder body = new StringBuilder();
         body.append(o.callerName).append(" -> ").append(cls.getSimpleName())
@@ -87,8 +121,8 @@ public final class PlantUmlSequenceDiagram {
 
         Set<String> stack = new HashSet<>();
         stack.add(cls.getSimpleName() + "." + method.getName());
-        walkStatements(method.getStatements(), cls, classes, participants, body,
-                stack, 1, o, "");
+        walkStatements(method.getStatements(), cls, classes, participants,
+                participantMethods, body, stack, 1, o, "");
         stack.remove(cls.getSimpleName() + "." + method.getName());
 
         body.append("deactivate ").append(cls.getSimpleName()).append('\n');
@@ -103,6 +137,10 @@ public final class PlantUmlSequenceDiagram {
                 out.append(' ').append(o.projectClassColor);
             }
             out.append('\n');
+        }
+        // participant 宣言の直後に JavaDoc / コメントを集約 note として発行
+        if (o.showComments) {
+            emitCommentNotes(out, o, participants, participantMethods, classes);
         }
         out.append(body);
         if (o.includeLegend) {
@@ -204,6 +242,7 @@ public final class PlantUmlSequenceDiagram {
                                         JavaClassInfo currentClass,
                                         List<JavaClassInfo> classes,
                                         Set<String> participants,
+                                        Map<String, LinkedHashSet<String>> participantMethods,
                                         StringBuilder body,
                                         Set<String> stack,
                                         int depth,
@@ -212,10 +251,10 @@ public final class PlantUmlSequenceDiagram {
         for (JavaMethodInfo.Statement s : stmts) {
             if (s instanceof JavaMethodInfo.Call) {
                 emitCall((JavaMethodInfo.Call) s, currentClass, classes,
-                        participants, body, stack, depth, opts, indent);
+                        participants, participantMethods, body, stack, depth, opts, indent);
             } else if (s instanceof JavaMethodInfo.Block) {
                 emitBlock((JavaMethodInfo.Block) s, currentClass, classes,
-                        participants, body, stack, depth, opts, indent);
+                        participants, participantMethods, body, stack, depth, opts, indent);
             }
         }
     }
@@ -224,6 +263,7 @@ public final class PlantUmlSequenceDiagram {
                                   JavaClassInfo currentClass,
                                   List<JavaClassInfo> classes,
                                   Set<String> participants,
+                                  Map<String, LinkedHashSet<String>> participantMethods,
                                   StringBuilder body,
                                   Set<String> stack,
                                   int depth,
@@ -234,6 +274,8 @@ public final class PlantUmlSequenceDiagram {
             return;
         }
         participants.add(target);
+        participantMethods.computeIfAbsent(target, k -> new LinkedHashSet<>())
+                .add(call.getMethodName());
         body.append(indent).append(currentClass.getSimpleName())
                 .append(" -> ").append(target)
                 .append(": ").append(call.getMethodName()).append("()\n");
@@ -262,7 +304,7 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("activate ").append(target).append('\n');
         stack.add(key);
         walkStatements(nextMethod.getStatements(), nextCls, classes,
-                participants, body, stack, depth + 1, opts, indent);
+                participants, participantMethods, body, stack, depth + 1, opts, indent);
         stack.remove(key);
         body.append(indent).append("deactivate ").append(target).append('\n');
     }
@@ -271,6 +313,7 @@ public final class PlantUmlSequenceDiagram {
                                    JavaClassInfo currentClass,
                                    List<JavaClassInfo> classes,
                                    Set<String> participants,
+                                   Map<String, LinkedHashSet<String>> participantMethods,
                                    StringBuilder body,
                                    Set<String> stack,
                                    int depth,
@@ -283,26 +326,26 @@ public final class PlantUmlSequenceDiagram {
         String inner = indent + "    ";
         switch (block.getKind()) {
             case IF:
-                emitIf(bs, currentClass, classes, participants, body, stack,
-                        depth, opts, indent, inner);
+                emitIf(bs, currentClass, classes, participants, participantMethods,
+                        body, stack, depth, opts, indent, inner);
                 break;
             case WHILE:
             case FOR:
             case DO_WHILE:
                 emitLoop(block, bs.get(0), currentClass, classes, participants,
-                        body, stack, depth, opts, indent, inner);
+                        participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             case SWITCH:
-                emitSwitch(bs, currentClass, classes, participants, body, stack,
-                        depth, opts, indent, inner);
+                emitSwitch(bs, currentClass, classes, participants, participantMethods,
+                        body, stack, depth, opts, indent, inner);
                 break;
             case TRY:
-                emitTry(bs, currentClass, classes, participants, body, stack,
-                        depth, opts, indent, inner);
+                emitTry(bs, currentClass, classes, participants, participantMethods,
+                        body, stack, depth, opts, indent, inner);
                 break;
             case SYNCHRONIZED:
                 emitSynchronized(bs.get(0), currentClass, classes, participants,
-                        body, stack, depth, opts, indent, inner);
+                        participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             default:
                 break;
@@ -313,6 +356,7 @@ public final class PlantUmlSequenceDiagram {
                                 JavaClassInfo currentClass,
                                 List<JavaClassInfo> classes,
                                 Set<String> participants,
+                                Map<String, LinkedHashSet<String>> participantMethods,
                                 StringBuilder body,
                                 Set<String> stack,
                                 int depth,
@@ -325,14 +369,14 @@ public final class PlantUmlSequenceDiagram {
             // 単一分岐 → opt
             body.append(indent).append("opt ").append(escapeLabel(first.getLabel())).append('\n');
             walkStatements(first.getBody(), currentClass, classes, participants,
-                    body, stack, depth, opts, inner);
+                    participantMethods, body, stack, depth, opts, inner);
             body.append(indent).append("end\n");
             return;
         }
         // 複数分岐 → alt + else
         body.append(indent).append("alt ").append(escapeLabel(first.getLabel())).append('\n');
         walkStatements(first.getBody(), currentClass, classes, participants,
-                body, stack, depth, opts, inner);
+                participantMethods, body, stack, depth, opts, inner);
         for (int i = 1; i < bs.size(); i++) {
             JavaMethodInfo.Branch b = bs.get(i);
             if ("else if".equals(b.getType())) {
@@ -341,7 +385,7 @@ public final class PlantUmlSequenceDiagram {
                 body.append(indent).append("else\n");
             }
             walkStatements(b.getBody(), currentClass, classes, participants,
-                    body, stack, depth, opts, inner);
+                    participantMethods, body, stack, depth, opts, inner);
         }
         body.append(indent).append("end\n");
     }
@@ -351,6 +395,7 @@ public final class PlantUmlSequenceDiagram {
                                   JavaClassInfo currentClass,
                                   List<JavaClassInfo> classes,
                                   Set<String> participants,
+                                  Map<String, LinkedHashSet<String>> participantMethods,
                                   StringBuilder body,
                                   Set<String> stack,
                                   int depth,
@@ -374,7 +419,7 @@ public final class PlantUmlSequenceDiagram {
         }
         body.append(indent).append("loop ").append(escapeLabel(label)).append('\n');
         walkStatements(br.getBody(), currentClass, classes, participants,
-                body, stack, depth, opts, inner);
+                participantMethods, body, stack, depth, opts, inner);
         body.append(indent).append("end\n");
     }
 
@@ -382,6 +427,7 @@ public final class PlantUmlSequenceDiagram {
                                     JavaClassInfo currentClass,
                                     List<JavaClassInfo> classes,
                                     Set<String> participants,
+                                    Map<String, LinkedHashSet<String>> participantMethods,
                                     StringBuilder body,
                                     Set<String> stack,
                                     int depth,
@@ -411,7 +457,7 @@ public final class PlantUmlSequenceDiagram {
                 body.append(indent).append("else ").append(escapeLabel(caseLabel)).append('\n');
             }
             walkStatements(b.getBody(), currentClass, classes, participants,
-                    body, stack, depth, opts, inner);
+                    participantMethods, body, stack, depth, opts, inner);
         }
         if (openedAlt) {
             body.append(indent).append("end\n");
@@ -422,6 +468,7 @@ public final class PlantUmlSequenceDiagram {
                                  JavaClassInfo currentClass,
                                  List<JavaClassInfo> classes,
                                  Set<String> participants,
+                                 Map<String, LinkedHashSet<String>> participantMethods,
                                  StringBuilder body,
                                  Set<String> stack,
                                  int depth,
@@ -432,15 +479,15 @@ public final class PlantUmlSequenceDiagram {
         for (JavaMethodInfo.Branch b : bs) {
             if ("try".equals(b.getType())) {
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        body, stack, depth, opts, inner);
+                        participantMethods, body, stack, depth, opts, inner);
             } else if ("catch".equals(b.getType())) {
                 body.append(indent).append("else catch ").append(escapeLabel(b.getLabel())).append('\n');
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        body, stack, depth, opts, inner);
+                        participantMethods, body, stack, depth, opts, inner);
             } else if ("finally".equals(b.getType())) {
                 body.append(indent).append("else finally\n");
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        body, stack, depth, opts, inner);
+                        participantMethods, body, stack, depth, opts, inner);
             }
         }
         body.append(indent).append("end\n");
@@ -450,6 +497,7 @@ public final class PlantUmlSequenceDiagram {
                                           JavaClassInfo currentClass,
                                           List<JavaClassInfo> classes,
                                           Set<String> participants,
+                                          Map<String, LinkedHashSet<String>> participantMethods,
                                           StringBuilder body,
                                           Set<String> stack,
                                           int depth,
@@ -459,8 +507,167 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("critical synchronized(")
                 .append(escapeLabel(br.getLabel())).append(")\n");
         walkStatements(br.getBody(), currentClass, classes, participants,
-                body, stack, depth, opts, inner);
+                participantMethods, body, stack, depth, opts, inner);
         body.append(indent).append("end\n");
+    }
+
+    /**
+     * 各 participant の JavaDoc・本体内コメントを冒頭に集約して note 出力する。
+     * シーケンス中に登場したメソッドのみ対象 (participantMethods から決定)。
+     * 仮想の Caller participant や、解析対象外の外部クラスは skip する。
+     */
+    private static void emitCommentNotes(StringBuilder out, Options o,
+                                          Set<String> participants,
+                                          Map<String, LinkedHashSet<String>> participantMethods,
+                                          List<JavaClassInfo> classes) {
+        boolean inline = o.commentStyle == PlantUmlClassDiagram.CommentStyle.INLINE;
+        for (String p : participants) {
+            if (o.callerName.equals(p)) {
+                continue;
+            }
+            JavaClassInfo c = findClass(classes, p);
+            if (c == null) {
+                continue;
+            }
+            LinkedHashSet<String> methodNames = participantMethods.get(p);
+            if (methodNames == null) {
+                methodNames = new LinkedHashSet<>();
+            }
+            if (inline) {
+                emitInlineNoteForParticipant(out, o, p, c, methodNames);
+            } else {
+                emitNoteBlockForParticipant(out, o, p, c, methodNames);
+            }
+        }
+    }
+
+    /** INLINE スタイル: クラス/メソッドの 1 行コメントを {@code note over P : ...} で並べる。 */
+    private static void emitInlineNoteForParticipant(StringBuilder out, Options o,
+                                                      String participant, JavaClassInfo c,
+                                                      LinkedHashSet<String> methodNames) {
+        // クラス JavaDoc 1 行目
+        String classFirst = JavaCommentScanner.firstLine(c.getComment());
+        if (classFirst != null && !classFirst.isEmpty()) {
+            appendInlineNoteLine(out, participant, o,
+                    PlantUmlClassDiagram.sanitizeInlineComment(classFirst, o.commentMaxLength));
+        }
+        // 各メソッドの 1 行コメント
+        for (String name : methodNames) {
+            JavaMethodInfo m = findMethod(c, name);
+            if (m == null) {
+                continue;
+            }
+            String first = JavaCommentScanner.firstLine(m.getComment());
+            if (first == null || first.isEmpty()) {
+                continue;
+            }
+            String line = PlantUmlClassDiagram.sanitizeInlineComment(
+                    name + "(): " + first, o.commentMaxLength);
+            appendInlineNoteLine(out, participant, o, line);
+        }
+    }
+
+    private static void appendInlineNoteLine(StringBuilder out, String participant,
+                                              Options o, String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        out.append("note over ").append(quote(participant)).append(" : ");
+        if (o.commentColor != null && !o.commentColor.isEmpty()) {
+            out.append("<color:").append(o.commentColor).append('>')
+                    .append(text).append("</color>");
+        } else {
+            out.append(text);
+        }
+        out.append('\n');
+    }
+
+    /** NOTE スタイル: 1 つの {@code note over P ... end note} ブロックにまとめる。 */
+    private static void emitNoteBlockForParticipant(StringBuilder out, Options o,
+                                                     String participant, JavaClassInfo c,
+                                                     LinkedHashSet<String> methodNames) {
+        // 表示すべき内容があるかを先にチェック (空ブロックを発行しない)
+        boolean hasClassComment = c.getComment() != null && !c.getComment().isEmpty();
+        boolean hasAnyMethodContent = false;
+        for (String name : methodNames) {
+            JavaMethodInfo m = findMethod(c, name);
+            if (m == null) {
+                continue;
+            }
+            if ((m.getComment() != null && !m.getComment().isEmpty())
+                    || (o.showMethodBodyComments && !m.getBodyComments().isEmpty())) {
+                hasAnyMethodContent = true;
+                break;
+            }
+        }
+        if (!hasClassComment && !hasAnyMethodContent) {
+            return;
+        }
+
+        out.append("note over ").append(quote(participant)).append('\n');
+        if (hasClassComment) {
+            PlantUmlClassDiagram.appendNoteBody(out, c.getComment(), "");
+        }
+        boolean needSeparator = hasClassComment && hasAnyMethodContent;
+        for (String name : methodNames) {
+            JavaMethodInfo m = findMethod(c, name);
+            if (m == null) {
+                continue;
+            }
+            boolean hasJavadoc = m.getComment() != null && !m.getComment().isEmpty();
+            boolean hasBody = o.showMethodBodyComments && !m.getBodyComments().isEmpty();
+            if (!hasJavadoc && !hasBody) {
+                continue;
+            }
+            if (needSeparator) {
+                out.append("  ---\n");
+                needSeparator = false;
+            }
+            if (hasJavadoc) {
+                // 1 行目はメソッド名: prefix、2 行目以降はインデント揃え
+                String[] lines = m.getComment().split("\n", -1);
+                boolean first = true;
+                for (String raw : lines) {
+                    String t = raw.replace('\r', ' ').replace('\t', ' ').trim();
+                    if (t.isEmpty()) {
+                        continue;
+                    }
+                    if (first) {
+                        out.append("  ").append(name).append("(): ")
+                                .append(truncate(t, o.commentMaxLength)).append('\n');
+                        first = false;
+                    } else {
+                        out.append("    ").append(truncate(t, o.commentMaxLength)).append('\n');
+                    }
+                }
+                if (first) {
+                    // 全行が空だった場合のフォールバック (メソッド名だけ)
+                    out.append("  ").append(name).append("()\n");
+                }
+            } else {
+                out.append("  ").append(name).append("()\n");
+            }
+            if (hasBody) {
+                for (String bc : m.getBodyComments()) {
+                    String[] lines = bc.split("\n", -1);
+                    for (String raw : lines) {
+                        String t = raw.replace('\r', ' ').replace('\t', ' ').trim();
+                        if (t.isEmpty()) {
+                            continue;
+                        }
+                        out.append("    // ").append(truncate(t, o.commentMaxLength)).append('\n');
+                    }
+                }
+            }
+        }
+        out.append("end note\n");
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
+            return s;
+        }
+        return s.substring(0, Math.max(1, maxLen - 1)) + "…";
     }
 
     private static void emitLegend(StringBuilder out, int participantCount,

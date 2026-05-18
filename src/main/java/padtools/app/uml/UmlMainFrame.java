@@ -284,10 +284,31 @@ public class UmlMainFrame extends JFrame {
     }
 
     private void openStyleSettings() {
-        DiagramStyle edited = StyleSettingsDialog.showDialog(this, PlantUmlRenderer.getStyle());
+        padtools.Setting setting = Main.getSetting();
+        boolean curShow = setting != null && setting.isSequenceShowComments();
+        padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle curStyle =
+                setting != null && "NOTE".equalsIgnoreCase(setting.getSequenceCommentStyle())
+                        ? padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.NOTE
+                        : padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
+        StyleSettingsDialog.Result edited = StyleSettingsDialog.showDialog(
+                this, PlantUmlRenderer.getStyle(), curShow, curStyle);
         if (edited != null) {
-            applyStyle(edited);
+            applyStyleSettings(edited);
         }
+    }
+
+    /** Style ダイアログ結果 (Style + シーケンス図コメント設定) を反映する。 */
+    private void applyStyleSettings(StyleSettingsDialog.Result r) {
+        try {
+            padtools.Setting setting = Main.getSetting();
+            if (setting != null) {
+                setting.setSequenceShowComments(r.sequenceShowComments);
+                setting.setSequenceCommentStyle(r.sequenceCommentStyle.name());
+            }
+        } catch (RuntimeException ignored) {
+            // 設定保存はベストエフォート
+        }
+        applyStyle(r.style);
     }
 
     /** スタイル変更を全方位 (レンダラ / 永続化 / メニュー UI / 再描画) に反映する。 */

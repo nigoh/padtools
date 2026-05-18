@@ -386,4 +386,134 @@ public class PlantUmlSequenceDiagramTest {
         assertEquals(1, list.size());
         assertEquals("C.run", list.get(0).getEntry());
     }
+
+    @Test
+    public void testCommentsNoteStyleDefault() {
+        String src =
+                "/** A クラスのトップレベル説明。 */\n"
+              + "class A {\n"
+              + "  /** run のエントリ JavaDoc。 */\n"
+              + "  void run() { b.doIt(); }\n"
+              + "}\n"
+              + "/** B のメイン処理 */\n"
+              + "class B {\n"
+              + "  /** doIt の処理 */\n"
+              + "  void doIt() {}\n"
+              + "}\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        // findClass の都合上、receiver "b" → "b" になるため
+        // doIt() の resolved target は "b" となる。B の note を出すには
+        // フィールド型で解決させる必要があるので、b を B 型のフィールドとして書く。
+        src =
+                "/** A クラスのトップレベル説明。 */\n"
+              + "class A {\n"
+              + "  B b;\n"
+              + "  /** run のエントリ JavaDoc。 */\n"
+              + "  void run() { b.doIt(); }\n"
+              + "}\n"
+              + "/** B のメイン処理 */\n"
+              + "class B {\n"
+              + "  /** doIt の処理 */\n"
+              + "  void doIt() {}\n"
+              + "}\n";
+        infos = JavaStructureExtractor.extract(src);
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // skinparam が出ている
+        assertTrue(puml, puml.contains("skinparam noteBorderColor #008800"));
+        assertTrue(puml, puml.contains("skinparam noteFontColor #008800"));
+        // note over A ブロックにクラス JavaDoc と run() が含まれる
+        assertTrue(puml, puml.contains("note over \"A\""));
+        assertTrue(puml, puml.contains("A クラスのトップレベル説明。"));
+        assertTrue(puml, puml.contains("run(): run のエントリ JavaDoc。"));
+        // note over B ブロックに doIt が含まれる
+        assertTrue(puml, puml.contains("note over \"B\""));
+        assertTrue(puml, puml.contains("doIt(): doIt の処理"));
+        // participant 宣言の後、本体シーケンスの前に note が出ていること
+        int idxParticipant = puml.indexOf("participant \"A\"");
+        int idxNote = puml.indexOf("note over \"A\"");
+        int idxArrow = puml.indexOf("Caller -> A: run()");
+        assertTrue("participant should appear before note", idxParticipant < idxNote);
+        assertTrue("note should appear before arrow", idxNote < idxArrow);
+    }
+
+    @Test
+    public void testCommentsInlineStyle() {
+        String src =
+                "/** A の説明はかなり長くて省略されるべき内容です */\n"
+              + "class A {\n"
+              + "  /** run の説明 */\n"
+              + "  void run() {}\n"
+              + "}\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        // 既定で INLINE
+        o.commentMaxLength = 12;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // skinparam は INLINE では出さない
+        assertFalse(puml, puml.contains("skinparam noteBorderColor"));
+        // 1 行 note (note over "A" : <color:...>...</color>) が出る
+        assertTrue(puml, puml.contains("note over \"A\" : <color:#008800>"));
+        // commentMaxLength=12 で省略記号が現れる
+        assertTrue(puml, puml.contains("…"));
+    }
+
+    @Test
+    public void testNoCommentsOption() {
+        String src =
+                "/** A の説明 */\n"
+              + "class A {\n"
+              + "  /** run の説明 */\n"
+              + "  void run() {}\n"
+              + "}\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.showComments = false;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertFalse(puml, puml.contains("note over \"A\""));
+        assertFalse(puml, puml.contains("skinparam noteBorderColor"));
+        // 本体シーケンスは通常通り
+        assertTrue(puml, puml.contains("Caller -> A: run()"));
+    }
+
+    @Test
+    public void testMethodBodyCommentsCollected() {
+        String src =
+                "class A {\n"
+              + "  /** run JavaDoc */\n"
+              + "  void run() {\n"
+              + "    // step1: 前処理\n"
+              + "    /* step2: 本処理 */\n"
+              + "    b.doIt();\n"
+              + "  }\n"
+              + "  B b;\n"
+              + "}\n"
+              + "class B { void doIt() {} }\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertTrue(puml, puml.contains("// step1: 前処理"));
+        assertTrue(puml, puml.contains("// step2: 本処理"));
+    }
+
+    @Test
+    public void testBodyCommentsCanBeDisabled() {
+        String src =
+                "class A {\n"
+              + "  void run() {\n"
+              + "    // 内部メモ\n"
+              + "    b.doIt();\n"
+              + "  }\n"
+              + "  B b;\n"
+              + "}\n"
+              + "class B { void doIt() {} }\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        o.showMethodBodyComments = false;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertFalse(puml, puml.contains("// 内部メモ"));
+    }
 }

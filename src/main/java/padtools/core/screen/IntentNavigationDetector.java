@@ -48,24 +48,44 @@ public final class IntentNavigationDetector {
     private static final Pattern SET_CLASS_NAME = Pattern.compile(
             "\\.\\s*setClassName\\s*\\(\\s*[^,]+,\\s*\"([^\"]+)\"\\s*\\)");
 
+    /**
+     * Kotlin の {@code Intent(ctx, X::class.java)} 形式。グループ 1: target クラス。
+     * Java の {@code new Intent(...)} と異なり {@code new} は付かない。
+     */
+    private static final Pattern KOTLIN_NEW_INTENT = Pattern.compile(
+            "\\bIntent\\s*\\(\\s*[^,]+,\\s*"
+                    + "([A-Za-z_$][A-Za-z0-9_$.]*)::class\\.java\\s*\\)");
+
+    /** Kotlin の {@code .setClass(ctx, X::class.java)} 形式。 */
+    private static final Pattern KOTLIN_SET_CLASS = Pattern.compile(
+            "\\.\\s*setClass\\s*\\(\\s*[^,]+,\\s*"
+                    + "([A-Za-z_$][A-Za-z0-9_$.]*)::class\\.java\\s*\\)");
+
     /** メソッド開始位置検出パターン (大まかな抽出)。 */
     private static final Pattern METHOD_DECL_PATTERN = Pattern.compile(
             "(?:public|protected|private|static|final|synchronized|abstract|@\\w+\\s*)*\\s*"
                     + "[A-Za-z_$<][A-Za-z0-9_$<>,\\s\\[\\]\\?]*\\s+"
                     + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{");
 
-    /** プロジェクト全体をスキャンして全画面遷移を抽出する。 */
+    /** Kotlin の {@code fun name(...): ReturnType { ... }} 形式。 */
+    private static final Pattern KOTLIN_FUN_DECL_PATTERN = Pattern.compile(
+            "\\bfun\\s+(?:<[^>]+>\\s+)?"
+                    + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\([^)]*\\)"
+                    + "(?:\\s*:\\s*[^{=]+)?\\s*\\{");
+
+    /** プロジェクト全体をスキャンして全画面遷移を抽出する (Java + Kotlin)。 */
     public List<ScreenTransition> analyzeProject(File projectRoot) throws IOException {
         if (projectRoot == null || !projectRoot.isDirectory()) {
             return Collections.emptyList();
         }
         AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
         opts.includeAidl = false;
+        opts.includeKotlin = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
         List<ScreenTransition> all = new ArrayList<>();
         for (File f : files) {
             String name = f.getName().toLowerCase();
-            if (!name.endsWith(".java")) continue;
+            if (!name.endsWith(".java") && !name.endsWith(".kt")) continue;
             try {
                 String src = AndroidProjectScanner.readFile(f);
                 all.addAll(analyzeSource(src, f.getPath()));
@@ -84,7 +104,7 @@ public final class IntentNavigationDetector {
         String className = readPrimaryClassName(src);
         String fqn = packageName.isEmpty() ? className : packageName + "." + className;
 
-        // メソッド開始位置を集める
+        // メソッド開始位置を集める (Java + Kotlin)
         List<int[]> methodSpans = new ArrayList<>();
         List<String> methodNames = new ArrayList<>();
         Matcher mm = METHOD_DECL_PATTERN.matcher(src);
@@ -96,17 +116,30 @@ public final class IntentNavigationDetector {
                 methodNames.add(mm.group(1));
             }
         }
+        Matcher km = KOTLIN_FUN_DECL_PATTERN.matcher(src);
+        while (km.find()) {
+            int braceStart = km.end() - 1;
+            int braceEnd = findMatchingBrace(src, braceStart);
+            if (braceEnd > braceStart) {
+                methodSpans.add(new int[]{braceStart, braceEnd});
+                methodNames.add(km.group(1));
+            }
+        }
 
-        // 各 Intent パターンを走査
+        // 各 Intent パターンを走査 (Java + Kotlin)
         addMatches(src, filePath, fqn, methodSpans, methodNames, out,
                 NEW_INTENT, ScreenTransition.Kind.START_ACTIVITY);
         addMatches(src, filePath, fqn, methodSpans, methodNames, out,
                 SET_CLASS, ScreenTransition.Kind.SET_CLASS);
         addMatches(src, filePath, fqn, methodSpans, methodNames, out,
                 SET_CLASS_NAME, ScreenTransition.Kind.SET_CLASS);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                KOTLIN_NEW_INTENT, ScreenTransition.Kind.START_ACTIVITY);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                KOTLIN_SET_CLASS, ScreenTransition.Kind.SET_CLASS);
 
-        // startActivityForResult が近接にあれば Kind を昇格 (簡易検出)
-        promoteForResultTransitions(src, out);
+        // startActivityForResult が同一メソッド内にあれば Kind を昇格
+        promoteForResultTransitions(src, out, methodSpans);
         return out;
     }
 
@@ -125,17 +158,30 @@ public final class IntentNavigationDetector {
     }
 
     /**
-     * START_ACTIVITY として記録された遷移のうち、近接 (前後 200 文字以内) に
-     * {@code startActivityForResult} があれば Kind を昇格させる。
+     * START_ACTIVITY として記録された遷移のうち、同じメソッド本体内に
+     * {@code startActivityForResult} / {@code registerForActivityResult} があれば
+     * Kind を昇格させる。メソッド外 (フィールド初期化など) や別メソッドの呼び出しは無視。
      */
-    private static void promoteForResultTransitions(String src, List<ScreenTransition> out) {
+    private static void promoteForResultTransitions(String src,
+                                                      List<ScreenTransition> out,
+                                                      List<int[]> methodSpans) {
         for (int i = 0; i < out.size(); i++) {
             ScreenTransition t = out.get(i);
             if (t.getKind() != ScreenTransition.Kind.START_ACTIVITY) continue;
             int center = lineToOffset(src, t.getLineHint());
             if (center < 0) continue;
-            int from = Math.max(0, center - 200);
-            int to = Math.min(src.length(), center + 200);
+            // この offset を囲む最小のメソッド span を探す
+            int[] enclosing = innermostSpanOf(center, methodSpans);
+            int from;
+            int to;
+            if (enclosing != null) {
+                from = enclosing[0];
+                to = enclosing[1];
+            } else {
+                // メソッド外 (フィールド初期化など): 近接 100 文字程度のみ参照
+                from = Math.max(0, center - 100);
+                to = Math.min(src.length(), center + 100);
+            }
             String window = src.substring(from, to);
             if (window.contains("startActivityForResult")
                     || window.contains("registerForActivityResult")) {
@@ -144,6 +190,22 @@ public final class IntentNavigationDetector {
                         ScreenTransition.Kind.START_FOR_RESULT));
             }
         }
+    }
+
+    /** offset を囲む最小スパン (最も内側のメソッド) を返す。 */
+    private static int[] innermostSpanOf(int offset, List<int[]> spans) {
+        int[] best = null;
+        int bestLen = Integer.MAX_VALUE;
+        for (int[] s : spans) {
+            if (offset >= s[0] && offset <= s[1]) {
+                int len = s[1] - s[0];
+                if (len < bestLen) {
+                    bestLen = len;
+                    best = s;
+                }
+            }
+        }
+        return best;
     }
 
     /** 遷移先クラス → 遷移元クラス Set のマップを返す (集計用)。 */
@@ -159,15 +221,18 @@ public final class IntentNavigationDetector {
     }
 
     private static String readPackage(String src) {
-        Matcher m = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;",
+        // Java は ; で終わる、Kotlin は ; なし。両方を許容。
+        Matcher m = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;?\\s*$",
                 Pattern.MULTILINE).matcher(src);
         return m.find() ? m.group(1) : "";
     }
 
     private static String readPrimaryClassName(String src) {
+        // Java + Kotlin: class / interface / object / enum / data class / sealed class 等
         Matcher m = Pattern.compile(
-                "(?:public\\s+)?(?:final\\s+|abstract\\s+)?"
-                        + "(?:class|interface|enum)\\s+([A-Za-z_$][A-Za-z0-9_$]*)").matcher(src);
+                "(?:public|protected|private|internal|final|abstract|open|sealed|data|inner)?"
+                        + "\\s*(?:enum\\s+|annotation\\s+)?(?:class|interface|object|enum)"
+                        + "\\s+([A-Za-z_$][A-Za-z0-9_$]*)").matcher(src);
         return m.find() ? m.group(1) : "Unknown";
     }
 

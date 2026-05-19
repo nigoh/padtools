@@ -69,6 +69,29 @@ public final class CacheKey {
         }
     }
 
+    /**
+     * プロジェクトルートの canonical path だけからキーを計算する。
+     *
+     * <p>files を含めないため、走査対象が増減・更新されても同じディレクトリが
+     * 使い回される。SQLite ベースの永続インデックスのように、ファイル差分は
+     * DB 内 (files.mtime/size) で検知する場合に使う。</p>
+     */
+    public static String computeRootOnly(File projectRoot) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            String rootCanonical;
+            try {
+                rootCanonical = projectRoot.getCanonicalPath();
+            } catch (IOException ex) {
+                rootCanonical = projectRoot.getAbsolutePath();
+            }
+            md.update(rootCanonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return toHex(md.digest());
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
+    }
+
     /** 先頭 16 hex char (64bit 相当) の短縮 ID。ディレクトリ名向き。 */
     public static String shortId(String fullKey) {
         if (fullKey == null || fullKey.length() < 16) {

@@ -1241,8 +1241,47 @@ public final class JavaStructureExtractor {
                         out.add(new JavaMethodInfo.Call(receiver, name));
                     }
                 }
+                // メソッド参照: Foo::bar / obj.field::bar (`::new` は除外)
+                if (t.is("::") && peek(1).type == JavaToken.Type.IDENT) {
+                    String name = peek(1).text;
+                    if (!"new".equals(name)) {
+                        String receiver = findReceiverBeforeColonColon();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
                 next();
             }
+        }
+
+        /**
+         * {@code ::} の直前を起点に receiver を組み立てる。
+         * {@code Foo::bar} は {@code Foo}、{@code a.b.c::m} は {@code a.b.c}。
+         * メソッド呼び出しのレシーバ検出 ({@link #findReceiver()}) は直前が
+         * {@code .} の場合だけ拾うが、メソッド参照は識別子自身もレシーバなので
+         * 起点が異なる。
+         */
+        private String findReceiverBeforeColonColon() {
+            int i = idx - 1;
+            StringBuilder sb = new StringBuilder();
+            int j = i;
+            while (j >= 0) {
+                JavaToken t = tokens.get(j);
+                if (t.is(".")) {
+                    sb.insert(0, '.');
+                    j--;
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT) {
+                    sb.insert(0, t.text);
+                    if (j - 1 >= 0 && tokens.get(j - 1).is(".")) {
+                        j--;
+                        continue;
+                    }
+                    break;
+                }
+                break;
+            }
+            return sb.toString();
         }
 
         /** 直前のトークンを見て {@code receiver.method(...)} の receiver を組み立てる。 */

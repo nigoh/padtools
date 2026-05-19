@@ -536,6 +536,47 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testMethodReferenceCall() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { list.forEach(Foo::bar); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        long barCalls = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "bar".equals(c.getMethodName()))
+                .count();
+        assertEquals(1, barCalls);
+    }
+
+    @Test
+    public void testMethodReferenceReceiver() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { x(a.b.c::meth); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        JavaMethodInfo.Call methCall = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "meth".equals(c.getMethodName()))
+                .findFirst().orElse(null);
+        assertNotNull(methCall);
+        assertEquals("a.b.c", methCall.getReceiver());
+    }
+
+    @Test
+    public void testConstructorReferenceIsExcluded() {
+        // String::new はコンストラクタ参照なので Call として記録しない
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { x(String::new); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        long newCalls = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "new".equals(c.getMethodName()))
+                .count();
+        assertEquals(0, newCalls);
+    }
+
+    @Test
     public void testTextBlockWithBracesAndQuotes() {
         // テキストブロック内の { } や " は構造を壊さない
         String src = "class A {\n"

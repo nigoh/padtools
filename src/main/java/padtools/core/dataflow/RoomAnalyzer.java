@@ -37,18 +37,32 @@ public final class RoomAnalyzer {
 
     private static final Pattern ENTITY_TABLENAME = Pattern.compile(
             "tableName\\s*=\\s*\"([^\"]+)\"");
+    /**
+     * Java {@code @ForeignKey(entity = User.class, ...)} と
+     * Kotlin {@code ForeignKey(entity = User::class, ...)} 両形式に対応。
+     * Kotlin の {@code @Entity(foreignKeys = [...])} 内では {@code ForeignKey} は
+     * クラスコンストラクタ呼び出しとして書かれるため {@code @} は付かない。
+     */
     private static final Pattern ENTITY_FOREIGN_KEY = Pattern.compile(
-            "@ForeignKey\\s*\\([^)]*entity\\s*=\\s*([A-Za-z_$][A-Za-z0-9_$.]*)\\.class");
+            "@?ForeignKey\\s*\\([^)]*entity\\s*=\\s*([A-Za-z_$][A-Za-z0-9_$.]*)"
+                    + "(?:\\.class|::class)");
     private static final Pattern COLUMN_NAME = Pattern.compile(
             "name\\s*=\\s*\"([^\"]+)\"");
+    /**
+     * Java {@code entities = {Foo.class, Bar.class}} と
+     * Kotlin {@code entities = [Foo::class, Bar::class]} 両形式に対応。
+     */
     private static final Pattern DATABASE_ENTITIES = Pattern.compile(
-            "entities\\s*=\\s*\\{([^}]*)\\}");
+            "entities\\s*=\\s*[\\[{]([^\\]}]*)[\\]}]");
     private static final Pattern DATABASE_VERSION = Pattern.compile(
             "version\\s*=\\s*(\\d+)");
     private static final Pattern QUERY_SQL = Pattern.compile(
             "@?Query\\s*\\(\\s*\"([^\"]+)\"");
+    /**
+     * {@code Foo.class} (Java) または {@code Foo::class} (Kotlin) のクラス参照。
+     */
     private static final Pattern ENTITY_CLASS_REF = Pattern.compile(
-            "([A-Za-z_$][A-Za-z0-9_$.]*)\\.class");
+            "([A-Za-z_$][A-Za-z0-9_$.]*)(?:\\.class|::class)");
 
     /** クラス群を走査して Room 関連クラスを抽出する。 */
     public Result analyze(Collection<JavaClassInfo> classes) {

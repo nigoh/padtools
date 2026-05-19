@@ -43,9 +43,14 @@ public final class KotlinLightScanner {
     /**
      * クラスヘッダパターン。グループ 1 = annotations + modifiers (空白区切り),
      * グループ 2 = 種別キーワード, グループ 3 = クラス名。
+     *
+     * <p>アノテーション引数の {@code (...)} は 1 レベルのネストを許容するように
+     * {@code (?:[^()]|\([^()]*\))*} を使う。これにより
+     * {@code @Entity(foreignKeys = [ForeignKey(...)])} のような Room の Kotlin
+     * スタイルもクラスヘッダの annotation prefix として認識できる。</p>
      */
     private static final Pattern CLASS_HEADER = Pattern.compile(
-            "((?:@[A-Za-z_][\\w.]*(?:\\([^)]*\\))?\\s*|"
+            "((?:@[A-Za-z_][\\w.]*(?:\\((?:[^()]|\\([^()]*\\))*\\))?\\s*|"
                     + "public\\s+|protected\\s+|private\\s+|internal\\s+|"
                     + "open\\s+|abstract\\s+|final\\s+|sealed\\s+|data\\s+|"
                     + "inner\\s+|companion\\s+|enum\\s+|annotation\\s+)*)"
@@ -151,8 +156,9 @@ public final class KotlinLightScanner {
 
     private static void extractAnnotations(String annsAndMods, List<String> into) {
         if (annsAndMods == null) return;
+        // 引数の () は 1 レベルのネストを許容 (Kotlin の Entity(foreignKeys = [ForeignKey(...)]) 等)
         Pattern annPattern = Pattern.compile(
-                "@([A-Za-z_][\\w.]*)(\\([^)]*\\))?");
+                "@([A-Za-z_][\\w.]*)(\\((?:[^()]|\\([^()]*\\))*\\))?");
         Matcher m = annPattern.matcher(annsAndMods);
         while (m.find()) {
             String full = "@" + m.group(1) + (m.group(2) == null ? "" : m.group(2));

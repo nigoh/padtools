@@ -470,6 +470,9 @@ public class UmlMainFrame extends JFrame {
     private JMenu buildHelpMenu() {
         JMenu m = new JMenu("Help");
         m.setMnemonic(KeyEvent.VK_H);
+        JMenuItem usage = new JMenuItem("Usage");
+        usage.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
+        usage.addActionListener(e -> showUsageDialog());
         JMenuItem about = new JMenuItem("About");
         about.addActionListener(e -> JOptionPane.showMessageDialog(this,
                 "PadTools UML\n\n"
@@ -477,8 +480,77 @@ public class UmlMainFrame extends JFrame {
                         + "Bundled PlantUML for rendering.",
                 "About PadTools UML",
                 JOptionPane.INFORMATION_MESSAGE));
+        m.add(usage);
+        m.addSeparator();
         m.add(about);
         return m;
+    }
+
+    /** 使い方ダイアログを表示する (Help > Usage / F1)。 */
+    private void showUsageDialog() {
+        String mod = MENU_MASK == InputEvent.META_DOWN_MASK ? "Cmd" : "Ctrl";
+        String text =
+                "PadTools UML — 使い方 (Usage)\n"
+                        + "\n"
+                        + "■ プロジェクトを開く (Open Project)\n"
+                        + "  File > Open Project... (" + mod + "+O)\n"
+                        + "    Gradle / Java プロジェクトのルートディレクトリを指定すると、\n"
+                        + "    左ペインのツリーにモジュール・パッケージ・クラスが表示されます。\n"
+                        + "\n"
+                        + "■ 図種を切り替える (Diagram)\n"
+                        + "  Diagram メニューから Class / Sequence / Activity / Layout などを選択。\n"
+                        + "  シーケンス図やアクティビティ図は起点メソッドの指定が必要です\n"
+                        + "  (Diagram > Choose Sequence Entry... / Choose Activity Method...)。\n"
+                        + "\n"
+                        + "■ 左ペインのツリー操作\n"
+                        + "  - クラスやメソッドを選択すると、対応する図に絞り込み表示します。\n"
+                        + "  - パッケージ / モジュール選択でスコープを切り替えられます。\n"
+                        + "\n"
+                        + "■ プレビュー (右ペイン) の操作\n"
+                        + "  - 左ドラッグ / 中ボタンドラッグ: パン (画面移動)\n"
+                        + "  - " + mod + " + マウスホイール: ポインタ位置を基点にズームイン/アウト\n"
+                        + "  - マウスホイールのみ: 縦スクロール\n"
+                        + "  - View > Zoom In / Out / 100% / Fit (" + mod + "+= / " + mod + "+- / " + mod + "+0 / " + mod + "+F)\n"
+                        + "\n"
+                        + "■ ドリルダウン (図中のクリック可能要素)\n"
+                        + "  - 図中のクラス名やメソッド名のうち、人差し指 (👆) アイコンが\n"
+                        + "    表示される箇所はクリックで詳細表示に切り替わります。\n"
+                        + "    ※ アイコンが出ない箇所はクリック対象ではありません。\n"
+                        + "  - 右クリックでポップアップメニュー (関連図への遷移など)。\n"
+                        + "  - View > Back (Alt+←) で 1 段戻る。\n"
+                        + "\n"
+                        + "■ 絞り込み / 検索\n"
+                        + "  - Diagram > Search Entities... (" + mod + "+Shift+F): クラス/メソッドを検索。\n"
+                        + "  - Diagram > Scope...: 表示範囲 (パッケージ等) を細かく指定。\n"
+                        + "  - Diagram > Filter Sequence Participants...: シーケンス図の登場人物を隠す。\n"
+                        + "  - Diagram > Preset > Minimal / Balanced / Detailed\n"
+                        + "    (" + mod + "+1 / " + mod + "+2 / " + mod + "+3): クラス図の表示密度を切替。\n"
+                        + "\n"
+                        + "■ 再描画 / キャンセル\n"
+                        + "  - File > Refresh (F5): 現在の図を再生成。\n"
+                        + "  - File > Cancel Loading: 重い解析を途中で中断。\n"
+                        + "\n"
+                        + "■ エクスポート (画像保存)\n"
+                        + "  - File > Save Diagram As... (" + mod + "+S): PNG / SVG / PUML で保存。\n"
+                        + "  - File > Export Class Diagrams Per Folder...: フォルダ単位で一括出力。\n"
+                        + "\n"
+                        + "■ スタイル (見た目)\n"
+                        + "  - Style メニュー: テーマ切替・詳細スタイル設定。\n"
+                        + "\n"
+                        + "■ ヒント\n"
+                        + "  - 右側タブの \"PlantUML Source\" で生成された .puml を確認できます。\n"
+                        + "  - Android プロジェクトでは \"Manifest Summary\" タブで概要を確認可能。";
+
+        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
+        area.setEditable(false);
+        area.setLineWrap(false);
+        area.setFont(new java.awt.Font(java.awt.Font.MONOSPACED,
+                java.awt.Font.PLAIN, area.getFont().getSize()));
+        area.setCaretPosition(0);
+        JScrollPane sp = new JScrollPane(area);
+        sp.setPreferredSize(new Dimension(640, 520));
+        JOptionPane.showMessageDialog(this, sp,
+                "Usage — PadTools UML", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private JComponent buildStatusBar() {

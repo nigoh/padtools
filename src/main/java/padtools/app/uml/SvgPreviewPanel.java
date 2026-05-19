@@ -115,6 +115,10 @@ public class SvgPreviewPanel extends JPanel {
         this.linkAreas = (areas == null || areas.isEmpty())
                 ? Collections.emptyList()
                 : Collections.unmodifiableList(new ArrayList<>(areas));
+        // リンク領域が空になった場合は人差し指アイコンを残さない
+        if (this.linkAreas.isEmpty() && dragStart == null) {
+            setCursor(defaultCursor);
+        }
     }
 
     /** 現在保持しているリンク領域のリスト (never null)。 */
@@ -137,6 +141,21 @@ public class SvgPreviewPanel extends JPanel {
      */
     public void setOnLinkClick(BiConsumer<LinkArea, MouseEvent> listener) {
         this.linkClickListener = listener;
+    }
+
+    /**
+     * 指定したパネル座標で表示すべきカーソルを返す。
+     * リンク領域 ({@link LinkArea}) 上では人差し指 (HAND_CURSOR)、
+     * それ以外ではデフォルトカーソル。コンテンツ未表示時もデフォルト。
+     */
+    private Cursor cursorForPosition(Point p) {
+        if (!hasContent()) {
+            return defaultCursor;
+        }
+        if (linkAreas.isEmpty() || p == null) {
+            return defaultCursor;
+        }
+        return hitTestLink(p) != null ? handCursor : defaultCursor;
     }
 
     /**
@@ -368,6 +387,14 @@ public class SvgPreviewPanel extends JPanel {
             }
 
             @Override
+            public void mouseMoved(MouseEvent e) {
+                if (dragStart != null) {
+                    return;
+                }
+                setCursor(cursorForPosition(e.getPoint()));
+            }
+
+            @Override
             public void mouseDragged(MouseEvent e) {
                 if (dragStart == null) {
                     return;
@@ -392,13 +419,13 @@ public class SvgPreviewPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 dragStart = null;
-                setCursor(hasContent() ? handCursor : defaultCursor);
+                setCursor(cursorForPosition(e.getPoint()));
                 maybeFireLinkPopup(e);
             }
 
             @Override
             public void mouseEntered(MouseEvent e) {
-                setCursor(hasContent() ? handCursor : defaultCursor);
+                setCursor(cursorForPosition(e.getPoint()));
             }
 
             @Override

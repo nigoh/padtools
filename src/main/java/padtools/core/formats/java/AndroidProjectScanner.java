@@ -72,6 +72,8 @@ public final class AndroidProjectScanner {
         public boolean includeManifest = false;
         /** res/layout/ 配下の XML レイアウトファイルを含める。 */
         public boolean includeLayout = false;
+        /** res/navigation/ 配下の Jetpack Navigation グラフ XML を含める。 */
+        public boolean includeNavigation = false;
         /** 除外ディレクトリ名のセット。 */
         public Set<String> excludedDirs = DEFAULT_EXCLUDED_DIRS;
         /** AOSP 級プロジェクト向けの追加除外名 ({@link #AOSP_EXTRA_EXCLUDED_DIRS}) も合成する。 */
@@ -210,6 +212,9 @@ public final class AndroidProjectScanner {
         if (opts.includeLayout && name.endsWith(".xml") && isInLayoutDir(f)) {
             return true;
         }
+        if (opts.includeNavigation && name.endsWith(".xml") && isInNavigationDir(f)) {
+            return true;
+        }
         return false;
     }
 
@@ -224,6 +229,18 @@ public final class AndroidProjectScanner {
         }
         String dir = parent.getName();
         return "layout".equals(dir) || dir.startsWith("layout-");
+    }
+
+    /**
+     * 親ディレクトリ名が {@code navigation} または {@code navigation-*} の場合に true を返す。
+     */
+    static boolean isInNavigationDir(File f) {
+        File parent = f.getParentFile();
+        if (parent == null) {
+            return false;
+        }
+        String dir = parent.getName();
+        return "navigation".equals(dir) || dir.startsWith("navigation-");
     }
 
     /** ファイルを UTF-8 で読み込んで文字列として返す。 */

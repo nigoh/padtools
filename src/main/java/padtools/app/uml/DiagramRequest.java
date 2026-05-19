@@ -91,6 +91,16 @@ public final class DiagramRequest {
     }
 
     /**
+     * NAVIGATION 図用のショートカットコンストラクタ。
+     * 内部的には {@link #layoutKey} スロットを再利用する
+     * (LAYOUT と NAVIGATION は同時に有効化されないため)。
+     */
+    public static DiagramRequest forNavigationGraph(String navKey, boolean includeLegend) {
+        return new DiagramRequest(DiagramKind.NAVIGATION, null, null, includeLegend,
+                null, false, navKey, null);
+    }
+
+    /**
      * ACTIVITY 図用のショートカットコンストラクタ。
      * {@code entryClass} と {@code entryMethod} は {@link #sequenceEntryClass} /
      * {@link #sequenceEntryMethod} スロットを共用する。SEQUENCE と ACTIVITY は
@@ -137,6 +147,17 @@ public final class DiagramRequest {
      * LAYOUT 図以外では null。
      */
     public String getLayoutKey() {
+        return layoutKey;
+    }
+
+    /**
+     * NAVIGATION 図でターゲットとする
+     * {@link padtools.core.formats.android.AndroidNavigationGraphInfo}
+     * のキー (形式: {@code moduleName::sourceSet::fileName})。
+     * 内部的には {@link #layoutKey} スロットを再利用しているため、
+     * {@code kind != NAVIGATION} の場合は LAYOUT 図用の値が返る点に注意。
+     */
+    public String getNavigationGraphKey() {
         return layoutKey;
     }
 

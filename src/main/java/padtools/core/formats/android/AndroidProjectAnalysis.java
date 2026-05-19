@@ -17,6 +17,8 @@ public class AndroidProjectAnalysis {
     private final Map<String, GradleProjectInfo> gradleByModule = new LinkedHashMap<>();
     private final Map<String, List<AndroidManifestInfo>> manifestsByModule = new LinkedHashMap<>();
     private final Map<String, List<AndroidLayoutInfo>> layoutsByModule = new LinkedHashMap<>();
+    private final Map<String, List<AndroidNavigationGraphInfo>> navigationsByModule
+            = new LinkedHashMap<>();
 
     public GradleProjectInfo getRootSettings() {
         return rootSettings;
@@ -50,6 +52,36 @@ public class AndroidProjectAnalysis {
             all.addAll(list);
         }
         return all;
+    }
+
+    /**
+     * モジュール名 → そのモジュールに含まれる Navigation グラフ XML のリスト。
+     * {@link AndroidNavigationGraphParser} 経由でパース済みの結果。
+     */
+    public Map<String, List<AndroidNavigationGraphInfo>> getNavigationsByModule() {
+        return navigationsByModule;
+    }
+
+    /** 全モジュールの Navigation グラフを 1 つのリストに連結。 */
+    public List<AndroidNavigationGraphInfo> allNavigationGraphs() {
+        List<AndroidNavigationGraphInfo> all = new ArrayList<>();
+        for (List<AndroidNavigationGraphInfo> list : navigationsByModule.values()) {
+            all.addAll(list);
+        }
+        return all;
+    }
+
+    /** {@link AndroidNavigationGraphInfo#getKey()} で Navigation グラフを検索。見つからなければ null。 */
+    public AndroidNavigationGraphInfo findNavigationByKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        for (AndroidNavigationGraphInfo info : allNavigationGraphs()) {
+            if (key.equals(info.getKey())) {
+                return info;
+            }
+        }
+        return null;
     }
 
     /** {@link AndroidLayoutInfo#getKey()} で layout を検索。見つからなければ null。 */

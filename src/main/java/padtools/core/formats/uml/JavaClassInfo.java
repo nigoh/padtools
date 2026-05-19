@@ -24,6 +24,7 @@ public class JavaClassInfo {
     private String packageName = "";
     private String simpleName = "";
     private Kind kind = Kind.CLASS;
+    private final List<String> imports = new ArrayList<>();
     private final List<String> modifiers = new ArrayList<>();
     private final List<String> annotations = new ArrayList<>();
     private String superClass;
@@ -75,6 +76,14 @@ public class JavaClassInfo {
 
     public void setKind(Kind kind) {
         this.kind = kind;
+    }
+
+    /**
+     * このソースファイルで宣言された import 文の完全修飾名 (またはワイルドカード) リスト。
+     * 名前解決 ({@code padtools.core.refs.NameResolver}) で単純名を FQN に解決する際に使用する。
+     */
+    public List<String> getImports() {
+        return imports;
     }
 
     public List<String> getModifiers() {

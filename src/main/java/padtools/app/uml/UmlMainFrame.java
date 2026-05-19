@@ -78,10 +78,15 @@ public class UmlMainFrame extends JFrame {
     }
 
     private final ProjectAnalysisCache cache = new ProjectAnalysisCache();
+    private final ReferenceIndexCache refIndexCache = new ReferenceIndexCache(cache);
     private final ProjectTreePanel treePanel = new ProjectTreePanel();
     private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
     private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
     private final ManifestSummaryPanel manifestSummaryPanel = new ManifestSummaryPanel();
+    private final padtools.app.uml.explore.ImpactExplorerPanel impactPanel
+            = new padtools.app.uml.explore.ImpactExplorerPanel(refIndexCache);
+    private final padtools.app.uml.explore.ReverseReferencePanel referencesPanel
+            = new padtools.app.uml.explore.ReverseReferencePanel(refIndexCache);
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
@@ -170,6 +175,8 @@ public class UmlMainFrame extends JFrame {
         rightTabs = new JTabbedPane();
         rightTabs.addTab("Preview", tabPane);
         rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
+        rightTabs.addTab("Impact", impactPanel);
+        rightTabs.addTab("References", referencesPanel);
         dynamicTabsIndex = rightTabs.indexOfComponent(tabPane);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
@@ -830,6 +837,7 @@ public class UmlMainFrame extends JFrame {
             protected Void doInBackground() {
                 try {
                     cache.clear();
+                    refIndexCache.invalidate();
                     cache.load(root, ErrorListener.silent(), prog, cancel, null);
                     cancelled = cancel.isCancelled();
                 } catch (Exception ex) {

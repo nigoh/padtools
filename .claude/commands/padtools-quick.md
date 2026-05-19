@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow`, `screen-flow` | 図/レポートの種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow`, `screen-flow`, `android-bp` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -38,6 +38,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `er-diagram` | `--er-diagram` | Room @Entity の ER 図 (PlantUML) |
 | `data-flow` | `--data-flow` | Room Entity / DAO / Database 全体レポート (Markdown + ER PlantUML) |
 | `screen-flow` | `--screen-flow` | Intent ベース画面遷移図 (startActivity / setClass / startActivityForResult) (Markdown + PlantUML) |
+| `android-bp` | `--android-bp` | AOSP の Android.bp (Soong) モジュール依存図 + Markdown インベントリ |
 
 ## 例
 
@@ -80,6 +81,9 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # Intent ベース画面遷移図 (startActivity / setClass)
 /padtools-quick screen-flow ~/projects/my-android-app
+
+# AOSP の Android.bp (Soong) モジュール依存図
+/padtools-quick android-bp ~/AOSP/packages/services/Car
 ```
 
 ## 出力

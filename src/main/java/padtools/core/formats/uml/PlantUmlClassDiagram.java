@@ -30,6 +30,11 @@ public final class PlantUmlClassDiagram {
     public static class Options {
         public boolean showVisibility = true;
         public boolean showInheritance = true;
+        /**
+         * {@code implements} によるインタフェース実装線を出力する。既定 true。
+         * 関連線種別フィルタで extends と implements を別々に制御したい場合に使う。
+         */
+        public boolean showImplementations = true;
         public boolean showUsageRelations = true;
         public boolean showFields = true;
         public boolean showMethods = true;
@@ -81,6 +86,30 @@ public final class PlantUmlClassDiagram {
          * SVG 上の {@code href} から FQN を取り出す側 (GUI) と揃える。
          */
         public String interactiveLinkPrefix = "padtools://class/";
+        /**
+         * 外部ライブラリ (java.*, android.*, kotlin.* など) を完全に除外する。
+         * 既定 false (除外せず {@code <<external>>} / {@code <<missing>>} ステレオタイプで区別表示する
+         * 既存挙動を維持)。
+         *
+         * <p>判定は 2 段で行う:
+         * <ol>
+         *   <li>{@link JavaClassInfo#getOrigin()} が {@code EXTERNAL_JAR} / {@code MISSING_JAR}</li>
+         *   <li>パッケージ名が {@link #externalPackagePrefixes} のいずれかに前方一致</li>
+         * </ol>
+         * いずれかに該当すれば除外される。</p>
+         */
+        public boolean excludeExternalLibraries = false;
+        /**
+         * 外部ライブラリ判定のパッケージ prefix セット。
+         * null/空のときは {@link ExternalPackageMatcher#DEFAULT_PREFIXES} が使われる。
+         */
+        public Set<String> externalPackagePrefixes =
+                new LinkedHashSet<>(ExternalPackageMatcher.DEFAULT_PREFIXES);
+        /**
+         * {@code public} 可視性のクラス / フィールド / メソッドのみを表示する。
+         * 既定 false (全可視性を表示)。
+         */
+        public boolean publicOnly = false;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(

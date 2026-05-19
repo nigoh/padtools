@@ -256,6 +256,8 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
         pickLayout.addActionListener(e -> pickLayoutFile());
         m.add(pickLayout);
+        m.addSeparator();
+        m.add(buildPresetSubMenu());
         JMenuItem scope = new JMenuItem("Scope...");
         scope.addActionListener(e -> openScopeDialog());
         m.add(scope);
@@ -266,6 +268,51 @@ public class UmlMainFrame extends JFrame {
         });
         m.add(clearScope);
         return m;
+    }
+
+    /** クラス図の表示密度プリセット ({@link DiagramPreset}) を切り替えるサブメニュー。 */
+    private JMenu buildPresetSubMenu() {
+        JMenu sub = new JMenu("Preset");
+        sub.setToolTipText("Switch class diagram density "
+                + "(Minimal / Balanced / Detailed)");
+        int seq = 1;
+        for (DiagramPreset p : DiagramPreset.values()) {
+            if (p == DiagramPreset.CUSTOM) {
+                continue;
+            }
+            JMenuItem mi = new JMenuItem(p.getDisplayName());
+            // Ctrl+1 = Minimal, Ctrl+2 = Balanced, Ctrl+3 = Detailed
+            int keyCode;
+            switch (seq) {
+                case 1: keyCode = KeyEvent.VK_1; break;
+                case 2: keyCode = KeyEvent.VK_2; break;
+                case 3: keyCode = KeyEvent.VK_3; break;
+                default: keyCode = KeyEvent.VK_UNDEFINED;
+            }
+            if (keyCode != KeyEvent.VK_UNDEFINED) {
+                mi.setAccelerator(KeyStroke.getKeyStroke(keyCode, MENU_MASK));
+            }
+            seq++;
+            final DiagramPreset preset = p;
+            mi.addActionListener(e -> applyPreset(preset));
+            sub.add(mi);
+        }
+        return sub;
+    }
+
+    /**
+     * 指定された {@link DiagramPreset} を現在のスコープに適用して再描画する。
+     * 既存スコープのフィルタ設定 (パッケージ・seed 等) は維持し、表示密度関連の
+     * 項目だけプリセットで書き換える。
+     */
+    private void applyPreset(DiagramPreset p) {
+        DiagramScope.Builder b = currentScope != null
+                ? currentScope.toBuilder()
+                : DiagramScope.builder();
+        p.applyTo(b);
+        currentScope = b.build();
+        status.setText("Preset: " + p.getDisplayName());
+        refreshDiagram();
     }
 
     private JMenu buildViewMenu() {

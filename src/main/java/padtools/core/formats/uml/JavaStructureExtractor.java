@@ -24,7 +24,7 @@ public final class JavaStructureExtractor {
     private static final Set<String> MODIFIERS = new HashSet<>(Arrays.asList(
             "public", "private", "protected", "static", "final", "abstract",
             "synchronized", "native", "strictfp", "default", "transient",
-            "volatile"));
+            "volatile", "sealed"));
 
     /** Java ソースから ClassInfo のリストを返す。 */
     public static List<JavaClassInfo> extract(String source) {

@@ -620,6 +620,28 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testSealedClassModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "public sealed class Shape permits Circle, Rectangle {}");
+        assertEquals(1, cs.size());
+        JavaClassInfo c = cs.get(0);
+        assertTrue(c.getModifiers().contains("public"));
+        assertTrue(c.getModifiers().contains("sealed"));
+        assertEquals("Shape", c.getSimpleName());
+        assertTrue(c.getInterfaces().contains("Circle"));
+        assertTrue(c.getInterfaces().contains("Rectangle"));
+    }
+
+    @Test
+    public void testSealedInterfaceModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "sealed interface Result permits Ok, Err {}");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.INTERFACE, cs.get(0).getKind());
+        assertTrue(cs.get(0).getModifiers().contains("sealed"));
+    }
+
+    @Test
     public void testTextBlockWithBracesAndQuotes() {
         // テキストブロック内の { } や " は構造を壊さない
         String src = "class A {\n"

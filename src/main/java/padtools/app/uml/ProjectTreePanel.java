@@ -60,10 +60,12 @@ public class ProjectTreePanel extends JPanel {
     private final DefaultMutableTreeNode root;
     private java.util.function.Consumer<JavaClassInfo> onClassSelected;
     private java.util.function.Consumer<MethodSelection> onMethodSelected;
+    private java.util.function.Consumer<MethodSelection> onActivityMethodSelected;
     private java.util.function.Consumer<String> onPackageSelected;
     private java.util.function.Consumer<String> onModuleSelected;
     private java.util.function.Consumer<AndroidManifestInfo> onManifestSelected;
     private java.util.function.Consumer<AndroidComponentInfo> onComponentSelected;
+    private java.util.function.Consumer<TreeNodeOpenRequest> onOpenInNewTab;
 
     public ProjectTreePanel() {
         super(new BorderLayout());
@@ -92,6 +94,7 @@ public class ProjectTreePanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 maybeShowPopup(e);
+                maybeOpenInNewTab(e);
             }
 
             @Override
@@ -99,6 +102,7 @@ public class ProjectTreePanel extends JPanel {
                 maybeShowPopup(e);
             }
         });
+        tree.setCellRenderer(new ProjectTreeCellRenderer());
         add(new JScrollPane(tree), BorderLayout.CENTER);
     }
 
@@ -108,6 +112,14 @@ public class ProjectTreePanel extends JPanel {
 
     public void setOnMethodSelected(java.util.function.Consumer<MethodSelection> listener) {
         this.onMethodSelected = listener;
+    }
+
+    /**
+     * メソッド配下のアクティビティ図リーフが選択されたときのハンドラ。
+     * 受け取り側はアクティビティ図モードへ切り替える。
+     */
+    public void setOnActivityMethodSelected(java.util.function.Consumer<MethodSelection> listener) {
+        this.onActivityMethodSelected = listener;
     }
 
     /**
@@ -132,6 +144,14 @@ public class ProjectTreePanel extends JPanel {
     /** Manifest 配下の Activity / Service / Receiver / Provider ノード選択時のコールバック。 */
     public void setOnComponentSelected(java.util.function.Consumer<AndroidComponentInfo> listener) {
         this.onComponentSelected = listener;
+    }
+
+    /**
+     * マウス中クリックで「新しいタブとして開く」操作を受けるハンドラ。
+     * 受け取り側は {@link DiagramTabPane#addOrFocusTab} などを呼び出す。
+     */
+    public void setOnOpenInNewTab(java.util.function.Consumer<TreeNodeOpenRequest> listener) {
+        this.onOpenInNewTab = listener;
     }
 
     /** モジュール紐付けなしの簡易 populate (既存呼び出しの互換維持)。 */
@@ -247,7 +267,22 @@ public class ProjectTreePanel extends JPanel {
         Object last = tree.getLastSelectedPathComponent();
         if (last instanceof DefaultMutableTreeNode) {
             Object u = ((DefaultMutableTreeNode) last).getUserObject();
+            if (u instanceof MethodDiagramEntry) {
+                MethodDiagramEntry mde = (MethodDiagramEntry) u;
+                MethodSelection sel = new MethodSelection(mde.owner, mde.method);
+                if (mde.kind == DiagramKind.ACTIVITY) {
+                    if (onActivityMethodSelected != null) {
+                        onActivityMethodSelected.accept(sel);
+                    }
+                } else {
+                    if (onMethodSelected != null) {
+                        onMethodSelected.accept(sel);
+                    }
+                }
+                return;
+            }
             if (u instanceof MethodEntry) {
+                // メソッド自体のクリックは従来通りシーケンス図に切り替え (後方互換)
                 MethodEntry me = (MethodEntry) u;
                 if (onMethodSelected != null) {
                     onMethodSelected.accept(new MethodSelection(me.owner, me.method));
@@ -296,6 +331,54 @@ public class ProjectTreePanel extends JPanel {
         if (onClassSelected != null) {
             onClassSelected.accept(null);
         }
+    }
+
+    /**
+     * マウス中クリック (ホイール押し込み) で当該ノードを「新しいタブで開く」リクエストを発火する。
+     * 受け手 (機能 2 で配線) は {@link #setOnOpenInNewTab(java.util.function.Consumer)} で設定する。
+     * 中クリックはツリーの選択を変えない (Web ブラウザの挙動に合わせる)。
+     */
+    private void maybeOpenInNewTab(MouseEvent e) {
+        if (!javax.swing.SwingUtilities.isMiddleMouseButton(e)) {
+            return;
+        }
+        if (onOpenInNewTab == null) {
+            return;
+        }
+        TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+        if (path == null) {
+            return;
+        }
+        Object last = path.getLastPathComponent();
+        if (!(last instanceof DefaultMutableTreeNode)) {
+            return;
+        }
+        TreeNodeOpenRequest req = buildOpenRequest(((DefaultMutableTreeNode) last).getUserObject());
+        if (req != null) {
+            onOpenInNewTab.accept(req);
+        }
+    }
+
+    /** ツリーのユーザーオブジェクトから「新しいタブで開く」リクエストを作る。 */
+    private TreeNodeOpenRequest buildOpenRequest(Object u) {
+        if (u instanceof MethodDiagramEntry) {
+            MethodDiagramEntry mde = (MethodDiagramEntry) u;
+            return TreeNodeOpenRequest.method(mde.owner, mde.method, mde.kind);
+        }
+        if (u instanceof MethodEntry) {
+            MethodEntry me = (MethodEntry) u;
+            return TreeNodeOpenRequest.method(me.owner, me.method, DiagramKind.SEQUENCE);
+        }
+        if (u instanceof ClassEntry) {
+            return TreeNodeOpenRequest.classNode(((ClassEntry) u).info);
+        }
+        if (u instanceof PackageEntry) {
+            return TreeNodeOpenRequest.pkg(((PackageEntry) u).name);
+        }
+        if (u instanceof ModuleEntry) {
+            return TreeNodeOpenRequest.module(((ModuleEntry) u).name);
+        }
+        return null;
     }
 
     private void maybeShowPopup(MouseEvent e) {
@@ -370,7 +453,13 @@ public class ProjectTreePanel extends JPanel {
             if (m.isAbstract()) {
                 continue;
             }
-            classNode.add(new DefaultMutableTreeNode(new MethodEntry(c, m)));
+            DefaultMutableTreeNode methodNode = new DefaultMutableTreeNode(new MethodEntry(c, m));
+            // シーケンス図 (赤丸) / アクティビティ図 (青丸) のリーフを生やす
+            methodNode.add(new DefaultMutableTreeNode(
+                    new MethodDiagramEntry(c, m, DiagramKind.SEQUENCE)));
+            methodNode.add(new DefaultMutableTreeNode(
+                    new MethodDiagramEntry(c, m, DiagramKind.ACTIVITY)));
+            classNode.add(methodNode);
         }
     }
 
@@ -469,6 +558,36 @@ public class ProjectTreePanel extends JPanel {
             Visibility v = method.getVisibility();
             String mark = v == null ? "~" : v.mark();
             return mark + " " + method.getName() + "()";
+        }
+    }
+
+    /**
+     * メソッドノードの子として並ぶ「図種別リーフ」ノード値。
+     * {@link DiagramKind#SEQUENCE} (赤丸) と {@link DiagramKind#ACTIVITY} (青丸) の
+     * 2 種類を {@link #addMethodNodes} で生成し、{@link ProjectTreeCellRenderer} が
+     * 該当アイコンを描画する。
+     */
+    static final class MethodDiagramEntry {
+        final JavaClassInfo owner;
+        final JavaMethodInfo method;
+        final DiagramKind kind;
+
+        MethodDiagramEntry(JavaClassInfo owner, JavaMethodInfo method, DiagramKind kind) {
+            this.owner = owner;
+            this.method = method;
+            this.kind = kind;
+        }
+
+        @Override
+        public String toString() {
+            switch (kind) {
+                case SEQUENCE:
+                    return "sequence";
+                case ACTIVITY:
+                    return "activity";
+                default:
+                    return kind.name().toLowerCase(java.util.Locale.ROOT);
+            }
         }
     }
 

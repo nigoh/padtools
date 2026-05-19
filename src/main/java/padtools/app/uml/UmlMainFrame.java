@@ -14,6 +14,7 @@ import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -37,6 +38,7 @@ import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -98,6 +100,13 @@ public class UmlMainFrame extends JFrame {
 
     private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
 
+    /** 動的タブ管理 (機能 2)。null の場合はタブ機能未配線。 */
+    private DiagramTabPane tabPane;
+    /** 右側の最上位タブ (Preview / Source / Manifest / Tabs)。 */
+    private JTabbedPane rightTabs;
+    /** rightTabs 内での "Tabs" タブのインデックス。-1 なら未配線。 */
+    private int dynamicTabsIndex = -1;
+
     private DiagramKind currentKind = DiagramKind.CLASS;
     private String currentPuml;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
@@ -108,8 +117,12 @@ public class UmlMainFrame extends JFrame {
     private String currentLayoutKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
-    /** ドリルダウン履歴 (戻る用)。 */
+    /** ドリルダウン履歴 (戻る用)。null スコープは {@link #SCOPE_NULL_MARKER} で保持。 */
     private final java.util.Deque<DiagramScope> scopeHistory = new java.util.ArrayDeque<>();
+    /** Back の対になる進む履歴。Back を実行したときに現在スコープがここに積まれる。 */
+    private final java.util.Deque<DiagramScope> forwardHistory = new java.util.ArrayDeque<>();
+    /** null スコープを Deque に保持するためのセンチネル (Deque は null 要素不可)。 */
+    private static final DiagramScope SCOPE_NULL_MARKER = DiagramScope.builder().build();
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
     /**
@@ -135,11 +148,13 @@ public class UmlMainFrame extends JFrame {
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
         previewPanel.setOnLinkClick(this::onPreviewLinkClick);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
+        treePanel.setOnActivityMethodSelected(this::onTreeActivityMethodSelected);
         treePanel.setOnClassSelected(this::onTreeClassSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
         treePanel.setOnModuleSelected(this::onTreeModuleSelected);
         treePanel.setOnManifestSelected(this::onTreeManifestSelected);
         treePanel.setOnComponentSelected(this::onTreeComponentSelected);
+        treePanel.setOnOpenInNewTab(this::onTreeOpenInNewTab);
 
         loadProgress.setStringPainted(true);
         loadProgress.setVisible(false);
@@ -148,10 +163,16 @@ public class UmlMainFrame extends JFrame {
         setJMenuBar(buildMenuBar());
 
         // 右側: プレビュー (ベクター SVG) と PlantUML ソース / Manifest Summary のタブ
-        JTabbedPane rightTabs = new JTabbedPane();
-        rightTabs.addTab("Preview", new JScrollPane(previewPanel));
+        // 動的タブ機能 (機能 2) は "Tabs" タブ内に DiagramTabPane を配置する。
+        // この設計だと既存ビュー (Preview/Source/Manifest) には触らずに済むため、
+        // メソッド差し替えやズーム連動などのリグレッションを最小化できる。
+        tabPane = new DiagramTabPane(cache, status::setText);
+        rightTabs = new JTabbedPane();
+        rightTabs.addTab("Preview", buildPreviewTabComponent());
         rightTabs.addTab("PlantUML Source", sourcePanel);
         rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
+        rightTabs.addTab("Tabs", tabPane);
+        dynamicTabsIndex = rightTabs.indexOfComponent(tabPane);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
                 treePanel, rightTabs);
@@ -172,6 +193,25 @@ public class UmlMainFrame extends JFrame {
         if (initialProject != null && initialProject.isDirectory()) {
             SwingUtilities.invokeLater(() -> loadProject(initialProject));
         }
+    }
+
+    /**
+     * Preview タブの内容物を構築する。プレビュー本体を {@link JScrollPane} に
+     * 入れた上で、上部右端に小さな "Save..." ボタンを {@link BorderLayout} で配置し、
+     * ビューワーから直接 1 クリックでエクスポート ({@link #chooseAndExport()}) を起動できるようにする。
+     */
+    private JComponent buildPreviewTabComponent() {
+        JPanel container = new JPanel(new BorderLayout());
+        JPanel toolbar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2));
+        JButton saveButton = new JButton("Save...");
+        saveButton.setToolTipText("Save current diagram as SVG / PNG / PUML (Ctrl+S)");
+        saveButton.setMargin(new Insets(2, 8, 2, 8));
+        saveButton.setFocusable(false);
+        saveButton.addActionListener(e -> chooseAndExport());
+        toolbar.add(saveButton);
+        container.add(toolbar, BorderLayout.NORTH);
+        container.add(new JScrollPane(previewPanel), BorderLayout.CENTER);
+        return container;
     }
 
     // --- メニュー -------------------------------------------------------------
@@ -361,7 +401,22 @@ public class UmlMainFrame extends JFrame {
                 MENU_MASK | InputEvent.ALT_DOWN_MASK));
         back.addActionListener(e -> popScopeHistory());
         m.add(back);
+        JMenuItem forward = new JMenuItem("Forward");
+        forward.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT,
+                MENU_MASK | InputEvent.ALT_DOWN_MASK));
+        forward.addActionListener(e -> popForwardHistory());
+        m.add(forward);
         return m;
+    }
+
+    /** Deque に保存可能な値に変換する (null → センチネル)。 */
+    private static DiagramScope encodeScope(DiagramScope scope) {
+        return scope == null ? SCOPE_NULL_MARKER : scope;
+    }
+
+    /** Deque から取り出した値を元のスコープ (null 可) に戻す。 */
+    private static DiagramScope decodeScope(DiagramScope scope) {
+        return scope == SCOPE_NULL_MARKER ? null : scope;
     }
 
     /** ドリルダウン履歴を 1 段戻す。空のときは無視。 */
@@ -370,8 +425,21 @@ public class UmlMainFrame extends JFrame {
             status.setText("No drill-down history.");
             return;
         }
-        currentScope = scopeHistory.pop();
+        forwardHistory.push(encodeScope(currentScope));
+        currentScope = decodeScope(scopeHistory.pop());
         status.setText("Back to previous scope.");
+        refreshDiagram();
+    }
+
+    /** Back で積まれた forward 履歴を 1 段進める。空のときは無視。 */
+    private void popForwardHistory() {
+        if (forwardHistory.isEmpty()) {
+            status.setText("No forward history.");
+            return;
+        }
+        scopeHistory.push(encodeScope(currentScope));
+        currentScope = decodeScope(forwardHistory.pop());
+        status.setText("Forward to next scope.");
         refreshDiagram();
     }
 
@@ -1017,6 +1085,73 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
+     * 左ペインで中クリックされたノードを「新しいタブ」として開くハンドラ。
+     * 機能 2 (動的タブ) で {@link DiagramTabPane} に委譲するが、現状は単に
+     * その図種に切り替える (タブ追加は別実装)。
+     */
+    private void onTreeOpenInNewTab(TreeNodeOpenRequest req) {
+        if (req == null) {
+            return;
+        }
+        if (tabPane != null) {
+            tabPane.addOrFocusTab(req);
+            if (rightTabs != null && dynamicTabsIndex >= 0) {
+                rightTabs.setSelectedIndex(dynamicTabsIndex);
+            }
+            return;
+        }
+        // フォールバック: タブパネル未配線時は現在ビューを差し替えるのみ
+        applyOpenRequest(req);
+    }
+
+    /** タブ未配線時の挙動: 現在ビューを差し替える。 */
+    private void applyOpenRequest(TreeNodeOpenRequest req) {
+        switch (req.target) {
+            case METHOD:
+                String entry = req.classInfo.getSimpleName() + "." + req.methodInfo.getName();
+                if (req.kind == DiagramKind.ACTIVITY) {
+                    switchToActivityDiagram(entry);
+                } else {
+                    switchToSequenceDiagram(entry);
+                }
+                break;
+            case CLASS:
+                onTreeClassSelected(req.classInfo);
+                break;
+            case PACKAGE:
+                onTreePackageSelected(req.name);
+                break;
+            case MODULE:
+                onTreeModuleSelected(req.name);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * 左ペインのアクティビティ図リーフ (青丸) が選択された際のハンドラ。
+     * アクティビティ図モードへ切り替えてその起点メソッドで再描画する。
+     */
+    private void onTreeActivityMethodSelected(ProjectTreePanel.MethodSelection sel) {
+        if (sel == null) {
+            return;
+        }
+        switchToActivityDiagram(sel.getEntry());
+    }
+
+    /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
+    private void switchToActivityDiagram(String entry) {
+        activityEntry = entry;
+        currentKind = DiagramKind.ACTIVITY;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        refreshDiagram();
+    }
+
+    /**
      * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
      * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
      */
@@ -1043,6 +1178,8 @@ public class UmlMainFrame extends JFrame {
         if (previous != null) {
             scopeHistory.push(previous);
         }
+        // 新規ドリルダウン時は forward 履歴をクリア (ブラウザ動作と同じ)
+        forwardHistory.clear();
         DiagramScope.Builder b = DiagramScope.builder()
                 .seed(fqn).neighborHops(1);
         DiagramPreset.DETAILED.applyTo(b);

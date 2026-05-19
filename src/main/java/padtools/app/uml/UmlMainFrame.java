@@ -1519,6 +1519,9 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
+        loadProgress.setString("Rendering...");
+        loadProgress.setIndeterminate(true);
+        loadProgress.setVisible(true);
         final String entry = sequenceEntry;
         final String activity = activityEntry;
         final String layoutKey = currentLayoutKey;
@@ -1557,6 +1560,9 @@ public class UmlMainFrame extends JFrame {
 
             @Override
             protected void done() {
+                loadProgress.setVisible(false);
+                loadProgress.setIndeterminate(false);
+                loadProgress.setString(null);
                 if (error != null) {
                     // モーダル ダイアログは出さず、ステータス バー + PlantUML Source タブで
                     // 通知する。Smetana のフォールバック SVG (Batik が読めない巨大 base64) を

@@ -15,6 +15,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -85,6 +86,7 @@ public class EntitySearchDialog extends JDialog {
     private Entry selectedEntry;
     /** OK ボタンの代わりに「Drill-down」を押したとき true。詳細図への遷移要求。 */
     private boolean drillDownRequested = false;
+    private final Timer debounceTimer = new Timer(150, e -> rebuildTree(filter.getText()));
 
     public EntitySearchDialog(Frame owner, List<JavaClassInfo> classes) {
         super(owner, "Search entities", true);
@@ -153,20 +155,21 @@ public class EntitySearchDialog extends JDialog {
                 }
             }
         });
+        debounceTimer.setRepeats(false);
         filter.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
         });
 

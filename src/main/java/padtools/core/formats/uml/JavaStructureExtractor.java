@@ -89,8 +89,27 @@ public final class JavaStructureExtractor {
         private final ErrorListener listener;
         private final List<JavaClassInfo> results = new ArrayList<>();
         private final List<JavaClassInfo> classStack = new ArrayList<>();
+        /**
+         * メソッド本体内で {@code [this.] IDENT = <inline>} を検出したが、
+         * 解析時点で同名フィールドがまだ宣言されていなかったケースを保留する。
+         * クラス本体のパース完了後にマッチを試みる。
+         */
+        private final List<PendingAssignment> pendingFieldAssignments = new ArrayList<>();
         private String packageName = "";
         private int idx;
+
+        private static final class PendingAssignment {
+            final JavaClassInfo cls;
+            final String fieldName;
+            final List<JavaMethodInfo> inlineMethods;
+
+            PendingAssignment(JavaClassInfo cls, String fieldName,
+                              List<JavaMethodInfo> inlineMethods) {
+                this.cls = cls;
+                this.fieldName = fieldName;
+                this.inlineMethods = inlineMethods;
+            }
+        }
 
         Extractor(List<JavaToken> tokens, String src,
                   List<JavaCommentScanner.Comment> comments,
@@ -177,6 +196,22 @@ public final class JavaStructureExtractor {
                 }
                 next();
             }
+            resolvePendingFieldAssignments();
+        }
+
+        /**
+         * クラス本体パース中に出現したが宣言順の都合で同名フィールドにマッチできなかった
+         * 代入 ({@link PendingAssignment}) を、最終的にフィールドへ紐づける。
+         * 該当フィールドが見つからない場合は破棄する (解析対象外のローカル変数等)。
+         */
+        private void resolvePendingFieldAssignments() {
+            for (PendingAssignment p : pendingFieldAssignments) {
+                JavaFieldInfo f = findFieldByName(p.cls, p.fieldName);
+                if (f != null) {
+                    f.getInlineMethods().addAll(p.inlineMethods);
+                }
+            }
+            pendingFieldAssignments.clear();
         }
 
         private void parseClassDecl(JavaClassInfo.Kind kind, List<String> mods,
@@ -485,14 +520,29 @@ public final class JavaStructureExtractor {
 
         /**
          * フィールド初期化子が {@code new SomeType(...) {...}} (匿名クラス) または
-         * {@code args -> body} (ラムダ) の場合、その本体内に出現するメソッドを
-         * {@link JavaFieldInfo#getInlineMethods()} に格納する。
+         * {@code args -> body} (ラムダ) または {@code Foo::bar} (メソッド参照) の場合、
+         * その本体内に出現するメソッドを {@link JavaFieldInfo#getInlineMethods()} に格納する。
          *
          * <p>{@code =} は呼び出し側で既に消費済み。本メソッドは消費したトークンを
          * 巻き戻して呼び出し側の {@link #skipUntilSemicolonRespectingBlocks()} に
          * 安全に引き継ぐ責務を持つ (異常検出時は何もしない)。</p>
          */
         private void tryParseInlineInitializer(JavaFieldInfo f) {
+            List<JavaMethodInfo> captured = tryParseInlineExpression(f.getType(), f.getName());
+            if (captured != null && !captured.isEmpty()) {
+                f.getInlineMethods().addAll(captured);
+            }
+        }
+
+        /**
+         * 現在位置から「関数を変数として設定」する式 (匿名クラス / ラムダ / メソッド参照)
+         * を検出して、本体から抽出したメソッド一覧を返す。検出できなければ idx を元に戻して
+         * null を返す。
+         *
+         * @param samTypeHint SAM 型のヒント (フィールド型・パラメータ型など)。null/空でも動く。
+         * @param nameHint    ヒント用の変数名 (フィールド名/受信側など)。null 可。
+         */
+        private List<JavaMethodInfo> tryParseInlineExpression(String samTypeHint, String nameHint) {
             int save = idx;
             // 匿名クラス判定: new TypeName (args) { ... }
             if (peek().isKw("new")) {
@@ -512,13 +562,13 @@ public final class JavaStructureExtractor {
                 }
                 // 配列の場合 (new int[]{...}) は無視
                 if (probe < tokens.size() && tokens.get(probe).is("[")) {
-                    return;
+                    return null;
                 }
                 // 引数 (...)
                 if (probe < tokens.size() && tokens.get(probe).is("(")) {
                     probe = skipBalancedAt(probe, "(", ")");
                 } else {
-                    return;
+                    return null;
                 }
                 // 直後が { なら匿名クラス本体
                 if (probe < tokens.size() && tokens.get(probe).is("{")) {
@@ -528,21 +578,20 @@ public final class JavaStructureExtractor {
                     dummy.setSimpleName("$anon");
                     // classStack には push しない (inner-class 判定の副作用回避)
                     parseClassBody(dummy);
-                    f.getInlineMethods().addAll(dummy.getMethods());
-                    return;
+                    return new ArrayList<>(dummy.getMethods());
                 }
                 idx = save;
-                return;
+                return null;
             }
             // ラムダ判定: x -> ... または (a, b) -> ...
             if (looksLikeLambdaStart()) {
                 consumeLambdaParams();
                 if (atEnd() || !peek().is("->")) {
                     idx = save;
-                    return;
+                    return null;
                 }
                 next(); // '->'
-                String samName = resolveSamMethodName(f.getType());
+                String samName = resolveSamMethodName(samTypeHint, nameHint);
                 JavaMethodInfo m = new JavaMethodInfo();
                 m.setName(samName);
                 m.setVisibility(Visibility.PUBLIC);
@@ -550,29 +599,81 @@ public final class JavaStructureExtractor {
                     next();
                     parseStatementBlock(m.getStatements());
                 } else {
-                    // expression-bodied lambda: フィールド終端 ';' は消費せず呼び出し元に残す
+                    // expression-bodied lambda: 文末 ';' は消費せず呼び出し元に残す
                     parseLambdaExpressionBody(m.getStatements());
                 }
-                f.getInlineMethods().add(m);
-                return;
+                List<JavaMethodInfo> out = new ArrayList<>();
+                out.add(m);
+                return out;
             }
-            // それ以外の初期化子: 巻き戻して何もしない
-            idx = save;
+            // メソッド参照判定: IDENT (. IDENT)* :: IDENT  (`::new` は除外)
+            if (looksLikeMethodReferenceStart()) {
+                String receiver = consumeMethodReferenceReceiver();
+                if (!peek().is("::")) {
+                    idx = save;
+                    return null;
+                }
+                next(); // '::'
+                if (atEnd() || peek().type != JavaToken.Type.IDENT
+                        || "new".equals(peek().text)) {
+                    idx = save;
+                    return null;
+                }
+                String refTarget = next().text;
+                String samName = resolveSamMethodName(samTypeHint, nameHint);
+                JavaMethodInfo m = new JavaMethodInfo();
+                m.setName(samName);
+                m.setVisibility(Visibility.PUBLIC);
+                // 本体は単一呼び出しに展開しておく (シーケンス図がそのまま辿れる)
+                m.getStatements().add(new JavaMethodInfo.Call(receiver, refTarget));
+                List<JavaMethodInfo> out = new ArrayList<>();
+                out.add(m);
+                return out;
+            }
+            return null;
+        }
+
+        /** 現在位置から {@code IDENT (. IDENT)* ::} の形で始まっていそうかを peek で判定する。 */
+        private boolean looksLikeMethodReferenceStart() {
+            if (peek().type != JavaToken.Type.IDENT) {
+                return false;
+            }
+            int probe = idx + 1;
+            while (probe + 1 < tokens.size()
+                    && tokens.get(probe).is(".")
+                    && tokens.get(probe + 1).type == JavaToken.Type.IDENT) {
+                probe += 2;
+            }
+            return probe < tokens.size() && tokens.get(probe).is("::");
+        }
+
+        /** {@link #looksLikeMethodReferenceStart()} が true の前提で受信側を消費して文字列化する。 */
+        private String consumeMethodReferenceReceiver() {
+            StringBuilder sb = new StringBuilder();
+            sb.append(next().text);
+            while (!atEnd() && peek().is(".")
+                    && idx + 1 < tokens.size()
+                    && tokens.get(idx + 1).type == JavaToken.Type.IDENT) {
+                next(); // '.'
+                sb.append('.').append(next().text);
+            }
+            return sb.toString();
         }
 
         /**
          * expression-bodied ラムダの本体 ({@code (...) -> EXPR} の EXPR 部) を読む。
          * 通常の {@link #parseExpressionStatement} と異なり、終端の {@code ;} は消費しない
          * (フィールド宣言の終端 {@code ;} はフィールドパーサ側で処理させるため)。
+         * 呼び出し引数の中に現れた expression-bodied ラムダ ({@code foo(v -> bar(), 1)})
+         * にも対応するため、parenDepth=0 で外側の {@code )} / {@code ,} に出会ったら
+         * 消費せずに戻る。
          */
         private void parseLambdaExpressionBody(List<JavaMethodInfo.Statement> out) {
             int parenDepth = 0;
             while (!atEnd()) {
                 JavaToken t = peek();
-                if (parenDepth == 0 && t.is(";")) {
-                    return;
-                }
-                if (parenDepth == 0 && t.is("}")) {
+                if (parenDepth == 0 && (t.is(";") || t.is("}")
+                        || t.is(")") || t.is(","))) {
                     return;
                 }
                 if (t.is("(") || t.is("[")) {
@@ -655,10 +756,16 @@ public final class JavaStructureExtractor {
         }
 
         /**
-         * フィールド宣言型から、ラムダに対応する SAM メソッド名を推定する。
-         * よく使う型は組み込みマップで解決し、未知なら {@code "<inline>"} を返す。
+         * フィールド宣言型から、ラムダ/メソッド参照に対応する SAM メソッド名を推定する。
+         * よく使う型は組み込みマップで解決し、未知でもサフィックス(Listener/Handler/Callback/
+         * Observer/Action) を検出できれば命名規約から推定する。最終的に解決できなければ
+         * {@code "<inline>"} を返す。
          */
         private static String resolveSamMethodName(String type) {
+            return resolveSamMethodName(type, null);
+        }
+
+        private static String resolveSamMethodName(String type, String nameHint) {
             if (type == null || type.isEmpty()) {
                 return "<inline>";
             }
@@ -676,8 +783,31 @@ public final class JavaStructureExtractor {
                 t = t.substring(dot + 1);
             }
             String mapped = SAM_FALLBACK.get(t);
-            return mapped != null ? mapped : "<inline>";
+            if (mapped != null) {
+                return mapped;
+            }
+            // 命名規約による推定: <Stem><Suffix> → <stem>
+            // 例: PrintHandler → print / OnFooListener → onFoo / MyCallback → my
+            for (String suf : SAM_NAME_SUFFIXES) {
+                if (t.endsWith(suf) && t.length() > suf.length()) {
+                    String stem = t.substring(0, t.length() - suf.length());
+                    if (!stem.isEmpty()) {
+                        return Character.toLowerCase(stem.charAt(0)) + stem.substring(1);
+                    }
+                }
+            }
+            // 命名規約に当たらないが、フィールド/受け取り変数名が onXxx 形式ならそれを採用
+            if (nameHint != null && nameHint.length() > 2
+                    && nameHint.startsWith("on")
+                    && Character.isUpperCase(nameHint.charAt(2))) {
+                return nameHint;
+            }
+            return "<inline>";
         }
+
+        private static final String[] SAM_NAME_SUFFIXES = {
+                "Listener", "Handler", "Callback", "Observer", "Action"
+        };
 
         private static final java.util.Map<String, String> SAM_FALLBACK;
         static {
@@ -1333,8 +1463,15 @@ public final class JavaStructureExtractor {
          * 通常の式文 ({@code ;} 終端) または特殊文を読む。途中に出現する呼び出しを
          * {@code out} に追加する。ブロック {@code {} に出会ったら再帰的に文として展開し、
          * 同じ {@code out} に呼び出しを追加する (匿名クラス本体・ラムダ本体・配列初期化など)。
+         *
+         * <p>文頭で {@code [this.] IDENT = <lambda|匿名クラス|メソッド参照>} のパターンを
+         * 検出した場合は、囲っているクラスに同名フィールドがあればそのフィールドの
+         * {@link JavaFieldInfo#getInlineMethods()} にコールバック本体を取り込む
+         * (コンストラクタ内/任意メソッド内のフィールド代入対応)。</p>
          */
         private void parseExpressionStatement(List<JavaMethodInfo.Statement> out) {
+            // 文頭の "[this.] IDENT = <inline>" を検出
+            tryCaptureFieldAssignmentInline();
             int parenDepth = 0;
             while (!atEnd()) {
                 JavaToken t = peek();
@@ -1364,7 +1501,20 @@ public final class JavaStructureExtractor {
                             && tokens.get(idx - 1).isKw("new");
                     if (!isControlKeyword(name) && !afterNew) {
                         String receiver = findReceiver();
-                        out.add(new JavaMethodInfo.Call(receiver, name));
+                        JavaMethodInfo.Call call = new JavaMethodInfo.Call(receiver, name);
+                        out.add(call);
+                        // 引数の先頭が lambda/匿名クラス/メソッド参照ならコールバックとして
+                        // この Call.inlineMethods に紐づける (setOnClickListener(...) 等)
+                        next(); // IDENT
+                        if (!atEnd() && peek().is("(")) {
+                            next(); // '('
+                            tryCaptureFirstInlineArgument(call);
+                        }
+                        // 上で `(` を 1 つ消費したが、外側の parenDepth とは別管理にした
+                        // ため、ここで `)` まで読み進める間の depth 整合性を保つ必要がある。
+                        // 簡略化のため parenDepth に +1 して `)` での -1 を待つ。
+                        parenDepth++;
+                        continue;
                     }
                 }
                 // メソッド参照: Foo::bar / obj.field::bar (`::new` は除外)
@@ -1377,6 +1527,86 @@ public final class JavaStructureExtractor {
                 }
                 next();
             }
+        }
+
+        /**
+         * 文頭で {@code [this.] IDENT = <inline>} の代入パターンを検出した場合、
+         * 同名フィールドの inlineMethods にコールバック本体を取り込み、
+         * 代入の右辺 (inline 部分) を消費する。{@code =} は消費するが文末 {@code ;}
+         * は呼び出し元 ({@link #parseExpressionStatement}) で処理させる。
+         *
+         * <p>該当パターンに見えない場合は idx を変更しない。</p>
+         */
+        private void tryCaptureFieldAssignmentInline() {
+            if (classStack.isEmpty()) {
+                return;
+            }
+            int save = idx;
+            String targetName = null;
+            // `this . IDENT =` あるいは `IDENT =` を検出
+            if (peek().isKw("this") && peek(1).is(".")
+                    && peek(2).type == JavaToken.Type.IDENT
+                    && peek(3).is("=") && !peek(3).is("==")) {
+                idx += 2; // this .
+                targetName = peek().text;
+                idx += 2; // IDENT =
+            } else if (peek().type == JavaToken.Type.IDENT
+                    && peek(1).is("=") && !peek(1).is("==")) {
+                targetName = peek().text;
+                idx += 2;
+            } else {
+                return;
+            }
+            // 右辺で inline 式を試す
+            JavaClassInfo cls = classStack.get(classStack.size() - 1);
+            JavaFieldInfo field = findFieldByName(cls, targetName);
+            String hint = field != null ? field.getType() : null;
+            List<JavaMethodInfo> captured = tryParseInlineExpression(hint, targetName);
+            if (captured == null || captured.isEmpty()) {
+                idx = save;
+                return;
+            }
+            if (field != null) {
+                field.getInlineMethods().addAll(captured);
+            } else {
+                // フィールドがクラスに見つからない場合は遅延解決のため pendingAssignments
+                // に積んでおき、クラス本体パース完了後にマッチさせる
+                pendingFieldAssignments.add(new PendingAssignment(cls, targetName, captured));
+            }
+            // 右辺は inline 部分のみ消費した。文末 `;` は外側で処理。
+        }
+
+        /**
+         * 呼び出しの最初の引数がラムダ/匿名クラスなら、それを {@code call.inlineMethods}
+         * に取り込む。呼び出し直前の {@code (} は既に消費済み。該当しなければ idx を変更しない。
+         *
+         * <p>メソッド参照 ({@code Foo::bar}) は引数として現れたときは parseExpressionStatement
+         * の {@code ::} ハンドラで親メソッドの呼び出しリストに記録するため、ここでは扱わない。</p>
+         */
+        private void tryCaptureFirstInlineArgument(JavaMethodInfo.Call call) {
+            // ラムダ・匿名クラスのみを対象とする (メソッド参照は除外)
+            if (!peek().isKw("new") && !looksLikeLambdaStart()) {
+                return;
+            }
+            int save = idx;
+            List<JavaMethodInfo> captured = tryParseInlineExpression(null, call.getMethodName());
+            if (captured == null || captured.isEmpty()) {
+                idx = save;
+                return;
+            }
+            call.getInlineMethods().addAll(captured);
+        }
+
+        private static JavaFieldInfo findFieldByName(JavaClassInfo cls, String name) {
+            if (cls == null || name == null) {
+                return null;
+            }
+            for (JavaFieldInfo f : cls.getFields()) {
+                if (name.equals(f.getName())) {
+                    return f;
+                }
+            }
+            return null;
         }
 
         /**

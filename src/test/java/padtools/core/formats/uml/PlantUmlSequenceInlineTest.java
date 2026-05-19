@@ -47,4 +47,39 @@ public class PlantUmlSequenceInlineTest {
         assertTrue("Runnable participant should be activated: \n" + diagram,
                 diagram.contains("activate Runnable"));
     }
+
+    @Test
+    public void testConstructorAssignmentListenerExpanded() {
+        // コンストラクタ内で代入したリスナーも、後で listener.onClick() を呼んだ際に
+        // シーケンス図で展開できること
+        String src = ""
+                + "class Baz {\n"
+                + "  private OnClickListener listener;\n"
+                + "  Baz() {\n"
+                + "    this.listener = new OnClickListener() {\n"
+                + "      public void onClick(View v) { mService.start(); }\n"
+                + "    };\n"
+                + "  }\n"
+                + "  private IService mService;\n"
+                + "  void register() { listener.onClick(null); }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Baz", "register", null);
+        assertTrue("constructor-assigned listener should expand: \n" + diagram,
+                diagram.contains(" -> IService: IService.start()"));
+    }
+
+    @Test
+    public void testFieldMethodReferenceExpanded() {
+        // メソッド参照によるフィールド初期化も展開できること
+        String src = ""
+                + "class Qux {\n"
+                + "  Runnable r = Worker::tick;\n"
+                + "  void kick() { r.run(); }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Qux", "kick", null);
+        assertTrue("method reference body should expand: \n" + diagram,
+                diagram.contains("Worker.tick()"));
+    }
 }

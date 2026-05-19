@@ -153,6 +153,159 @@ public class JavaStructureExtractorInlineTest {
         assertFalse(cs.get(0).getFields().isEmpty());
     }
 
+    @Test
+    public void testMethodReferenceFieldInitCaptured() {
+        // メソッド参照 Foo::bar はフィールド初期化子として inlineMethods に取り込む
+        String src = ""
+                + "class A {\n"
+                + "  Runnable r = Foo::bar;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo r = findField(cs.get(0), "r");
+        assertNotNull(r);
+        assertEquals(1, r.getInlineMethods().size());
+        JavaMethodInfo m = r.getInlineMethods().get(0);
+        assertEquals("run", m.getName());
+        assertEquals(1, m.getCalls().size());
+        assertEquals("bar", m.getCalls().get(0).getMethodName());
+        assertEquals("Foo", m.getCalls().get(0).getReceiver());
+    }
+
+    @Test
+    public void testInstanceMethodReferenceFieldInitCaptured() {
+        // ドット付き receiver もサポート: a.b.c::method
+        String src = ""
+                + "class A {\n"
+                + "  Runnable r = a.b.c::method;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo r = findField(cs.get(0), "r");
+        assertNotNull(r);
+        assertEquals(1, r.getInlineMethods().size());
+        assertEquals("a.b.c", r.getInlineMethods().get(0).getCalls().get(0).getReceiver());
+    }
+
+    @Test
+    public void testUnknownListenerSuffixResolvedByNamingConvention() {
+        // 未知でも *Listener なら "<stem>" を method 名として推定する
+        String src = ""
+                + "class A {\n"
+                + "  MyCustomListener l = () -> doX();\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo l = findField(cs.get(0), "l");
+        assertNotNull(l);
+        assertEquals(1, l.getInlineMethods().size());
+        // "MyCustomListener" → strip "Listener" → "MyCustom" → "myCustom"
+        assertEquals("myCustom", l.getInlineMethods().get(0).getName());
+    }
+
+    @Test
+    public void testUnknownHandlerSuffixResolvedByNamingConvention() {
+        String src = ""
+                + "class A {\n"
+                + "  PrintHandler h = () -> doX();\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo h = findField(cs.get(0), "h");
+        assertNotNull(h);
+        assertEquals("print", h.getInlineMethods().get(0).getName());
+    }
+
+    @Test
+    public void testConstructorFieldAssignmentCaptured() {
+        // コンストラクタ内で this.listener = ... としているケースを
+        // フィールドの inlineMethods に紐づける
+        String src = ""
+                + "class A {\n"
+                + "  private OnClickListener listener;\n"
+                + "  A() {\n"
+                + "    this.listener = new OnClickListener() {\n"
+                + "      public void onClick(View v) { mService.start(); }\n"
+                + "    };\n"
+                + "  }\n"
+                + "  private IService mService;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo listener = findField(cs.get(0), "listener");
+        assertNotNull(listener);
+        assertEquals(1, listener.getInlineMethods().size());
+        assertEquals("onClick", listener.getInlineMethods().get(0).getName());
+    }
+
+    @Test
+    public void testConstructorFieldAssignmentWithLambdaCaptured() {
+        // ラムダ代入も同様に拾うこと
+        String src = ""
+                + "class A {\n"
+                + "  private Runnable r;\n"
+                + "  A() { this.r = () -> doX(); }\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo r = findField(cs.get(0), "r");
+        assertNotNull(r);
+        assertEquals(1, r.getInlineMethods().size());
+        assertEquals("run", r.getInlineMethods().get(0).getName());
+        assertEquals("doX", r.getInlineMethods().get(0).getCalls().get(0).getMethodName());
+    }
+
+    @Test
+    public void testFieldAssignmentAfterFieldDeclarationOrder() {
+        // フィールドがコンストラクタの「後」に宣言されているケースでも、
+        // 解決パスでマッチさせること
+        String src = ""
+                + "class A {\n"
+                + "  A() { this.r = () -> doX(); }\n"
+                + "  private Runnable r;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaFieldInfo r = findField(cs.get(0), "r");
+        assertNotNull(r);
+        assertEquals(1, r.getInlineMethods().size());
+    }
+
+    @Test
+    public void testMethodInternalListenerRegistrationCaptured() {
+        // setOnClickListener(new OnClickListener() {...}) の第 1 引数が
+        // 親メソッド本体の Call.inlineMethods に取り込まれること
+        String src = ""
+                + "class A {\n"
+                + "  void onCreate() {\n"
+                + "    button.setOnClickListener(new OnClickListener() {\n"
+                + "      public void onClick(View v) { mService.start(); }\n"
+                + "    });\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaMethodInfo onCreate = cs.get(0).getMethods().get(0);
+        JavaMethodInfo.Call setListener = onCreate.getCalls().stream()
+                .filter(c -> "setOnClickListener".equals(c.getMethodName()))
+                .findFirst().orElse(null);
+        assertNotNull(setListener);
+        assertEquals(1, setListener.getInlineMethods().size());
+        assertEquals("onClick", setListener.getInlineMethods().get(0).getName());
+    }
+
+    @Test
+    public void testMethodInternalLambdaListenerCaptured() {
+        // setOnClickListener(v -> doX()) のラムダ引数も同様
+        String src = ""
+                + "class A {\n"
+                + "  void onCreate() {\n"
+                + "    button.setOnClickListener(v -> doX());\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        JavaMethodInfo onCreate = cs.get(0).getMethods().get(0);
+        JavaMethodInfo.Call setListener = onCreate.getCalls().stream()
+                .filter(c -> "setOnClickListener".equals(c.getMethodName()))
+                .findFirst().orElse(null);
+        assertNotNull(setListener);
+        assertEquals(1, setListener.getInlineMethods().size());
+        JavaMethodInfo inline = setListener.getInlineMethods().get(0);
+        assertEquals("doX", inline.getCalls().get(0).getMethodName());
+    }
+
     private static JavaFieldInfo findField(JavaClassInfo c, String name) {
         for (JavaFieldInfo f : c.getFields()) {
             if (name.equals(f.getName())) {

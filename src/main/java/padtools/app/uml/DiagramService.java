@@ -113,6 +113,10 @@ public final class DiagramService {
                 PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 applySequenceCommentSettings(o);
+                Set<String> hidden = request.getSequenceHiddenParticipants();
+                if (hidden != null && !hidden.isEmpty()) {
+                    o.hiddenParticipants = hidden;
+                }
                 return PlantUmlSequenceDiagram.generate(source, cls, method, o);
             }
             case COMPONENT: {
@@ -156,8 +160,8 @@ public final class DiagramService {
     }
 
     /**
-     * シーケンス図のコメント表示設定 ({@code showComments} / {@code commentStyle}) を
-     * {@link padtools.SettingManager} から読み出して {@link PlantUmlSequenceDiagram.Options} に反映する。
+     * シーケンス図のコメント表示・修飾設定を {@link padtools.SettingManager} から
+     * 読み出して {@link PlantUmlSequenceDiagram.Options} に反映する。
      * SettingManager が利用できない場合 (テスト / 単体実行) は既定値のまま。
      */
     private static void applySequenceCommentSettings(PlantUmlSequenceDiagram.Options o) {
@@ -172,8 +176,16 @@ public final class DiagramService {
             } else {
                 o.commentStyle = padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
             }
+            if ("PARTICIPANT_TOP".equalsIgnoreCase(s.getSequenceCommentPlacement())) {
+                o.commentPlacement =
+                        PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP;
+            } else {
+                o.commentPlacement =
+                        PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
+            }
+            o.qualifyMethodNames = s.isSequenceQualifyMethodNames();
         } catch (RuntimeException ignored) {
-            // 設定取得失敗時は既定値のまま (showComments=true, INLINE)
+            // 設定取得失敗時は既定値のまま (showComments=true, INLINE, AT_CALL_SITE)
         }
     }
 

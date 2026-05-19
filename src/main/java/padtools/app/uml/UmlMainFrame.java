@@ -398,15 +398,26 @@ public class UmlMainFrame extends JFrame {
                         ? padtools.core.formats.uml.PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP
                         : padtools.core.formats.uml.PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
         boolean curQualify = setting == null || setting.isSequenceQualifyMethodNames();
+        StyleSettingsDialog.ClassDiagramPrefs curClass = setting != null
+                ? new StyleSettingsDialog.ClassDiagramPrefs(
+                        setting.isClassDiagramShowFields(),
+                        setting.isClassDiagramShowMethods(),
+                        setting.isClassDiagramShowAnnotations(),
+                        setting.isClassDiagramPublicOnly(),
+                        setting.isClassDiagramExcludeExternal(),
+                        setting.getClassDiagramCommentMaxLength(),
+                        StyleSettingsDialog.ClassDiagramPrefs.parseCsv(
+                                setting.getClassDiagramHiddenAnnotations()))
+                : StyleSettingsDialog.ClassDiagramPrefs.defaults();
         StyleSettingsDialog.Result edited = StyleSettingsDialog.showDialog(
                 this, PlantUmlRenderer.getStyle(), curShow, curStyle,
-                curPlacement, curQualify);
+                curPlacement, curQualify, curClass);
         if (edited != null) {
             applyStyleSettings(edited);
         }
     }
 
-    /** Style ダイアログ結果 (Style + シーケンス図設定) を反映する。 */
+    /** Style ダイアログ結果 (Style + シーケンス図設定 + クラス図設定) を反映する。 */
     private void applyStyleSettings(StyleSettingsDialog.Result r) {
         try {
             padtools.Setting setting = Main.getSetting();
@@ -415,6 +426,16 @@ public class UmlMainFrame extends JFrame {
                 setting.setSequenceCommentStyle(r.sequenceCommentStyle.name());
                 setting.setSequenceCommentPlacement(r.sequenceCommentPlacement.name());
                 setting.setSequenceQualifyMethodNames(r.sequenceQualifyMethodNames);
+                if (r.classDiagram != null) {
+                    StyleSettingsDialog.ClassDiagramPrefs cp = r.classDiagram;
+                    setting.setClassDiagramShowFields(cp.showFields);
+                    setting.setClassDiagramShowMethods(cp.showMethods);
+                    setting.setClassDiagramShowAnnotations(cp.showAnnotations);
+                    setting.setClassDiagramPublicOnly(cp.publicOnly);
+                    setting.setClassDiagramExcludeExternal(cp.excludeExternal);
+                    setting.setClassDiagramCommentMaxLength(cp.commentMaxLength);
+                    setting.setClassDiagramHiddenAnnotations(cp.hiddenAnnotationsCsv());
+                }
             }
         } catch (RuntimeException ignored) {
             // 設定保存はベストエフォート
@@ -751,7 +772,17 @@ public class UmlMainFrame extends JFrame {
         if (fqn == null) {
             return;
         }
-        // 履歴に push して詳細図にドリルダウン
+        drillDownToClass(fqn);
+    }
+
+    /**
+     * 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。
+     * 現在のスコープは履歴に push され、Back メニューで戻せる。
+     */
+    private void drillDownToClass(String fqn) {
+        if (fqn == null || fqn.isEmpty()) {
+            return;
+        }
         DiagramScope previous = currentScope;
         if (previous != null) {
             scopeHistory.push(previous);
@@ -918,6 +949,12 @@ public class UmlMainFrame extends JFrame {
         dlg.setVisible(true);
         EntitySearchDialog.Entry result = dlg.getResult();
         if (result == null) {
+            return;
+        }
+        if (dlg.isDrillDownRequested()) {
+            // Drill-down ボタンを押された場合は kind に関係なく ownerQn のクラスへ
+            // DETAILED プリセットで遷移する。
+            drillDownToClass(result.ownerQn);
             return;
         }
         switch (result.kind) {

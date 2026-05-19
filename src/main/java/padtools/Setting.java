@@ -44,6 +44,23 @@ public class Setting {
     /** メソッド呼び出しラベルにクラス名を付けるか (例: "Foo.bar()" vs "bar()")。 */
     private boolean sequenceQualifyMethodNames = true;
 
+    /** クラス図に最後に適用したプリセット名 ("MINIMAL" / "BALANCED" / "DETAILED" / "CUSTOM")。 */
+    private String classDiagramLastPreset = "BALANCED";
+    /** クラス図でフィールドを表示するか。 */
+    private boolean classDiagramShowFields = true;
+    /** クラス図でメソッドを表示するか。 */
+    private boolean classDiagramShowMethods = true;
+    /** クラス図でアノテーションを表示するか。 */
+    private boolean classDiagramShowAnnotations = true;
+    /** public のみ表示する公開フィルタ。 */
+    private boolean classDiagramPublicOnly = false;
+    /** 外部ライブラリ (java.* / android.* / kotlin.* など) を除外するか。 */
+    private boolean classDiagramExcludeExternal = false;
+    /** インラインコメントの最大文字数 (0 で非表示)。 */
+    private int classDiagramCommentMaxLength = 80;
+    /** 非表示アノテーション名の CSV (例: "Override,SuppressWarnings")。 */
+    private String classDiagramHiddenAnnotations = "Override,SuppressWarnings";
+
     public int getWindowX() { return windowX; }
     public void setWindowX(int windowX) { this.windowX = windowX; }
     public int getWindowY() { return windowY; }
@@ -71,6 +88,33 @@ public class Setting {
     public boolean isSequenceQualifyMethodNames() { return sequenceQualifyMethodNames; }
     public void setSequenceQualifyMethodNames(boolean v) {
         this.sequenceQualifyMethodNames = v;
+    }
+
+    public String getClassDiagramLastPreset() { return classDiagramLastPreset; }
+    public void setClassDiagramLastPreset(String v) {
+        this.classDiagramLastPreset = (v == null || v.isEmpty()) ? "BALANCED" : v;
+    }
+    public boolean isClassDiagramShowFields() { return classDiagramShowFields; }
+    public void setClassDiagramShowFields(boolean v) { this.classDiagramShowFields = v; }
+    public boolean isClassDiagramShowMethods() { return classDiagramShowMethods; }
+    public void setClassDiagramShowMethods(boolean v) { this.classDiagramShowMethods = v; }
+    public boolean isClassDiagramShowAnnotations() { return classDiagramShowAnnotations; }
+    public void setClassDiagramShowAnnotations(boolean v) {
+        this.classDiagramShowAnnotations = v;
+    }
+    public boolean isClassDiagramPublicOnly() { return classDiagramPublicOnly; }
+    public void setClassDiagramPublicOnly(boolean v) { this.classDiagramPublicOnly = v; }
+    public boolean isClassDiagramExcludeExternal() { return classDiagramExcludeExternal; }
+    public void setClassDiagramExcludeExternal(boolean v) {
+        this.classDiagramExcludeExternal = v;
+    }
+    public int getClassDiagramCommentMaxLength() { return classDiagramCommentMaxLength; }
+    public void setClassDiagramCommentMaxLength(int v) {
+        this.classDiagramCommentMaxLength = Math.max(0, v);
+    }
+    public String getClassDiagramHiddenAnnotations() { return classDiagramHiddenAnnotations; }
+    public void setClassDiagramHiddenAnnotations(String v) {
+        this.classDiagramHiddenAnnotations = v == null ? "" : v;
     }
 
     /** 永続化済みの値から {@link DiagramStyle} を組み立てて返す。 */
@@ -122,6 +166,21 @@ public class Setting {
         props.setProperty("sequence.commentPlacement", sequenceCommentPlacement);
         props.setProperty("sequence.qualifyMethodNames",
                 Boolean.toString(sequenceQualifyMethodNames));
+        props.setProperty("classDiagram.lastPreset", classDiagramLastPreset);
+        props.setProperty("classDiagram.showFields",
+                Boolean.toString(classDiagramShowFields));
+        props.setProperty("classDiagram.showMethods",
+                Boolean.toString(classDiagramShowMethods));
+        props.setProperty("classDiagram.showAnnotations",
+                Boolean.toString(classDiagramShowAnnotations));
+        props.setProperty("classDiagram.publicOnly",
+                Boolean.toString(classDiagramPublicOnly));
+        props.setProperty("classDiagram.excludeExternal",
+                Boolean.toString(classDiagramExcludeExternal));
+        props.setProperty("classDiagram.commentMaxLength",
+                Integer.toString(classDiagramCommentMaxLength));
+        props.setProperty("classDiagram.hiddenAnnotations",
+                classDiagramHiddenAnnotations);
 
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
             props.storeToXML(bos, "PadTools Settings");
@@ -163,6 +222,23 @@ public class Setting {
                 props.getProperty("sequence.commentPlacement"), "AT_CALL_SITE");
         s.sequenceQualifyMethodNames = parseBooleanSafe(
                 props.getProperty("sequence.qualifyMethodNames"), true);
+        s.classDiagramLastPreset = stringOrDefault(
+                props.getProperty("classDiagram.lastPreset"), "BALANCED");
+        s.classDiagramShowFields = parseBooleanSafe(
+                props.getProperty("classDiagram.showFields"), true);
+        s.classDiagramShowMethods = parseBooleanSafe(
+                props.getProperty("classDiagram.showMethods"), true);
+        s.classDiagramShowAnnotations = parseBooleanSafe(
+                props.getProperty("classDiagram.showAnnotations"), true);
+        s.classDiagramPublicOnly = parseBooleanSafe(
+                props.getProperty("classDiagram.publicOnly"), false);
+        s.classDiagramExcludeExternal = parseBooleanSafe(
+                props.getProperty("classDiagram.excludeExternal"), false);
+        s.classDiagramCommentMaxLength = parseIntSafe(
+                props.getProperty("classDiagram.commentMaxLength"), 80);
+        s.classDiagramHiddenAnnotations = stringOrDefault(
+                props.getProperty("classDiagram.hiddenAnnotations"),
+                "Override,SuppressWarnings");
 
         return s;
     }

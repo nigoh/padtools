@@ -386,11 +386,11 @@ public final class JavaStructureExtractor {
             int startPos = peek().start;
             int lastIdentEnd = startPos;
             String fieldName = "";
-            // 型 + 名前を読み込み (; or = に到達するまで)
+            // 型 + 最初の名前を読み込み (; / = / , に到達するまで)
             int depth = 0;
             while (!atEnd()) {
                 JavaToken t = peek();
-                if (depth == 0 && (t.is(";") || t.is("="))) {
+                if (depth == 0 && (t.is(";") || t.is("=") || t.is(","))) {
                     break;
                 }
                 if (t.is("(") || t.is("[") || t.is("<")) {
@@ -409,9 +409,43 @@ public final class JavaStructureExtractor {
                 next();
             }
             String type = src.substring(startPos, lastIdentEnd).trim();
-            // 末尾のカンマ区切り変数 (int a = 1, b = 2) は最初の宣言のみ取得して残りはスキップ
+            JavaFieldInfo first = addField(cls, mods, annotations, comment, fieldName, type);
+            // 初期化子が匿名クラス/ラムダなら本体を吸い上げて f.inlineMethods に格納する。
+            if (!atEnd() && peek().is("=")) {
+                next(); // '=' を消費
+                tryParseInlineInitializer(first);
+                skipUntilCommaOrSemicolonRespectingBlocks();
+            }
+            // 追加変数 (int a, b, c = 1)
+            while (!atEnd() && peek().is(",")) {
+                next(); // ','
+                if (atEnd() || peek().type != JavaToken.Type.IDENT) {
+                    break;
+                }
+                String name2 = next().text;
+                // 配列ブラケット `b[]` を型に追加
+                String type2 = type;
+                while (!atEnd() && peek().is("[") && peek(1).is("]")) {
+                    next();
+                    next();
+                    type2 = type2 + "[]";
+                }
+                JavaFieldInfo extra = addField(cls, mods, annotations, comment, name2, type2);
+                if (!atEnd() && peek().is("=")) {
+                    next();
+                    tryParseInlineInitializer(extra);
+                    skipUntilCommaOrSemicolonRespectingBlocks();
+                }
+            }
+            // ; までスキップ
+            skipUntilSemicolonRespectingBlocks();
+        }
+
+        private JavaFieldInfo addField(JavaClassInfo cls, List<String> mods,
+                                        List<String> annotations, String comment,
+                                        String name, String type) {
             JavaFieldInfo f = new JavaFieldInfo();
-            f.setName(fieldName);
+            f.setName(name);
             f.setType(normalizeType(stripAnnotations(type)));
             f.setVisibility(Visibility.fromModifiers(mods));
             f.setStatic(mods.contains("static"));
@@ -419,14 +453,31 @@ public final class JavaStructureExtractor {
             f.getAnnotations().addAll(annotations);
             f.setComment(comment);
             cls.getFields().add(f);
-            // 初期化子が匿名クラス/ラムダなら本体を吸い上げて f.inlineMethods に格納する。
-            // 失敗時は idx を元に戻し、後段の skipUntilSemicolonRespectingBlocks() に委ねる。
-            if (!atEnd() && peek().is("=")) {
-                next(); // '=' を消費
-                tryParseInlineInitializer(f);
+            return f;
+        }
+
+        /**
+         * 初期化式の途中から {@code ,} または {@code ;} までを括弧深度を考慮して読み飛ばす。
+         * フィールドの複数宣言 ({@code int a = 1, b = 2;}) で次の変数に進むために使う。
+         */
+        private void skipUntilCommaOrSemicolonRespectingBlocks() {
+            int d = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (d == 0 && (t.is(";") || t.is(","))) {
+                    return;
+                }
+                if (t.is("(") || t.is("[") || t.is("{")) {
+                    d++;
+                } else if (t.is(")") || t.is("]") || t.is("}")) {
+                    if (d > 0) {
+                        d--;
+                    } else {
+                        return;
+                    }
+                }
+                next();
             }
-            // ; までスキップ
-            skipUntilSemicolonRespectingBlocks();
         }
 
         /**

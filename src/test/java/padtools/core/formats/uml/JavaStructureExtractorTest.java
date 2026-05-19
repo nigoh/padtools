@@ -577,6 +577,49 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testMultiVarFieldSimple() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a, b; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("int", cs.get(0).getFields().get(0).getType());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+        assertEquals("int", cs.get(0).getFields().get(1).getType());
+    }
+
+    @Test
+    public void testMultiVarFieldWithInitializers() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a = 1, b = 2; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+    }
+
+    @Test
+    public void testMultiVarFieldWithModifiers() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { public static final int X = 1, Y = 2, Z = 3; }");
+        assertEquals(3, cs.get(0).getFields().size());
+        for (JavaFieldInfo f : cs.get(0).getFields()) {
+            assertTrue(f.isStatic());
+            assertTrue(f.isFinal());
+            assertEquals("int", f.getType());
+        }
+    }
+
+    @Test
+    public void testMultiVarFieldWithArrayBrackets() {
+        // int a[], b: a は int[], b は int
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a[], b; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+        assertEquals("int", cs.get(0).getFields().get(1).getType());
+    }
+
+    @Test
     public void testTextBlockWithBracesAndQuotes() {
         // テキストブロック内の { } や " は構造を壊さない
         String src = "class A {\n"

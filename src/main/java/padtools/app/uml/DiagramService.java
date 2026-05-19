@@ -7,6 +7,7 @@ import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.PlantUmlLayoutDiagram;
 import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.uml.ClassIndex;
+import padtools.core.formats.uml.DependencyJarIndex;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaFieldInfo;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
@@ -52,7 +53,7 @@ public final class DiagramService {
             throw new IllegalStateException("ProjectAnalysisCache is not loaded");
         }
         return generatePuml(request, cache.getAnalysis(), cache.getClasses(),
-                cache.getIndex());
+                cache.getIndex(), cache.getDependencyIndex());
     }
 
     /**
@@ -61,7 +62,7 @@ public final class DiagramService {
     public static String generatePuml(DiagramRequest request,
                                        AndroidProjectAnalysis analysis,
                                        List<JavaClassInfo> classes) {
-        return generatePuml(request, analysis, classes, null);
+        return generatePuml(request, analysis, classes, null, null);
     }
 
     /**
@@ -71,6 +72,19 @@ public final class DiagramService {
                                        AndroidProjectAnalysis analysis,
                                        List<JavaClassInfo> classes,
                                        ClassIndex index) {
+        return generatePuml(request, analysis, classes, index, null);
+    }
+
+    /**
+     * 依存 JAR インデックスを併用する版。シーケンス図/クラス図で {@code <<external>>} /
+     * {@code <<missing>>} ステレオタイプを描画するために
+     * {@link DependencyJarIndex} を引き渡す。
+     */
+    public static String generatePuml(DiagramRequest request,
+                                       AndroidProjectAnalysis analysis,
+                                       List<JavaClassInfo> classes,
+                                       ClassIndex index,
+                                       DependencyJarIndex depIndex) {
         if (request == null) {
             throw new IllegalArgumentException("request is null");
         }
@@ -112,6 +126,7 @@ public final class DiagramService {
                         ? promoteToDetailed(classes, index) : classes;
                 PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
+                o.dependencyIndex = depIndex;
                 applySequenceCommentSettings(o);
                 Set<String> hidden = request.getSequenceHiddenParticipants();
                 if (hidden != null && !hidden.isEmpty()) {

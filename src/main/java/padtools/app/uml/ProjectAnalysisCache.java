@@ -4,6 +4,7 @@ import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.AndroidProjectAnalyzer;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.ClassIndex;
+import padtools.core.formats.uml.DependencyJarIndex;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.util.CancelToken;
@@ -52,6 +53,7 @@ public final class ProjectAnalysisCache {
     private AndroidProjectAnalysis analysis;
     private List<JavaClassInfo> classes = Collections.emptyList();
     private ClassIndex index = new ClassIndex();
+    private DependencyJarIndex dependencyIndex = new DependencyJarIndex();
     private final PersistentAnalysisCache disk;
 
     public ProjectAnalysisCache() {
@@ -134,6 +136,8 @@ public final class ProjectAnalysisCache {
         this.analysis = a;
         this.classes = result.getClasses() != null ? result.getClasses() : Collections.emptyList();
         this.index = result.getIndex() != null ? result.getIndex() : new ClassIndex();
+        this.dependencyIndex = result.getDependencyIndex() != null
+                ? result.getDependencyIndex() : new DependencyJarIndex();
 
         // 解析成功後にディスクキャッシュを更新 (Stage A 情報を永続化)
         if (o.lazyDetails && o.useDiskCache && disk != null) {
@@ -153,6 +157,7 @@ public final class ProjectAnalysisCache {
         analysis = null;
         classes = Collections.emptyList();
         index = new ClassIndex();
+        dependencyIndex = new DependencyJarIndex();
     }
 
     public File getProjectRoot() {
@@ -169,6 +174,11 @@ public final class ProjectAnalysisCache {
 
     public ClassIndex getIndex() {
         return index;
+    }
+
+    /** 依存 JAR/AAR の遅延解決インデックス (Gradle 宣言由来)。常に非 null。 */
+    public DependencyJarIndex getDependencyIndex() {
+        return dependencyIndex;
     }
 
     /** 完全修飾名 → モジュール名のマップ (Gradle 解析由来)。 */

@@ -27,6 +27,10 @@ dependencies {
     // PlantUML (GPLv3). UML 系出力を SVG として直接書き出すために同梱する。
     // graphviz/dot は不要 (PlantUmlRenderer が Smetana レイアウトを自動指定)。
     implementation 'net.sourceforge.plantuml:plantuml:1.2026.2'
+    // ASM: 依存 JAR/AAR からクラスヘッダ (名前・superclass・interfaces・public members)
+    // を読み取り、シーケンス図/クラス図に外部クラスを表示するために使用する。
+    // .class バイトコードは SKIP_CODE で読み飛ばし、ヘッダ情報のみを抽出する。
+    implementation 'org.ow2.asm:asm:9.7'
     testImplementation 'junit:junit:4.13.2'
     // Playwright (ブラウザ自動化) で生成 SVG をレンダリング・スナップショット検証する。
     // 初回テスト実行時に `playwright install chromium` がトリガーされ Chromium が

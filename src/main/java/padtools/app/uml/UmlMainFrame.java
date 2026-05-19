@@ -226,6 +226,12 @@ public class UmlMainFrame extends JFrame {
             m.add(item);
         }
         m.addSeparator();
+        JMenuItem search = new JMenuItem("Search Entities...");
+        // Ctrl+F は Zoom to Fit が既に使っているため Ctrl+Shift+F に割り当て
+        search.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F,
+                MENU_MASK | InputEvent.SHIFT_DOWN_MASK));
+        search.addActionListener(e -> openEntitySearch());
+        m.add(search);
         JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
         pickEntry.addActionListener(e -> pickSequenceEntry());
         m.add(pickEntry);
@@ -461,8 +467,15 @@ public class UmlMainFrame extends JFrame {
                 sequenceHiddenParticipants.clear();
                 currentScope = null;
                 updateManifestSummary();
-                status.setText("Analyzed " + cache.getClasses().size() + " class(es)"
-                        + " from " + root.getAbsolutePath());
+                StringBuilder st = new StringBuilder();
+                st.append("Analyzed ").append(cache.getClasses().size())
+                        .append(" class(es) from ").append(root.getAbsolutePath());
+                // 依存 JAR の未解決件数があれば追記 (図に <<missing>> ⚠ が出る理由を明示)
+                int missing = cache.getDependencyIndex().getMissingArtifacts().size();
+                if (missing > 0) {
+                    st.append(" — ").append(missing).append(" dependency(ies) not resolved");
+                }
+                status.setText(st.toString());
                 refreshDiagram();
             }
         }.execute();
@@ -764,6 +777,75 @@ public class UmlMainFrame extends JFrame {
         }
         sb.append(')');
         return sb.toString();
+    }
+
+    /**
+     * クラス・メソッド・フィールドの横断検索ダイアログを開き、結果に応じて
+     * クラス図 / シーケンス図に切り替える。
+     *
+     * <ul>
+     *   <li>CLASS 選択 → クラス図モードへ切り替え、当該クラスを seed に 1 ホップでスコープ</li>
+     *   <li>METHOD 選択 → 当該メソッドを起点とするシーケンス図モード</li>
+     *   <li>FIELD 選択 → 所属クラスを seed に 1 ホップしたクラス図 (フィールド型まで含む)</li>
+     * </ul>
+     */
+    private void openEntitySearch() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        EntitySearchDialog dlg = new EntitySearchDialog(this, cache.getClasses());
+        if (dlg.getCandidateCount() == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No entities found in this project.",
+                    "Search", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        dlg.setVisible(true);
+        EntitySearchDialog.Entry result = dlg.getResult();
+        if (result == null) {
+            return;
+        }
+        switch (result.kind) {
+            case CLASS:
+                scopeToClass(result.ownerQn, result.simpleName);
+                break;
+            case METHOD:
+                String simple = extractSimpleClass(result.ownerQn);
+                switchToSequenceDiagram(simple + "." + result.simpleName);
+                break;
+            case FIELD:
+                scopeToClass(result.ownerQn,
+                        extractSimpleClass(result.ownerQn) + "." + result.simpleName);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** クラス図モードへ切り替え、FQN を seed として 1 ホップ近傍でスコープする。 */
+    private void scopeToClass(String fqn, String statusLabel) {
+        if (fqn == null || fqn.isEmpty()) {
+            return;
+        }
+        currentScope = DiagramScope.builder().seed(fqn).neighborHops(1).build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Scope: " + statusLabel + " (+1 hop)");
+        refreshDiagram();
+    }
+
+    private static String extractSimpleClass(String qn) {
+        if (qn == null || qn.isEmpty()) {
+            return "";
+        }
+        int dot = qn.lastIndexOf('.');
+        return dot < 0 ? qn : qn.substring(dot + 1);
     }
 
     private void pickSequenceEntry() {

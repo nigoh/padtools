@@ -32,6 +32,8 @@ final class PlantUmlClassLegend {
         boolean hasComment;
         boolean hasMemberAnnotation;
         boolean hasEnumConstant;
+        boolean hasExternalOrigin;
+        boolean hasMissingOrigin;
     }
 
     static void emit(StringBuilder out, List<JavaClassInfo> classes,
@@ -42,9 +44,24 @@ final class PlantUmlClassLegend {
         emitMemberModifiers(out, o, s);
         emitKinds(out, s);
         emitStereotypes(out, s);
+        emitOrigins(out, s);
         emitRelations(out, o, s);
         emitNotes(out, o, s);
         out.append("endlegend\n");
+    }
+
+    /** 外部 JAR / 未解決 JAR 由来クラスの凡例。出現したものだけ表示。 */
+    private static void emitOrigins(StringBuilder out, Stats s) {
+        if (!s.hasExternalOrigin && !s.hasMissingOrigin) {
+            return;
+        }
+        out.append("== 外部クラス ==\n");
+        if (s.hasExternalOrigin) {
+            out.append("<<external>>   依存 JAR/AAR で解決できた外部ライブラリクラス\n");
+        }
+        if (s.hasMissingOrigin) {
+            out.append("<<missing>>    依存宣言はあるが JAR/AAR が見つからないクラス\n");
+        }
     }
 
     private static Stats collect(List<JavaClassInfo> classes,
@@ -60,6 +77,12 @@ final class PlantUmlClassLegend {
         for (JavaClassInfo c : classes) {
             collectStereotypes(c, o, s);
             collectKindFlags(c, s);
+            // 依存 JAR 由来のクラスを凡例に反映
+            if (c.getOrigin() == JavaClassInfo.Origin.EXTERNAL_JAR) {
+                s.hasExternalOrigin = true;
+            } else if (c.getOrigin() == JavaClassInfo.Origin.MISSING_JAR) {
+                s.hasMissingOrigin = true;
+            }
             if (c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
                 s.hasInheritance = true;
             }

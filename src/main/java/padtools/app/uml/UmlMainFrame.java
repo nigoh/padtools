@@ -9,8 +9,10 @@ import padtools.util.CancelToken;
 import padtools.util.ErrorListener;
 import padtools.util.ProgressListener;
 
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -26,6 +28,8 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JToggleButton;
+import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
@@ -84,6 +88,10 @@ public class UmlMainFrame extends JFrame {
     private final ButtonGroup diagramGroup = new ButtonGroup();
     private final java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems
             = new java.util.EnumMap<>(DiagramKind.class);
+    /** ツールバー上の「図種切替」トグルボタン。メニュー側ラジオと選択状態を同期する。 */
+    private final java.util.EnumMap<DiagramKind, JToggleButton> diagramToggles
+            = new java.util.EnumMap<>(DiagramKind.class);
+    private final ButtonGroup diagramToolbarGroup = new ButtonGroup();
     private final ButtonGroup themeGroup = new ButtonGroup();
     private final java.util.Map<String, JRadioButtonMenuItem> themeItems
             = new java.util.LinkedHashMap<>();
@@ -151,6 +159,7 @@ public class UmlMainFrame extends JFrame {
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
 
+        add(buildToolBarPanel(), BorderLayout.NORTH);
         add(buildStatusBar(), BorderLayout.SOUTH);
 
         Setting setting = Main.getSetting();
@@ -225,6 +234,15 @@ public class UmlMainFrame extends JFrame {
             item.addActionListener(e -> {
                 currentKind = k;
                 refreshDiagram();
+            });
+            // メニュー側で選択された時に、ツールバーのトグルボタンも同じ状態に揃える。
+            // ActionListener ではなく PropertyChangeListener にしておくと、API 経由で
+            // setSelected された場合 (左ペインや drill-down) も同期される。
+            final DiagramKind kind = k;
+            item.addItemListener(ev -> {
+                if (((AbstractButton) ev.getSource()).isSelected()) {
+                    syncDiagramToggle(kind);
+                }
             });
             diagramGroup.add(item);
             diagramItems.put(k, item);
@@ -498,7 +516,10 @@ public class UmlMainFrame extends JFrame {
                         + "    左ペインのツリーにモジュール・パッケージ・クラスが表示されます。\n"
                         + "\n"
                         + "■ 図種を切り替える (Diagram)\n"
-                        + "  Diagram メニューから Class / Sequence / Activity / Layout などを選択。\n"
+                        + "  Diagram メニューから Class / Sequence / Activity / Common / Layout などを選択。\n"
+                        + "  ウィンドウ上部のツールバーのトグルボタンでも同じ切替ができます。\n"
+                        + "  Common (共通クラス図) は他クラスから参照される回数 (fan-in) が多い\n"
+                        + "  「使い回されているクラス」上位 N 件をハイライト表示します。\n"
                         + "  シーケンス図やアクティビティ図は起点メソッドの指定が必要です\n"
                         + "  (Diagram > Choose Sequence Entry... / Choose Activity Method...)。\n"
                         + "\n"
@@ -562,6 +583,169 @@ public class UmlMainFrame extends JFrame {
         east.add(zoomLabel, BorderLayout.EAST);
         bar.add(east, BorderLayout.EAST);
         return bar;
+    }
+
+    // --- ツールバー -----------------------------------------------------------
+
+    /**
+     * ウィンドウ上部のツールバーを構築する。
+     *
+     * <p>2 段構成:
+     * <ol>
+     *   <li>上段: ファイル / 表示 / 検索など頻用操作のボタン群
+     *       (Open / Save / Refresh / Back / Search / Scope / Zoom 各種)。
+     *       すべてのアクションはメニュー側と同じハンドラを呼び出し、
+     *       メニュー側で設定したショートカットも引き続き使用可能。</li>
+     *   <li>下段: 図種切替のトグルボタン (Class / Package / Sequence / Activity /
+     *       Common / Component / Dependency / Manifest / Layout)。
+     *       Diagram メニューのラジオ選択と双方向に同期する。</li>
+     * </ol>
+     * </p>
+     */
+    private JComponent buildToolBarPanel() {
+        JPanel container = new JPanel(new BorderLayout(0, 0));
+        container.add(buildActionToolBar(), BorderLayout.NORTH);
+        container.add(buildDiagramKindToolBar(), BorderLayout.SOUTH);
+        return container;
+    }
+
+    private JToolBar buildActionToolBar() {
+        JToolBar bar = new JToolBar();
+        bar.setFloatable(false);
+        bar.setRollover(true);
+
+        bar.add(makeButton("Open", "Open project (Ctrl+O)", e -> chooseProject()));
+        bar.add(makeButton("Save", "Save diagram (Ctrl+S)", e -> chooseAndExport()));
+        bar.add(makeButton("Refresh", "Refresh diagram (F5)", e -> refreshDiagram()));
+        bar.addSeparator();
+        bar.add(makeButton("Back", "Back to previous scope (Alt+←)",
+                e -> popScopeHistory()));
+        bar.add(makeButton("Search", "Search entities (Ctrl+Shift+F)",
+                e -> openEntitySearch()));
+        bar.add(makeButton("Scope", "Edit diagram scope", e -> openScopeDialog()));
+        bar.add(makeButton("Clear Scope", "Clear current scope filter", e -> {
+            currentScope = null;
+            refreshDiagram();
+        }));
+        bar.addSeparator();
+        bar.add(makeButton("Zoom In", "Zoom in (Ctrl+=)", e -> previewPanel.zoomIn()));
+        bar.add(makeButton("Zoom Out", "Zoom out (Ctrl+-)",
+                e -> previewPanel.zoomOut()));
+        bar.add(makeButton("100%", "Reset zoom (Ctrl+0)",
+                e -> previewPanel.zoomReset()));
+        bar.add(makeButton("Fit", "Zoom to fit (Ctrl+F)",
+                e -> previewPanel.zoomToFit()));
+        return bar;
+    }
+
+    private JToolBar buildDiagramKindToolBar() {
+        JToolBar bar = new JToolBar();
+        bar.setFloatable(false);
+        bar.setRollover(true);
+        bar.add(new JLabel(" Diagram: "));
+        for (DiagramKind k : DiagramKind.values()) {
+            JToggleButton b = new JToggleButton(toolbarLabel(k));
+            b.setToolTipText(k.getDisplayName() + tooltipExtra(k));
+            b.setFocusable(false);
+            if (k == DiagramKind.CLASS) {
+                b.setSelected(true);
+            }
+            final DiagramKind kind = k;
+            b.addActionListener(e -> selectDiagramKind(kind));
+            diagramToolbarGroup.add(b);
+            diagramToggles.put(k, b);
+            bar.add(b);
+        }
+        return bar;
+    }
+
+    /** トグルボタン用の短いラベル (ツールバー幅を抑えるため省略名)。 */
+    private static String toolbarLabel(DiagramKind k) {
+        switch (k) {
+            case CLASS: return "Class";
+            case PACKAGE: return "Package";
+            case SEQUENCE: return "Sequence";
+            case ACTIVITY: return "Activity";
+            case COMMON: return "Common";
+            case COMPONENT: return "Component";
+            case DEPENDENCY: return "Dependency";
+            case MANIFEST: return "Manifest";
+            case LAYOUT: return "Layout";
+            default: return k.getDisplayName();
+        }
+    }
+
+    /** ツールチップの末尾に付ける補助説明 (必要な図種だけ案内)。 */
+    private static String tooltipExtra(DiagramKind k) {
+        switch (k) {
+            case SEQUENCE: return " (choose entry from Diagram menu)";
+            case ACTIVITY: return " (choose method from Diagram menu)";
+            case LAYOUT:   return " (choose layout file from Diagram menu)";
+            case COMMON:   return " — top-N most referenced classes (fan-in)";
+            default: return "";
+        }
+    }
+
+    /**
+     * ツールバーの図種ボタンが押されたときのハンドラ。
+     * 図種に応じて必要な追加入力ダイアログを開く (シーケンス起点未指定など)。
+     */
+    private void selectDiagramKind(DiagramKind kind) {
+        currentKind = kind;
+        JRadioButtonMenuItem item = diagramItems.get(kind);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        // SEQUENCE/ACTIVITY/LAYOUT は追加入力が必要。未指定なら入力ダイアログを誘導する。
+        if (kind == DiagramKind.SEQUENCE
+                && (sequenceEntry == null || sequenceEntry.isEmpty())) {
+            if (cache.isLoaded()) {
+                pickSequenceEntry();
+            } else {
+                refreshDiagram();
+            }
+            return;
+        }
+        if (kind == DiagramKind.ACTIVITY
+                && (activityEntry == null || activityEntry.isEmpty())) {
+            if (cache.isLoaded()) {
+                pickActivityEntry();
+            } else {
+                refreshDiagram();
+            }
+            return;
+        }
+        if (kind == DiagramKind.LAYOUT
+                && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
+            if (cache.isLoaded()) {
+                pickLayoutFile();
+            } else {
+                refreshDiagram();
+            }
+            return;
+        }
+        refreshDiagram();
+    }
+
+    /**
+     * ツールバーのトグルボタン側で現在の図種を反映する。メニュー (ラジオボタン) と
+     * 双方向に同期するため、各 onTree*Selected / drillDown 等で
+     * {@link #diagramItems} を更新する場所で同時に呼ぶ。
+     */
+    private void syncDiagramToggle(DiagramKind kind) {
+        JToggleButton b = diagramToggles.get(kind);
+        if (b != null && !b.isSelected()) {
+            b.setSelected(true);
+        }
+    }
+
+    private static JButton makeButton(String text, String tooltip,
+                                       java.awt.event.ActionListener listener) {
+        JButton b = new JButton(text);
+        b.setToolTipText(tooltip);
+        b.setFocusable(false);
+        b.addActionListener(listener);
+        return b;
     }
 
     // --- イベント処理 ---------------------------------------------------------

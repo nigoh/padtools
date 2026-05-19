@@ -129,6 +129,27 @@ public class DiagramServiceTest {
     }
 
     @Test
+    public void testCommonClassesDiagram() {
+        // 共通クラス図: 3 つのクラスが Util を参照する場面で生成が成立すること
+        List<JavaClassInfo> infos = new ArrayList<>();
+        infos.addAll(JavaStructureExtractor.extract(
+                "package com.x; class Util {}"));
+        infos.addAll(JavaStructureExtractor.extract(
+                "package com.x; class A { Util u; }"));
+        infos.addAll(JavaStructureExtractor.extract(
+                "package com.x; class B { Util u; }"));
+        infos.addAll(JavaStructureExtractor.extract(
+                "package com.x; class C { Util u; }"));
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.COMMON),
+                sampleAnalysis(), infos);
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("<<common>>"));
+    }
+
+    @Test
     public void testManifestDiagram() {
         String puml = DiagramService.generatePuml(
                 new DiagramRequest(DiagramKind.MANIFEST),

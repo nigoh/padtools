@@ -4,6 +4,17 @@ Change log
 Unreleased
 --------
 
+* **共通クラス図 (Common Classes Diagram) を追加 + GUI ツールバー導入** (`PlantUmlCommonClassesDiagram` 新規 / `DiagramKind.COMMON` / `DiagramService` / `UmlMainFrame`)
+    * 新図種「Common Classes」: プロジェクト内のクラス群を走査し、他クラスから参照される回数 (fan-in) が多い「共通 (= 使い回されている) クラス」を上位 N 件 (既定 20) でハイライト表示する。参照種別は `extends` / `implements` / フィールド型 / メソッド引数型 / 戻り値型を集計し、自己参照は除外、外部ライブラリ (`java.*` / `android.*` / `kotlin.*` 等 + `Origin.EXTERNAL_JAR/MISSING_JAR`) も既定で集計対象外
+    * 各ハブクラスは `<<common>>` ステレオタイプ + 黄背景で強調し、ラベルに `N refs` を併記。参照元クラスは破線矢印 `referrer ..> hub : uses` で接続 (`referrersPerClass` で上限制御、既定 5)
+    * `DiagramService` に `case COMMON` を追加し、既存の `DiagramScope` フィルタ (パッケージ / モジュール / 正規表現 / seed+hop) と詳細昇格 (`ClassIndex.detail`) を流用
+    * **ウィンドウ上部にツールバーを新設**: 既存メニューとショートカットは維持したまま、頻用操作をボタンとして可視化
+        * 上段 (Action ツールバー): `Open` / `Save` / `Refresh` / `Back` / `Search` / `Scope` / `Clear Scope` / `Zoom In` / `Zoom Out` / `100%` / `Fit`
+        * 下段 (Diagram トグル): `Class` / `Package` / `Sequence` / `Activity` / `Common` / `Component` / `Dependency` / `Manifest` / `Layout` を `JToggleButton` + `ButtonGroup` で配置し、Diagram メニューのラジオ選択と双方向同期 (`ItemListener` 経由)
+        * `Sequence` / `Activity` / `Layout` ボタンは追加入力が未指定なら起点選択ダイアログを自動で開く
+    * テスト: `PlantUmlCommonClassesDiagramTest` (10 ケース: fan-in 集計 / minReferences フィルタ / interface 実装 / 自己参照除外 / 外部ライブラリ除外 / topN 上限) と `DiagramServiceTest.testCommonClassesDiagram` を追加
+    * 目的: AOSP 級プロジェクトでも「実際に共有されている中核クラス」を一目で把握できるようにし、頻用操作をメニュー潜り無しでクリックひとつで起動できるようにする
+
 * **クラス・メソッド・フィールド横断検索ダイアログを追加** (`EntitySearchDialog` 新規 / `UmlMainFrame`)
     * Diagram メニュー → `Search Entities...` (アクセラレータ `Ctrl+Shift+F`) で開くモーダル。クラス・メソッド・フィールドを 1 つの部分一致検索で横断的に絞り込み、Kind チェックボックスで種別を ON/OFF できる
     * 選択結果に応じて: クラス → seed+1hop でクラス図に切り替え / メソッド → シーケンス図を生成 / フィールド → 所属クラス seed+1hop でクラス図 (フィールド型まで含む)

@@ -81,4 +81,52 @@ public class DiagramServiceScopeTest {
         assertTrue(puml.contains("OtherClass"));
         assertFalse("scope 警告なし", puml.contains("scope filter"));
     }
+
+    @Test
+    public void testScopeExcludesPackage() {
+        DiagramScope scope = DiagramScope.builder()
+                .excludePackage("com.other").build();
+        DiagramRequest req = new DiagramRequest(DiagramKind.CLASS, null, null, false, scope);
+        String puml = DiagramService.generatePuml(req, null, sample(), null);
+        assertTrue("CarManager は残る", puml.contains("CarManager"));
+        assertFalse("除外パッケージのクラスは消える", puml.contains("OtherClass"));
+    }
+
+    @Test
+    public void testScopeExcludesExternalLibraries() {
+        List<JavaClassInfo> mixed = new ArrayList<>();
+        mixed.add(cls("com.app", "MyClass"));
+        JavaClassInfo ext = cls("com.app.dep", "DepClass");
+        ext.setOrigin(JavaClassInfo.Origin.EXTERNAL_JAR);
+        mixed.add(ext);
+        mixed.add(cls("android.view", "View"));
+
+        DiagramScope scope = DiagramScope.builder()
+                .excludeExternalLibraries(true).build();
+        DiagramRequest req = new DiagramRequest(DiagramKind.CLASS, null, null, false, scope);
+        String puml = DiagramService.generatePuml(req, null, mixed, null);
+        assertTrue("project class remains", puml.contains("MyClass"));
+        assertFalse("EXTERNAL_JAR class removed",
+                puml.contains("DepClass"));
+        assertFalse("android.* class removed by prefix",
+                puml.contains("android.view"));
+    }
+
+    @Test
+    public void testScopePropagatesPublicOnlyToOptions() {
+        // public でないクラスがフィルタされることを確認
+        JavaClassInfo pub = cls("com.app", "PublicCls");
+        pub.getModifiers().add("public");
+        JavaClassInfo pkg = cls("com.app", "PkgCls"); // 修飾子なし = package-private
+        List<JavaClassInfo> infos = new ArrayList<>();
+        infos.add(pub);
+        infos.add(pkg);
+
+        DiagramScope scope = DiagramScope.builder()
+                .visibilityFilter(VisibilityFilter.PUBLIC_ONLY).build();
+        DiagramRequest req = new DiagramRequest(DiagramKind.CLASS, null, null, false, scope);
+        String puml = DiagramService.generatePuml(req, null, infos, null);
+        assertTrue("public class remains", puml.contains("PublicCls"));
+        assertFalse("non-public class hidden", puml.contains("PkgCls"));
+    }
 }

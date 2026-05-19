@@ -12,6 +12,7 @@ import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaFieldInfo;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
 import padtools.core.formats.uml.PlantUmlActivityDiagram;
+import padtools.core.formats.uml.PlantUmlCommonClassesDiagram;
 import padtools.core.formats.uml.PlantUmlPackageDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.util.ErrorListener;
@@ -167,6 +168,17 @@ public final class DiagramService {
                 PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlManifestDiagram.generate(analysis, o);
+            }
+            case COMMON: {
+                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                        index != null ? index.moduleMap() : null);
+                if (index != null) {
+                    scoped = promoteToDetailed(scoped, index);
+                }
+                PlantUmlCommonClassesDiagram.Options o =
+                        new PlantUmlCommonClassesDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlCommonClassesDiagram.generate(scoped, o);
             }
             case LAYOUT: {
                 String key = request.getLayoutKey();

@@ -18,6 +18,7 @@ Graphviz / PlantUML の追加インストールは不要です。
 | クラス図 | パッケージ単位でグループ化、継承 / 実装 / 利用関係、AAOS パターン (`<<CarManager>>`)、AndroidManifest 連携 (`<<Activity>>` 等)、JavaDoc / アノテーション / enum 定数 |
 | パッケージ図 | パッケージごとのクラス数と参照関係 (継承 / 実装 / フィールド型) を集約 |
 | シーケンス図 | `Class.method` を起点に呼び出しを多段トレース、制御構造 (`if/while/switch/try`) を `alt/loop/group` で表現 |
+| 共通クラス図 | 他クラスから参照される回数 (fan-in: extends / implements / フィールド型 / メソッド引数・戻り値型) が多い「共通 (= 使い回されている) クラス」を上位 N 件 (既定 20) で強調表示し、参照元との関係を可視化 |
 | コンポーネント図 | AndroidManifest の Activity / Service / Receiver / Provider、`exported` 属性、ランチャー強調、uses-permission |
 | Manifest 図 | AndroidManifest の `<application>` 属性 (package / class / theme / debuggable / allowBackup / meta-data) を中央ノードに、配下に Activity / Service / Receiver / Provider をグループ化、周辺に `uses-permission` / `uses-feature` を配置 |
 | Gradle 依存図 | モジュール間 `project(':x')` 依存と外部 Maven ライブラリ、`libs.versions.toml` 解決 |
@@ -45,9 +46,13 @@ java -jar PadTools.jar ~/AndroidStudioProjects/MyApp
 
 GUI の操作:
 
+* **ウィンドウ上部のツールバー** — 頻用操作を 1 クリックで実行
+    * 上段 (Action): `Open` / `Save` / `Refresh` / `Back` / `Search` / `Scope` / `Clear Scope` / `Zoom In` / `Zoom Out` / `100%` / `Fit`
+    * 下段 (Diagram): `Class` / `Package` / `Sequence` / `Activity` / `Common` / `Component` / `Dependency` / `Manifest` / `Layout` をトグルボタンで切り替え。Diagram メニューのラジオ選択と双方向同期。Sequence / Activity / Layout は起点未指定なら自動で選択ダイアログを表示
+    * 既存のショートカット (`Ctrl+O` / `Ctrl+S` / `F5` / `Ctrl+F` / `Ctrl+=` / `Ctrl+-` / `Ctrl+0` / `Alt+←` / `Ctrl+Shift+F`) はそのまま使用可能
 * **File → Open Project...** (Ctrl+O) — Android / Gradle プロジェクトのルートディレクトリを選択
 * **File → Cancel Loading** — 進行中の解析を中断 (AOSP 級プロジェクトで途中で気が変わったとき用)
-* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / コンポーネント図 / 依存図 / Manifest 図 のラジオ選択
+* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / 共通クラス図 / コンポーネント図 / 依存図 / Manifest 図 のラジオ選択
 * **Diagram → Choose Sequence Entry...** — シーケンス図の起点 `Class.method` を絞り込みリストから選択
 * **Diagram → Scope...** — クラス図 / パッケージ図の表示範囲を絞り込み (パッケージ複数選択 / モジュール複数選択 / 正規表現 / 最大クラス数 / シードからの hop 数)
 * **Diagram → Clear Scope** — 絞り込みを解除

@@ -168,6 +168,10 @@ public final class JavaStructureExtractor {
                     parseClassDecl(JavaClassInfo.Kind.ENUM, mods, ann, comment);
                     continue;
                 }
+                if (peek().isKw("record")) {
+                    parseClassDecl(JavaClassInfo.Kind.RECORD, mods, ann, comment);
+                    continue;
+                }
                 next();
             }
         }
@@ -194,6 +198,10 @@ public final class JavaStructureExtractor {
             // ジェネリック型パラメータ <T extends ...>
             if (peek().is("<")) {
                 skipBalanced("<", ">");
+            }
+            // record のコンパクトコンストラクタ引数: record Foo(int x, int y)
+            if (kind == JavaClassInfo.Kind.RECORD && peek().is("(")) {
+                skipBalanced("(", ")");
             }
             // extends ... / implements ...
             while (!atEnd() && !peek().is("{") && !peek().is(";")) {
@@ -306,6 +314,10 @@ public final class JavaStructureExtractor {
                 }
                 if (peek().isKw("enum")) {
                     parseClassDecl(JavaClassInfo.Kind.ENUM, mods, annotations, comment);
+                    continue;
+                }
+                if (peek().isKw("record")) {
+                    parseClassDecl(JavaClassInfo.Kind.RECORD, mods, annotations, comment);
                     continue;
                 }
                 if (peek().is("@") && peek(1).isKw("interface")) {

@@ -493,6 +493,49 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testRecordTopLevel() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "package p; record Point(int x, int y) {}");
+        assertEquals(1, cs.size());
+        JavaClassInfo c = cs.get(0);
+        assertEquals("Point", c.getSimpleName());
+        assertEquals(JavaClassInfo.Kind.RECORD, c.getKind());
+        assertEquals("p", c.getPackageName());
+    }
+
+    @Test
+    public void testRecordWithBody() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "record Pair(String a, String b) { int sum() { return 0; } }");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.RECORD, cs.get(0).getKind());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("sum", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testRecordImplementsInterface() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "record Foo(int x) implements Comparable<Foo> {}");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.RECORD, cs.get(0).getKind());
+        assertEquals(1, cs.get(0).getInterfaces().size());
+    }
+
+    @Test
+    public void testRecordNested() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { record Inner(int x) {} }");
+        assertEquals(2, cs.size());
+        JavaClassInfo inner = cs.stream()
+                .filter(c -> c.getKind() == JavaClassInfo.Kind.RECORD)
+                .findFirst().orElse(null);
+        assertNotNull(inner);
+        assertEquals("Inner", inner.getSimpleName());
+        assertEquals("A", inner.getEnclosingClass());
+    }
+
+    @Test
     public void testTextBlockWithBracesAndQuotes() {
         // テキストブロック内の { } や " は構造を壊さない
         String src = "class A {\n"

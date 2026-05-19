@@ -22,6 +22,7 @@ public class JavaMethodInfo {
         private final String receiver;
         private final String methodName;
         private final List<JavaMethodInfo> inlineMethods = new ArrayList<>();
+        private String firstArgLabel;
 
         public Call(String receiver, String methodName) {
             this.receiver = receiver;
@@ -43,6 +44,22 @@ public class JavaMethodInfo {
          */
         public List<JavaMethodInfo> getInlineMethods() {
             return inlineMethods;
+        }
+
+        /**
+         * 呼び出しの第 1 引数が定数シンボル参照 (例:
+         * {@code VehiclePropertyIds.HVAC_TEMPERATURE_SET},
+         * {@code Manifest.permission.READ_PHONE_STATE},
+         * 単独 {@code MAX_VALUE}) のとき、そのシンボル文字列を保持する。
+         * シーケンス図のラベルに {@code method(SYMBOL)} 形式で添える用途。
+         * 該当しなければ null。
+         */
+        public String getFirstArgLabel() {
+            return firstArgLabel;
+        }
+
+        public void setFirstArgLabel(String firstArgLabel) {
+            this.firstArgLabel = firstArgLabel;
         }
     }
 

@@ -4,6 +4,13 @@ Change log
 Unreleased
 --------
 
+* **AAOS Phase 2.4: シーケンス図に第 1 引数の定数シンボルを併記** (`JavaMethodInfo.Call.firstArgLabel` 新規 / `JavaStructureExtractor` / `PlantUmlSequenceDiagram.formatCallLabel`)
+    * `JavaMethodInfo.Call` に nullable な `firstArgLabel` フィールドを追加 (`getFirstArgLabel` / `setFirstArgLabel`)。呼び出しの第 1 引数が単独の定数シンボル参照 (例 `VehiclePropertyIds.HVAC_TEMPERATURE_SET`, `Manifest.permission.READ_PHONE_STATE`, 単独 `MAX_VALUE`) のときにそのフルパス文字列を保持する。
+    * `JavaStructureExtractor` に `tryCaptureFirstConstantArgument` を新設。probe-only (idx を進めない) で先頭引数を覗き、ドット区切りの IDENT 連鎖を組み立てて、末尾セグメントが `UPPER_CASE_WITH_UNDERSCORES` 形式 (大文字始まり、英大文字・数字・アンダースコアのみ、長さ 2 以上) で、直後に `,` または `)` が続く場合だけ採用。`FOO + 1` のような複合式や `T` のような 1 文字 (型パラメータの可能性)、`Foo.class` (小文字末尾) は誤検出を避けて拒否。
+    * `PlantUmlSequenceDiagram.formatCallLabel` に第 1 引数ラベル対応のオーバーロードを追加し、`emitCall` から `call.getFirstArgLabel()` を渡す。`firstArgLabel` があれば `getProperty(VehiclePropertyIds.HVAC_TEMPERATURE_SET)` のように引数まで表示、無ければ従来通り `getProperty()`。
+    * テスト: 新規 `JavaStructureExtractorConstantArgTest` 13 ケース (ドット定数 / 単独定数 / 3 段ドット / 小文字変数の拒否 / 数値・文字列リテラル拒否 / `Foo.class` 拒否 / 単一文字 `T` 拒否 / 複合式拒否 / 後続引数があっても先頭を拾う / 数字を含む定数 / 別呼び出し戻り値の拒否)、`PlantUmlSequenceDiagramTest` に 2 ケース追加 (UML 出力反映 + ローカル変数引数のフォールバック)。既存 893 件全 PASS。
+    * 目的: AAOS の {@code CarPropertyManager.getProperty(VehiclePropertyIds.XXX)} のような「シンボル定数 1 つを渡す呼び出し」をシーケンス図ラベルに引数まで載せて表示し、VHAL や Permission のシーケンス図を読み取り易くする。
+
 * **AAOS Phase 2.3: AAOS API レベルバッジ** (`AaosPattern.apiLevelBadge` / `PlantUmlClassDiagram`)
     * クラスに付与された AAOS / Android API 要件アノテーションから、{@code "API 33+"} / {@code "Car 34+"} / {@code "Plat TIRAMISU+/Car TIRAMISU+"} のような短いバッジ文字列を生成し、クラス図にステレオタイプとして併記する。
     * サポート対象: `@AddedIn(majorVersion=33)` / `@AddedIn(33)` 位置引数 / `@AddedInOrBefore(...)` / `@MinimumPlatformSdkVersion(N)` / `@MinimumCarVersion(N)` / `@ApiRequirements(minPlatformVersion=..., minCarVersion=...)`。

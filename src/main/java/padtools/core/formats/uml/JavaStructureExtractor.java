@@ -1781,6 +1781,8 @@ public final class JavaStructureExtractor {
                         next(); // IDENT
                         if (!atEnd() && peek().is("(")) {
                             next(); // '('
+                            // 先に定数シンボル ({@code FOO.BAR_BAZ}) を probe-only で確認
+                            tryCaptureFirstConstantArgument(call);
                             tryCaptureFirstInlineArgument(call);
                         }
                         // 上で `(` を 1 つ消費したが、外側の parenDepth とは別管理にした
@@ -1868,6 +1870,70 @@ public final class JavaStructureExtractor {
                 return;
             }
             call.getInlineMethods().addAll(captured);
+        }
+
+        /**
+         * 呼び出しの第 1 引数が定数シンボル参照 (例:
+         * {@code VehiclePropertyIds.HVAC_TEMPERATURE_SET},
+         * {@code Manifest.permission.READ_PHONE_STATE},
+         * 単独 {@code MAX_VALUE}) の場合に、その文字列を
+         * {@link JavaMethodInfo.Call#setFirstArgLabel} に格納する。
+         *
+         * <p>シーケンス図のラベルで {@code getProperty(HVAC_TEMPERATURE_SET)} のように
+         * 引数を併記するため。判定基準は「ドット区切りの IDENT 列で、末尾セグメントが
+         * UPPERCASE_WITH_UNDERSCORES 形式」。本メソッドは probe-only で idx を進めない
+         * (引数本体の消費は呼び出し元の parseExpressionStatement に任せる)。</p>
+         */
+        private void tryCaptureFirstConstantArgument(JavaMethodInfo.Call call) {
+            if (atEnd() || peek().type != JavaToken.Type.IDENT) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append(peek().text);
+            int probe = idx + 1;
+            while (probe + 1 < tokens.size()
+                    && tokens.get(probe).is(".")
+                    && tokens.get(probe + 1).type == JavaToken.Type.IDENT) {
+                sb.append('.').append(tokens.get(probe + 1).text);
+                probe += 2;
+            }
+            // 引数の終端: ',' または ')' のいずれかが直後でないと「単一の定数参照」とは
+            // 言えない (`FOO + 1` や `FOO.method()` のような複合式を誤検出しないため)
+            if (probe >= tokens.size()) {
+                return;
+            }
+            JavaToken nxt = tokens.get(probe);
+            if (!nxt.is(",") && !nxt.is(")")) {
+                return;
+            }
+            String full = sb.toString();
+            int lastDot = full.lastIndexOf('.');
+            String lastSegment = lastDot < 0 ? full : full.substring(lastDot + 1);
+            if (!looksLikeConstantSymbol(lastSegment)) {
+                return;
+            }
+            call.setFirstArgLabel(full);
+        }
+
+        /**
+         * Java の定数命名規約 {@code UPPER_CASE_WITH_UNDERSCORES} に従う識別子か。
+         * 大文字始まりで、英大文字・数字・アンダースコアのみで構成され、長さ 2 以上。
+         * ({@code F} のような 1 文字は誤検出を避けて除外。{@code PI} は採用。)
+         */
+        private static boolean looksLikeConstantSymbol(String name) {
+            if (name == null || name.length() < 2) {
+                return false;
+            }
+            if (!Character.isUpperCase(name.charAt(0))) {
+                return false;
+            }
+            for (int i = 0; i < name.length(); i++) {
+                char c = name.charAt(i);
+                if (!Character.isUpperCase(c) && !Character.isDigit(c) && c != '_') {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static JavaFieldInfo findFieldByName(JavaClassInfo cls, String name) {

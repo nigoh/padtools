@@ -650,4 +650,31 @@ public class PlantUmlSequenceDiagramTest {
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertFalse(puml, puml.contains("<<binder>>"));
     }
+
+    @Test
+    public void testFirstArgConstantSurfacedOnCallLabel() {
+        // VHAL property のような定数シンボル引数がシーケンス図ラベルに添えられる
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { CarPropertyManager mgr;"
+                        + "  void run() {"
+                        + "    mgr.getProperty(VehiclePropertyIds.HVAC_TEMPERATURE_SET);"
+                        + "  } } "
+                        + "class CarPropertyManager {"
+                        + "  void getProperty(int id) {}"
+                        + "}");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue(puml,
+                puml.contains("getProperty(VehiclePropertyIds.HVAC_TEMPERATURE_SET)"));
+    }
+
+    @Test
+    public void testNonConstantArgFallsBackToEmptyParens() {
+        // 通常のローカル変数引数では従来通り `()` 表記
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; void run(int x) { b.act(x); } } "
+                        + "class B { void act(int v) {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue(puml, puml.contains("act()"));
+        assertFalse(puml, puml.contains("act(x)"));
+    }
 }

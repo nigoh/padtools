@@ -198,4 +198,97 @@ public class AaosPatternTest {
         JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
         assertFalse(AaosPattern.isAidlBinderImpl(c));
     }
+
+    // -------- API レベルバッジ (@ApiRequirements / @AddedIn 等) --------
+
+    @Test
+    public void testApiLevelBadgeAddedInNamedArg() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("AddedIn(majorVersion=33)");
+        assertEquals("API 33+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeAddedInPositional() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("AddedIn(34)");
+        assertEquals("API 34+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeAddedInWithWhitespace() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("AddedIn(majorVersion = 33)");
+        assertEquals("API 33+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeAddedInOrBefore() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("AddedInOrBefore(majorVersion=33)");
+        assertEquals("API <=33", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeMinimumCarVersion() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("MinimumCarVersion(35)");
+        assertEquals("Car 35+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeMinimumPlatformSdkVersion() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("MinimumPlatformSdkVersion(34)");
+        assertEquals("Plat 34+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeApiRequirementsCombined() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add(
+                "ApiRequirements(minPlatformVersion=Car.PLATFORM_VERSION_TIRAMISU_0, "
+                        + "minCarVersion=Car.PLATFORM_VERSION_TIRAMISU_0)");
+        assertEquals("Plat TIRAMISU+/Car TIRAMISU+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeApiRequirementsPlatOnly() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add(
+                "ApiRequirements(minPlatformVersion=Car.PLATFORM_VERSION_UPSIDE_DOWN_CAKE_0)");
+        assertEquals("Plat UPSIDE_DOWN_CAKE+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeApiRequirementsPreferredOverAddedIn() {
+        // ApiRequirements が AddedIn より優先される
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("AddedIn(33)");
+        c.getAnnotations().add(
+                "ApiRequirements(minPlatformVersion=Car.PLATFORM_VERSION_TIRAMISU_0, "
+                        + "minCarVersion=Car.PLATFORM_VERSION_TIRAMISU_0)");
+        assertEquals("Plat TIRAMISU+/Car TIRAMISU+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeFqnAnnotation() {
+        // FQN 形式の annotation でも判定できる
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("android.car.annotation.AddedIn(majorVersion=33)");
+        assertEquals("API 33+", AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeNoneForUnrelatedAnnotation() {
+        JavaClassInfo c = make("android.car", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("Override");
+        c.getAnnotations().add("Deprecated");
+        assertNull(AaosPattern.apiLevelBadge(c));
+    }
+
+    @Test
+    public void testApiLevelBadgeNullSafe() {
+        assertNull(AaosPattern.apiLevelBadge(null));
+    }
 }

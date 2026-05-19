@@ -95,4 +95,32 @@ public class PlantUmlClassDiagramAaosStereotypeTest {
         assertFalse(puml, puml.contains("<<TestApi>>"));
         assertFalse(puml, puml.contains("<<binder>>"));
     }
+
+    @Test
+    public void testApiLevelBadgeRenderedAsStereotype() {
+        JavaClassInfo c = make("android.car", "Foo");
+        c.getAnnotations().add("AddedIn(majorVersion=33)");
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c));
+        assertTrue(puml, puml.contains("<<API 33+>>"));
+    }
+
+    @Test
+    public void testApiRequirementsBadgeRenderedAsStereotype() {
+        JavaClassInfo c = make("android.car", "Foo");
+        c.getAnnotations().add(
+                "ApiRequirements(minPlatformVersion=Car.PLATFORM_VERSION_TIRAMISU_0, "
+                        + "minCarVersion=Car.PLATFORM_VERSION_TIRAMISU_0)");
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c));
+        assertTrue(puml, puml.contains("<<Plat TIRAMISU+/Car TIRAMISU+>>"));
+    }
+
+    @Test
+    public void testApiBadgeSuppressedByMarkAaosCategoriesOff() {
+        JavaClassInfo c = make("android.car", "Foo");
+        c.getAnnotations().add("AddedIn(33)");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.markAaosCategories = false;
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c), o);
+        assertFalse(puml, puml.contains("API 33+"));
+    }
 }

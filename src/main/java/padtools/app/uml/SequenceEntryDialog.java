@@ -13,6 +13,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -54,6 +55,7 @@ public class SequenceEntryDialog extends JDialog {
 
     private final List<Entry> allEntries = new ArrayList<>();
     private String selectedEntry;
+    private final Timer debounceTimer = new Timer(150, e -> rebuildTree(filter.getText()));
 
     public SequenceEntryDialog(Frame owner, List<JavaClassInfo> classes) {
         super(owner, "Select sequence diagram entry", true);
@@ -117,20 +119,21 @@ public class SequenceEntryDialog extends JDialog {
                 }
             }
         });
+        debounceTimer.setRepeats(false);
         filter.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                rebuildTree(filter.getText());
+                debounceTimer.restart();
             }
         });
 

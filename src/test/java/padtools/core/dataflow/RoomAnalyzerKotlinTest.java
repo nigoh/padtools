@@ -82,9 +82,6 @@ public class RoomAnalyzerKotlinTest {
                 + "abstract class AppDb : RoomDatabase() {\n"
                 + "  abstract fun userDao(): UserDao\n"
                 + "}\n";
-        // 注: 現状の RoomAnalyzer は entities = {Foo.class, ...} の Java 形式のみマッチする。
-        // Kotlin の [Foo::class, Bar::class] は別途対応が必要だが、ここでは
-        // クラスと @Database アノテーション自体が検出されることを確認する。
         List<JavaClassInfo> infos = scanKotlin(src);
         assertEquals(1, infos.size());
         boolean hasDatabaseAnn = false;
@@ -94,6 +91,31 @@ public class RoomAnalyzerKotlinTest {
         assertTrue("Must capture @Database annotation", hasDatabaseAnn);
         RoomAnalyzer.Result r = new RoomAnalyzer().analyze(infos);
         assertEquals(1, r.getDatabases().size());
+        RoomDatabase db = r.getDatabases().get(0);
+        assertEquals(3, db.getVersion());
+        // Kotlin の [Foo::class, Bar::class] 形式から entities を抽出できること
+        assertEquals(2, db.getEntityClasses().size());
+        assertTrue(db.getEntityClasses().contains("User"));
+        assertTrue(db.getEntityClasses().contains("Post"));
+    }
+
+    @Test
+    public void detectsKotlinForeignKey() {
+        String src = "package com.x\n"
+                + "@Entity(tableName = \"posts\", foreignKeys = [\n"
+                + "  ForeignKey(entity = User::class, parentColumns = [\"id\"],"
+                + " childColumns = [\"userId\"])\n"
+                + "])\n"
+                + "data class Post(\n"
+                + "  @PrimaryKey val id: Long,\n"
+                + "  val userId: Long\n"
+                + ")\n";
+        RoomAnalyzer.Result r = new RoomAnalyzer().analyze(scanKotlin(src));
+        assertEquals(1, r.getEntities().size());
+        RoomEntity post = r.getEntities().get(0);
+        // Kotlin の @ForeignKey(entity = User::class, ...) からターゲットを抽出
+        assertEquals(1, post.getForeignKeyTargets().size());
+        assertEquals("User", post.getForeignKeyTargets().get(0));
     }
 
     @Test

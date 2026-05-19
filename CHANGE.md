@@ -4,6 +4,16 @@ Change log
 Unreleased
 --------
 
+* **AAOS Phase 2.2: Car App Library パターン認識** (`CarAppLibraryPattern` 新規 / `PlantUmlClassDiagram`)
+    * `androidx.car.app.*` の Car App Library ベース型を継承するクラスを検出し、クラス図に `<<CarAppService>>` / `<<CarAppSession>>` / `<<CarAppScreen>>` ステレオタイプを付与する。`JetpackPattern` と同じ単純名末尾一致 + パッケージヒントの構造を採用。
+    * 判定ロジック:
+        * `CarAppService` は車載特有の名前なので superClass の単純名マッチだけで採用 (`extends CarAppService` でも `extends androidx.car.app.CarAppService` でも検出)
+        * `Session` / `Screen` は汎用名なので、(a) superClass が FQN で `androidx.car.app.*` であるか、(b) 自クラスが `androidx.car.app.*` パッケージ配下にある、のいずれかを満たす場合だけ採用 (例: `class BackgroundSession extends Session` は採用しないが、`class HomeScreen extends androidx.car.app.Screen` は採用)
+        * ジェネリクス後置 (`extends androidx.car.app.Screen<MyTemplate>`) も `JetpackPattern.simpleName` で除去して比較
+    * `PlantUmlClassDiagram.stereotype` に組み込み、既存の `<<CarManager>>` / `<<SystemApi>>` / API レベルバッジと併記可能 (重複は除去)。`markAaosCategories=false` で抑制可。
+    * テスト: 新規 `CarAppLibraryPatternTest` 13 ケース (CarAppService 単純名/FQN、Session/Screen の FQN 経由・パッケージ経由・誤検出回避、ジェネリクス、null セーフ、ヘルパー単体)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力反映 + suppress)。既存 894 件全 PASS。
+    * 目的: AAOS の Car App Library を使うモバイル UI コンポーネント (`CarAppService` / `Session` / `Screen`) を、ユーザコード側で簡単な命名規約に従っていなくても図上で識別できるようにする。
+
 * **AAOS Phase 2.3: AAOS API レベルバッジ** (`AaosPattern.apiLevelBadge` / `PlantUmlClassDiagram`)
     * クラスに付与された AAOS / Android API 要件アノテーションから、{@code "API 33+"} / {@code "Car 34+"} / {@code "Plat TIRAMISU+/Car TIRAMISU+"} のような短いバッジ文字列を生成し、クラス図にステレオタイプとして併記する。
     * サポート対象: `@AddedIn(majorVersion=33)` / `@AddedIn(33)` 位置引数 / `@AddedInOrBefore(...)` / `@MinimumPlatformSdkVersion(N)` / `@MinimumCarVersion(N)` / `@ApiRequirements(minPlatformVersion=..., minCarVersion=...)`。

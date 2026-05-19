@@ -123,4 +123,30 @@ public class PlantUmlClassDiagramAaosStereotypeTest {
         String puml = PlantUmlClassDiagram.generate(Arrays.asList(c), o);
         assertFalse(puml, puml.contains("API 33+"));
     }
+
+    @Test
+    public void testCarAppServiceStereotypeAppears() {
+        JavaClassInfo c = make("com.example.app", "MyCarService");
+        c.setSuperClass("CarAppService");
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c));
+        assertTrue(puml, puml.contains("<<CarAppService>>"));
+    }
+
+    @Test
+    public void testCarAppScreenStereotypeFromFqnSuperclass() {
+        JavaClassInfo c = make("com.example.app", "HomeScreen");
+        c.setSuperClass("androidx.car.app.Screen");
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c));
+        assertTrue(puml, puml.contains("<<CarAppScreen>>"));
+    }
+
+    @Test
+    public void testCarAppSessionStereotypeSuppressedByMarkAaosCategoriesOff() {
+        JavaClassInfo c = make("androidx.car.app.demo", "DemoSession");
+        c.setSuperClass("Session");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.markAaosCategories = false;
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(c), o);
+        assertFalse(puml, puml.contains("<<CarAppSession>>"));
+    }
 }

@@ -100,6 +100,8 @@ public class UmlMainFrame extends JFrame {
     private String currentLayoutKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
+    /** ドリルダウン履歴 (戻る用)。 */
+    private final java.util.Deque<DiagramScope> scopeHistory = new java.util.ArrayDeque<>();
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
     /**
@@ -123,6 +125,7 @@ public class UmlMainFrame extends JFrame {
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
+        previewPanel.setOnLinkClick(this::onPreviewLinkClick);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnClassSelected(this::onTreeClassSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
@@ -334,7 +337,24 @@ public class UmlMainFrame extends JFrame {
         m.add(zoomOut);
         m.add(zoomReset);
         m.add(zoomFit);
+        m.addSeparator();
+        JMenuItem back = new JMenuItem("Back");
+        back.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT,
+                MENU_MASK | InputEvent.ALT_DOWN_MASK));
+        back.addActionListener(e -> popScopeHistory());
+        m.add(back);
         return m;
+    }
+
+    /** ドリルダウン履歴を 1 段戻す。空のときは無視。 */
+    private void popScopeHistory() {
+        if (scopeHistory.isEmpty()) {
+            status.setText("No drill-down history.");
+            return;
+        }
+        currentScope = scopeHistory.pop();
+        status.setText("Back to previous scope.");
+        refreshDiagram();
     }
 
     private JMenu buildStyleMenu() {
@@ -723,6 +743,45 @@ public class UmlMainFrame extends JFrame {
      * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
      * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
      */
+    private void onPreviewLinkClick(LinkArea link, MouseEvent event) {
+        if (link == null) {
+            return;
+        }
+        String fqn = parseClassFqnFromHref(link.getHref());
+        if (fqn == null) {
+            return;
+        }
+        // 履歴に push して詳細図にドリルダウン
+        DiagramScope previous = currentScope;
+        if (previous != null) {
+            scopeHistory.push(previous);
+        }
+        DiagramScope.Builder b = DiagramScope.builder()
+                .seed(fqn).neighborHops(1);
+        DiagramPreset.DETAILED.applyTo(b);
+        currentScope = b.build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Drill-down: " + fqn);
+        refreshDiagram();
+    }
+
+    /** href 文字列から {@code padtools://class/<FQN>} の FQN 部分を取り出す。 */
+    private static String parseClassFqnFromHref(String href) {
+        if (href == null) {
+            return null;
+        }
+        final String prefix = "padtools://class/";
+        if (href.startsWith(prefix)) {
+            String s = href.substring(prefix.length()).trim();
+            return s.isEmpty() ? null : s;
+        }
+        return null;
+    }
+
     private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
         if (link == null || event == null) {
             return;

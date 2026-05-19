@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow`, `screen-flow`, `android-bp` | 図/レポートの種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow`, `screen-flow`, `android-bp`, `selinux`, `rro-overlays` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -39,6 +39,8 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `data-flow` | `--data-flow` | Room Entity / DAO / Database 全体レポート (Markdown + ER PlantUML) |
 | `screen-flow` | `--screen-flow` | Intent ベース画面遷移図 (startActivity / setClass / startActivityForResult) (Markdown + PlantUML) |
 | `android-bp` | `--android-bp` | AOSP の Android.bp (Soong) モジュール依存図 + Markdown インベントリ |
+| `selinux` | `--selinux` | AOSP の SELinux policy (*.te) を type 宣言 / allow / neverallow に分類した Markdown |
+| `rro-overlays` | `--rro-overlays` | AndroidManifest 内 `<overlay>` を検出して RRO 一覧 (Markdown) |
 
 ## 例
 
@@ -84,6 +86,12 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # AOSP の Android.bp (Soong) モジュール依存図
 /padtools-quick android-bp ~/AOSP/packages/services/Car
+
+# AOSP SELinux policy summary (*.te ファイル群)
+/padtools-quick selinux ~/AOSP/system/sepolicy
+
+# RRO Overlay 一覧 (AndroidManifest の <overlay> 要素検出)
+/padtools-quick rro-overlays ~/AOSP/packages/overlays
 ```
 
 ## 出力

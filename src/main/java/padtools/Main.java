@@ -26,8 +26,14 @@ import padtools.core.aaos.VhalAccess;
 import padtools.core.aaos.VhalAnalyzer;
 import padtools.core.aosp.AndroidBpModule;
 import padtools.core.aosp.AndroidBpParser;
+import padtools.core.aosp.MarkdownRroReport;
+import padtools.core.aosp.MarkdownSelinuxReport;
 import padtools.core.aosp.MarkdownSoongReport;
 import padtools.core.aosp.PlantUmlSoongDependencyDiagram;
+import padtools.core.aosp.RroOverlay;
+import padtools.core.aosp.RroOverlayDetector;
+import padtools.core.aosp.SelinuxPolicyParser;
+import padtools.core.aosp.SelinuxRule;
 import padtools.core.dataflow.MarkdownDataFlowReport;
 import padtools.core.dataflow.PlantUmlErDiagram;
 import padtools.core.dataflow.RoomAnalyzer;
@@ -146,6 +152,8 @@ public class Main {
         final Option optDataFlow = new Option(null, "data-flow", false);
         final Option optScreenFlow = new Option(null, "screen-flow", false);
         final Option optAndroidBp = new Option(null, "android-bp", false);
+        final Option optSelinux = new Option(null, "selinux", false);
+        final Option optRro = new Option(null, "rro-overlays", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -163,7 +171,7 @@ public class Main {
                 optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
                 optImpact, optImpactDepth, optRefFind,
                 optVhalFlow, optAidlBinding, optErDiagram, optDataFlow,
-                optScreenFlow, optAndroidBp});
+                optScreenFlow, optAndroidBp, optSelinux, optRro});
 
         try {
             optParser.parse(args);
@@ -296,6 +304,14 @@ public class Main {
         }
         if (optAndroidBp.isSet()) {
             handleAndroidBp(file_in, file_out, listener);
+            return;
+        }
+        if (optSelinux.isSet()) {
+            handleSelinux(file_in, file_out, listener);
+            return;
+        }
+        if (optRro.isSet()) {
+            handleRroOverlays(file_in, file_out, listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -718,6 +734,40 @@ public class Main {
         String md = MarkdownDataFlowReport.render(room);
         String puml = PlantUmlErDiagram.render(room);
         writeImpactOutput(fileOut, md, puml);
+    }
+
+    /**
+     * {@code --selinux}: プロジェクト下の {@code *.te} を再帰走査し、
+     * type 宣言と allow/neverallow ルールを Markdown レポートにまとめる。
+     */
+    private static void handleSelinux(File fileIn, File fileOut,
+                                         ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--selinux requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<SelinuxRule> rules =
+                new SelinuxPolicyParser().analyzeProject(fileIn);
+        String md = MarkdownSelinuxReport.render(rules);
+        writeText(fileOut, md);
+    }
+
+    /**
+     * {@code --rro-overlays}: プロジェクト下の {@code AndroidManifest.xml} から
+     * {@code &lt;overlay targetPackage="..."&gt;} を検出し、RRO 一覧を Markdown 出力する。
+     */
+    private static void handleRroOverlays(File fileIn, File fileOut,
+                                             ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--rro-overlays requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<RroOverlay> overlays =
+                new RroOverlayDetector().analyzeProject(fileIn);
+        String md = MarkdownRroReport.render(overlays);
+        writeText(fileOut, md);
     }
 
     /**
@@ -1343,6 +1393,11 @@ public class Main {
         System.err.println("  --android-bp: Parse all Android.bp (Soong) files under"
                 + " the project and emit module inventory + dependency graph"
                 + " (Markdown + PlantUML).");
+        System.err.println("  --selinux: Parse all *.te SELinux policy files under"
+                + " the project (type declarations, allow/neverallow rules,"
+                + " Markdown report).");
+        System.err.println("  --rro-overlays: Detect Android Runtime Resource Overlays"
+                + " by scanning AndroidManifest.xml for <overlay> elements.");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

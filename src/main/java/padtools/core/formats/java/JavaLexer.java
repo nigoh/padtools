@@ -54,6 +54,12 @@ public final class JavaLexer {
                 skipBlockComment();
                 continue;
             }
+            if (c == '"' && pos + 2 < len
+                    && src.charAt(pos + 1) == '"'
+                    && src.charAt(pos + 2) == '"') {
+                out.add(readTextBlock());
+                continue;
+            }
             if (c == '"') {
                 out.add(readString('"', JavaToken.Type.STRING));
                 continue;
@@ -90,6 +96,37 @@ public final class JavaLexer {
             pos++;
         }
         pos = Math.min(pos + 2, len);
+    }
+
+    /**
+     * テキストブロック {@code """ ... """} を読み取る (Java 15+)。
+     * 開始は呼び出し時に {@code pos} が最初の {@code "} を指している前提。
+     */
+    private JavaToken readTextBlock() {
+        int start = pos;
+        int startLine = line;
+        pos += 3; // 開始 """
+        while (pos + 2 < len) {
+            char c = src.charAt(pos);
+            if (c == '\\' && pos + 1 < len) {
+                if (src.charAt(pos + 1) == '\n') {
+                    line++;
+                }
+                pos += 2;
+                continue;
+            }
+            if (c == '"' && src.charAt(pos + 1) == '"' && src.charAt(pos + 2) == '"') {
+                pos += 3;
+                return new JavaToken(JavaToken.Type.STRING, src.substring(start, pos), startLine, start, pos);
+            }
+            if (c == '\n') {
+                line++;
+            }
+            pos++;
+        }
+        // 終端が見つからないまま EOF: 残りを 1 トークンとして返す
+        pos = len;
+        return new JavaToken(JavaToken.Type.STRING, src.substring(start, pos), startLine, start, pos);
     }
 
     private JavaToken readString(char quote, JavaToken.Type type) {

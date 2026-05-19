@@ -165,6 +165,41 @@ public class JavaLexerTest {
     }
 
     @Test
+    public void testTextBlockSingleLine() {
+        String src = "\"\"\"hello\"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+        assertEquals(JavaToken.Type.EOF, toks.get(1).type);
+    }
+
+    @Test
+    public void testTextBlockMultiline() {
+        String src = "\"\"\"\n  line1\n  line2\n  \"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+        assertEquals(JavaToken.Type.EOF, toks.get(1).type);
+    }
+
+    @Test
+    public void testTextBlockWithEmbeddedQuote() {
+        // テキストブロック内の "" は終端ではない (3 連続 " のみ終端)
+        String src = "\"\"\"he said \"hi\" here\"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+    }
+
+    @Test
+    public void testTextBlockDoesNotBreakSubsequentTokens() {
+        String src = "a = \"\"\"\n  body\n  \"\"\"; b";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.IDENT, "a");
+        assertToken(toks.get(1), JavaToken.Type.OP, "=");
+        assertToken(toks.get(2), JavaToken.Type.STRING, "\"\"\"\n  body\n  \"\"\"");
+        assertToken(toks.get(3), JavaToken.Type.PUNCT, ";");
+        assertToken(toks.get(4), JavaToken.Type.IDENT, "b");
+    }
+
+    @Test
     public void testGetSource() {
         JavaLexer lex = new JavaLexer("abc");
         lex.tokenize();

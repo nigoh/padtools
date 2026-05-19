@@ -50,6 +50,32 @@ public final class JavaCommentScanner {
                 i++;
                 continue;
             }
+            if (c == '"' && i + 2 < n
+                    && src.charAt(i + 1) == '"'
+                    && src.charAt(i + 2) == '"') {
+                int afterStart = i + 3;
+                int j = afterStart;
+                while (j + 2 < n) {
+                    char cj = src.charAt(j);
+                    if (cj == '\\' && j + 1 < n) {
+                        if (src.charAt(j + 1) == '\n') {
+                            line++;
+                        }
+                        j += 2;
+                        continue;
+                    }
+                    if (cj == '"' && src.charAt(j + 1) == '"' && src.charAt(j + 2) == '"') {
+                        j += 3;
+                        break;
+                    }
+                    if (cj == '\n') {
+                        line++;
+                    }
+                    j++;
+                }
+                i = Math.max(j, afterStart);
+                continue;
+            }
             if (c == '"') {
                 i = skipStringLiteral(src, i, n);
                 continue;

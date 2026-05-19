@@ -474,4 +474,35 @@ public class JavaStructureExtractorTest {
                 "package p.q; class C {}");
         assertEquals("p.q.C", cs.get(0).getQualifiedName());
     }
+
+    @Test
+    public void testTextBlockFieldDoesNotBreakParsing() {
+        String src = "class A {\n"
+                + "  String s = \"\"\"\n"
+                + "    hello\n"
+                + "    world\n"
+                + "    \"\"\";\n"
+                + "  void m() {}\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        assertEquals(1, cs.size());
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("s", cs.get(0).getFields().get(0).getName());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("m", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testTextBlockWithBracesAndQuotes() {
+        // テキストブロック内の { } や " は構造を壊さない
+        String src = "class A {\n"
+                + "  String json = \"\"\"\n"
+                + "    { \"key\": \"value\" }\n"
+                + "    \"\"\";\n"
+                + "  int x;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        assertEquals(1, cs.size());
+        assertEquals(2, cs.get(0).getFields().size());
+    }
 }

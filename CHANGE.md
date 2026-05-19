@@ -4,6 +4,15 @@ Change log
 Unreleased
 --------
 
+* **AAOS Phase 2.3: AAOS API レベルバッジ** (`AaosPattern.apiLevelBadge` / `PlantUmlClassDiagram`)
+    * クラスに付与された AAOS / Android API 要件アノテーションから、{@code "API 33+"} / {@code "Car 34+"} / {@code "Plat TIRAMISU+/Car TIRAMISU+"} のような短いバッジ文字列を生成し、クラス図にステレオタイプとして併記する。
+    * サポート対象: `@AddedIn(majorVersion=33)` / `@AddedIn(33)` 位置引数 / `@AddedInOrBefore(...)` / `@MinimumPlatformSdkVersion(N)` / `@MinimumCarVersion(N)` / `@ApiRequirements(minPlatformVersion=..., minCarVersion=...)`。
+    * `Car.PLATFORM_VERSION_TIRAMISU_0` のようなプラットフォーム定数シンボルからは正規表現 `PLATFORM_VERSION_(\w+?)(?:_\d+)?$` でコードネーム部 (例: `TIRAMISU`) を抜き出して表示。純数値はそのまま、引用符付きリテラルは中身を採用、その他は前後空白だけ削って返す。
+    * 優先順位は `@ApiRequirements` (Plat+Car の両軸表示) → 単軸マーカー (annotation 出現順)。複数 annotation の集約は行わず最初に有効なものを返す (実プロジェクトでクラス宣言に複数 API marker が共存することはまず無いため)。
+    * `markAaosCategories=false` で他の AAOS 系ステレオタイプと一括抑制可能。
+    * テスト: `AaosPatternTest` に 12 ケース追加 (named arg / positional / 空白許容 / OrBefore / Plat+Car 組み合わせ / 優先順位 / FQN annotation / 未指定 / null)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力への反映 + suppress)。既存 878 件全 PASS。
+    * 目的: AAOS クラス図で「このクラスが利用できる最小 API レベル」を一目で確認できるようにし、互換性検討の往復を減らす。
+
 * **AAOS Phase 2.1: Android API 可視性マーカー + AIDL binder impl ステレオタイプ** (`AaosPattern` / `PlantUmlClassDiagram` / `PlantUmlSequenceDiagram`)
     * `AaosPattern.apiVisibilityStereotype(JavaClassInfo)` を新設。クラスの annotation 短名 (`@SystemApi` / FQN `android.annotation.SystemApi` / 引数有り `@SystemApi(client=...)` も吸収) と JavaDoc コメント中の `@hide` マーカーから `Hidden` / `SystemApi` / `TestApi` のいずれかを返す。`@SystemApi` 付きでも JavaDoc に `@hide` があれば `Hidden` を優先表示する (より制限の強い側を優先)。Android プラットフォーム API 全般のマーカーだが、AAOS の CarService / 内部 SDK で多用されるため `AaosPattern` に同居。
     * `AaosPattern.isAidlBinderImpl(JavaClassInfo)` を新設。superClass の末尾セグメントが `Stub` (ジェネリクス後置可) で前段が 1 セグメント以上ある場合に true を返す。`class CarFooService extends ICarFoo.Stub` や深くネストした `Outer.Inner.Stub<T>` も検出。前段なしの単独 `Stub` は誤検出を避けるため除外。

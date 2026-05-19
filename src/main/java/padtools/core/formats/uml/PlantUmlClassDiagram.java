@@ -506,6 +506,11 @@ public final class PlantUmlClassDiagram {
             if (AaosPattern.isAidlBinderImpl(c)) {
                 parts.add("binder");
             }
+            // AAOS API レベルバッジ (`@ApiRequirements` / `@AddedIn` 等)
+            String apiBadge = AaosPattern.apiLevelBadge(c);
+            if (apiBadge != null) {
+                parts.add(apiBadge);
+            }
         }
         if (c.getAndroidComponentType() != null && !c.getAndroidComponentType().isEmpty()) {
             parts.add(c.getAndroidComponentType());

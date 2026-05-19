@@ -435,6 +435,45 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testMethodBodyMultiLineBlockComment() {
+        // 2行以上のブロックコメントが丸ごと拾えるかを検証
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  void run() {\n"
+                        + "    /*\n"
+                        + "     * 行1\n"
+                        + "     * 行2\n"
+                        + "     */\n"
+                        + "    doIt();\n"
+                        + "  }\n"
+                        + "  void doIt() {}\n"
+                        + "}");
+        JavaMethodInfo run = cs.get(0).getMethods().get(0);
+        List<String> bc = run.getBodyComments();
+        assertEquals(1, bc.size());
+        assertEquals("行1\n行2", bc.get(0));
+    }
+
+    @Test
+    public void testMethodBodyConsecutiveLineComments() {
+        // 連続する // コメントが両方拾えるかを検証
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A {\n"
+                        + "  void run() {\n"
+                        + "    // 行1\n"
+                        + "    // 行2\n"
+                        + "    doIt();\n"
+                        + "  }\n"
+                        + "  void doIt() {}\n"
+                        + "}");
+        JavaMethodInfo run = cs.get(0).getMethods().get(0);
+        List<String> bc = run.getBodyComments();
+        assertEquals(2, bc.size());
+        assertEquals("行1", bc.get(0));
+        assertEquals("行2", bc.get(1));
+    }
+
+    @Test
     public void testEnumConstantsCaptured() {
         List<JavaClassInfo> cs = JavaStructureExtractor.extract(
                 "enum Color { RED, GREEN, BLUE }");

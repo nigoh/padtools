@@ -218,8 +218,29 @@ public final class KotlinLightScanner {
             mth.setVisibility(Visibility.PUBLIC);
             extractAnnotations(anns, mth.getAnnotations());
             parseParameters(paramsText, mth);
+            // メソッド本体内の呼び出しを抽出
+            int braceStart = findBraceAfter(body, m.end());
+            if (braceStart >= 0) {
+                int braceEnd = matchBrace(body, braceStart);
+                if (braceEnd > braceStart) {
+                    extractCallsFromBody(body.substring(braceStart + 1, braceEnd), mth);
+                }
+            }
             info.getMethods().add(mth);
         }
+    }
+
+    /** FUN_DECL マッチ後の位置から最初の {@code &#123;} を探す。式本体 {@code = ...} はスキップ。 */
+    private static int findBraceAfter(String body, int from) {
+        for (int i = from; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (c == '{') return i;
+            if (c == '=' || c == '\n') return -1; // 式本体は走査しない
+            if (!Character.isWhitespace(c)) {
+                // = や { 以外の文字 (例: throws) は通り過ぎる
+            }
+        }
+        return -1;
     }
 
     /** {@code name: Type, name2: Type2 = default} を解析してパラメータに追加。 */
@@ -263,6 +284,153 @@ public final class KotlinLightScanner {
         }
         if (cur.length() > 0) out.add(cur.toString());
         return out;
+    }
+
+    /**
+     * Kotlin の制御フローキーワード/予約語。{@code foo(...)} 呼び出し検出時に
+     * これらが識別子として現れたら call とみなさない。
+     */
+    private static final java.util.Set<String> CONTROL_KEYWORDS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "if", "else", "while", "for", "do", "when", "try", "catch",
+                    "finally", "return", "throw", "break", "continue",
+                    "val", "var", "fun", "class", "object", "interface",
+                    "is", "as", "in", "by", "this", "super",
+                    "true", "false", "null", "package", "import",
+                    "fun", "operator", "infix", "lateinit", "const",
+                    "private", "protected", "public", "internal", "open",
+                    "abstract", "final", "override", "suspend", "inline",
+                    "data", "sealed", "enum", "annotation", "inner",
+                    "companion", "out", "in", "where", "init"));
+
+    /**
+     * Kotlin 関数本体から {@code receiver.method(...)} 形式の呼び出しを抽出する。
+     * receiver の末尾の {@code ?} ({@code obj?.method}) や {@code !!}
+     * ({@code obj!!.method}) は除去して JavaMethodInfo.Call に格納する。
+     */
+    private static void extractCallsFromBody(String body, JavaMethodInfo mth) {
+        if (body == null || body.isEmpty()) return;
+        int n = body.length();
+        boolean inString = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
+        char prev = 0;
+        int i = 0;
+        while (i < n) {
+            char c = body.charAt(i);
+            // 文字列とコメントをスキップ
+            if (inLineComment) {
+                if (c == '\n') inLineComment = false;
+                i++;
+                prev = c;
+                continue;
+            }
+            if (inBlockComment) {
+                if (c == '*' && i + 1 < n && body.charAt(i + 1) == '/') {
+                    inBlockComment = false;
+                    i += 2;
+                    prev = '/';
+                    continue;
+                }
+                i++;
+                prev = c;
+                continue;
+            }
+            if (inString) {
+                if (c == '\\' && i + 1 < n) { i += 2; prev = body.charAt(i - 1); continue; }
+                if (c == '"') inString = false;
+                i++;
+                prev = c;
+                continue;
+            }
+            if (c == '/' && i + 1 < n) {
+                char d = body.charAt(i + 1);
+                if (d == '/') { inLineComment = true; i += 2; prev = '/'; continue; }
+                if (d == '*') { inBlockComment = true; i += 2; prev = '*'; continue; }
+            }
+            if (c == '"') { inString = true; i++; prev = c; continue; }
+
+            // 識別子の開始?
+            if (isIdentStart(c)) {
+                int idStart = i;
+                while (i < n && isIdentPart(body.charAt(i))) i++;
+                String ident = body.substring(idStart, i);
+                // 次が `(` で識別子が制御キーワードでなければ呼び出し候補
+                int j = i;
+                while (j < n && Character.isWhitespace(body.charAt(j))) j++;
+                if (j < n && body.charAt(j) == '(' && !CONTROL_KEYWORDS.contains(ident)) {
+                    // 直前のシーケンスから receiver を取り出す
+                    String receiver = extractReceiverBackward(body, idStart);
+                    mth.getStatements().add(new JavaMethodInfo.Call(receiver, ident));
+                }
+                prev = body.charAt(i - 1);
+                continue;
+            }
+            prev = c;
+            i++;
+        }
+    }
+
+    /**
+     * {@code idStart} 直前のトークンを見て receiver 文字列を組み立てる。
+     * {@code .}, {@code ?.}, {@code !!.} のいずれかが直前にあれば、その前の識別子チェーンを
+     * receiver として返す。なければ空文字 (同クラス呼び出し)。
+     */
+    private static String extractReceiverBackward(String body, int idStart) {
+        int j = idStart - 1;
+        // 空白を読み飛ばす
+        while (j >= 0 && Character.isWhitespace(body.charAt(j))) j--;
+        if (j < 0) return "";
+        char c = body.charAt(j);
+        // ?. or !!. or .
+        if (c == '.') {
+            j--; // skip '.'
+        } else {
+            return "";
+        }
+        // ? や !! を消費
+        while (j >= 0 && (body.charAt(j) == '?' || body.charAt(j) == '!')) {
+            j--;
+        }
+        // 空白
+        while (j >= 0 && Character.isWhitespace(body.charAt(j))) j--;
+        // 識別子チェーン (a.b.c) を逆方向に収集
+        StringBuilder sb = new StringBuilder();
+        while (j >= 0) {
+            char cc = body.charAt(j);
+            if (cc == ')' || cc == ']') {
+                // チェーン経由の呼び出し: 中を全部スキップ
+                int depth = 1;
+                j--;
+                char open = cc == ')' ? '(' : '[';
+                char close = cc;
+                while (j >= 0 && depth > 0) {
+                    char k = body.charAt(j);
+                    if (k == close) depth++;
+                    else if (k == open) depth--;
+                    j--;
+                }
+                continue;
+            }
+            if (isIdentPart(cc)) {
+                sb.insert(0, cc);
+                j--;
+            } else if (cc == '.' && j > 0 && isIdentPart(body.charAt(j - 1))) {
+                sb.insert(0, '.');
+                j--;
+            } else {
+                break;
+            }
+        }
+        return sb.toString();
+    }
+
+    private static boolean isIdentStart(char c) {
+        return Character.isLetter(c) || c == '_' || c == '$';
+    }
+
+    private static boolean isIdentPart(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == '$';
     }
 
     private static int findNextChar(String src, int from, char target) {

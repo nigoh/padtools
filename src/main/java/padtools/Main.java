@@ -101,6 +101,18 @@ public class Main {
      * @param args 引数
      */
     public static void main(String[] args) throws IOException {
+        // 専用サブコマンドの早期分岐 (option parser を経由しない)。
+        // 既存の "java -jar PadTools.jar -c <path>" のような呼び出しは args[0] が "-c"
+        // 等のオプション or 入力パスになるので、ここでは "index" だけを intercept する。
+        if (args.length > 0 && "index".equals(args[0])) {
+            int code = padtools.app.cli.IndexCommand.execute(
+                    args, padtools.util.ErrorListener.stderr());
+            if (code != 0) {
+                System.exit(code);
+            }
+            return;
+        }
+
         // SettingManager を初期化し、永続化されたスタイルをレンダラへ反映
         SettingManager.initialize();
         PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());

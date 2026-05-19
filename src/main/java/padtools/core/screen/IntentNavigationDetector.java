@@ -73,7 +73,12 @@ public final class IntentNavigationDetector {
                     + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\([^)]*\\)"
                     + "(?:\\s*:\\s*[^{=]+)?\\s*\\{");
 
-    /** プロジェクト全体をスキャンして全画面遷移を抽出する (Java + Kotlin)。 */
+    /**
+     * プロジェクト全体をスキャンして全画面遷移を抽出する (Java + Kotlin + Compose)。
+     *
+     * <p>Java/Kotlin の Intent ベース遷移と、Kotlin の Jetpack Compose NavHost
+     * 宣言的遷移 ({@link ComposeNavScanner}) を統合して返す。</p>
+     */
     public List<ScreenTransition> analyzeProject(File projectRoot) throws IOException {
         if (projectRoot == null || !projectRoot.isDirectory()) {
             return Collections.emptyList();
@@ -83,12 +88,16 @@ public final class IntentNavigationDetector {
         opts.includeKotlin = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
         List<ScreenTransition> all = new ArrayList<>();
+        ComposeNavScanner compose = new ComposeNavScanner();
         for (File f : files) {
             String name = f.getName().toLowerCase();
             if (!name.endsWith(".java") && !name.endsWith(".kt")) continue;
             try {
                 String src = AndroidProjectScanner.readFile(f);
                 all.addAll(analyzeSource(src, f.getPath()));
+                if (name.endsWith(".kt")) {
+                    all.addAll(compose.analyzeSource(src, f.getPath()).getTransitions());
+                }
             } catch (IOException ex) {
                 // skip unreadable
             }

@@ -38,6 +38,30 @@ public final class AaosPattern {
     private static final Pattern MANAGER_PATTERN = Pattern.compile("^Car[A-Z].*Manager$");
     private static final Pattern SERVICE_PATTERN = Pattern.compile("^Car[A-Z].*Service$");
     private static final Pattern AIDL_PATTERN = Pattern.compile("^ICar[A-Z0-9].*$");
+    /**
+     * AIDL 生成された binder stub の継承パターン。{@code ICarFoo.Stub} や、
+     * 多重ネストの {@code Outer.Inner.Stub} (任意のジェネリクス後置を含む) にも
+     * マッチさせるため、最終セグメントが {@code Stub} で終わる修飾名を対象にする。
+     */
+    private static final Pattern STUB_SUPERCLASS_PATTERN =
+            Pattern.compile("^.+\\.Stub(?:<[^>]*>)?$");
+    /**
+     * クラスの JavaDoc 内で hidden API を示すマーカー。{@code @hide} もしくは
+     * {@code {@hide}} の前後に単語境界 (改行・空白・記号) があることを要求し、
+     * 識別子内の {@code @hide} 等での誤検出を避ける。
+     */
+    private static final Pattern HIDE_JAVADOC_PATTERN =
+            Pattern.compile("(?:^|[\\s*{(])@hide(?:$|[\\s*})])");
+
+    /** Android プラットフォーム API 可視性マーカーの annotation 短名。 */
+    private static final Set<String> SYSTEM_API_ANNOTATIONS;
+    private static final Set<String> TEST_API_ANNOTATIONS;
+    static {
+        SYSTEM_API_ANNOTATIONS = Collections.unmodifiableSet(new HashSet<>(
+                Arrays.asList("SystemApi")));
+        TEST_API_ANNOTATIONS = Collections.unmodifiableSet(new HashSet<>(
+                Arrays.asList("TestApi")));
+    }
 
     /** クラスのカテゴリを推定する (見つからなければ null)。 */
     public static String categorize(JavaClassInfo info) {
@@ -119,6 +143,100 @@ public final class AaosPattern {
     private static boolean containsAaosApi(List<String> annotations) {
         for (String a : annotations) {
             if (isAaosApiAnnotation(a)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Android プラットフォーム API の可視性マーカーを 1 つだけ返す
+     * (見つからなければ null)。
+     *
+     * <p>優先順位は {@code Hidden > SystemApi > TestApi}。これは
+     * 「`@SystemApi` だが `@hide` JavaDoc 付き」のような併用パターンで、
+     * より制限の強い hidden を優先表示するため。</p>
+     *
+     * <p>判定基準:</p>
+     * <ul>
+     *   <li>{@code Hidden}: クラスの JavaDoc に {@code @hide} を含む</li>
+     *   <li>{@code SystemApi}: クラスのアノテーションリストに
+     *       {@code @SystemApi} が含まれる (FQN や引数有りも考慮)</li>
+     *   <li>{@code TestApi}: 同 {@code @TestApi}</li>
+     * </ul>
+     *
+     * <p>これらは AAOS 専用ではなく Android プラットフォーム全般のマーカー
+     * だが、AAOS の Stub / CarService / 内部 SDK で多用されるため本
+     * パターン集に同居させる。</p>
+     */
+    public static String apiVisibilityStereotype(JavaClassInfo info) {
+        if (info == null) {
+            return null;
+        }
+        if (hasHideJavadoc(info)) {
+            return "Hidden";
+        }
+        if (hasAnnotationShortName(info.getAnnotations(), SYSTEM_API_ANNOTATIONS)) {
+            return "SystemApi";
+        }
+        if (hasAnnotationShortName(info.getAnnotations(), TEST_API_ANNOTATIONS)) {
+            return "TestApi";
+        }
+        return null;
+    }
+
+    /**
+     * このクラスが AIDL の生成 stub を継承して binder サービスを実装しているか。
+     *
+     * <p>典型的なパターン: {@code class CarFooService extends ICarFoo.Stub}。
+     * シーケンス図でプロセス境界 ({@code binder} hop) を可視化する判定に使う。
+     * superClass 名の末尾セグメントが {@code Stub} (任意のジェネリクス後置可)
+     * で、かつ前段が 1 セグメント以上ある場合に true を返す。</p>
+     */
+    public static boolean isAidlBinderImpl(JavaClassInfo info) {
+        if (info == null) {
+            return false;
+        }
+        String sup = info.getSuperClass();
+        if (sup == null || sup.isEmpty()) {
+            return false;
+        }
+        return STUB_SUPERCLASS_PATTERN.matcher(sup.trim()).matches();
+    }
+
+    /** JavaDoc コメントに {@code @hide} マーカーが含まれているか。 */
+    private static boolean hasHideJavadoc(JavaClassInfo info) {
+        String c = info.getComment();
+        if (c == null || c.isEmpty()) {
+            return false;
+        }
+        return HIDE_JAVADOC_PATTERN.matcher(c).find();
+    }
+
+    /**
+     * アノテーション短名 ({@code @Foo} の {@code Foo} 部) のいずれかが
+     * {@code names} に含まれているか。FQN 形式 ({@code android.annotation.SystemApi})
+     * や引数有り ({@code SystemApi(client=...)}) も短名比較で吸収する。
+     */
+    private static boolean hasAnnotationShortName(List<String> annotations,
+                                                    Set<String> names) {
+        if (annotations == null) {
+            return false;
+        }
+        for (String a : annotations) {
+            if (a == null || a.isEmpty()) {
+                continue;
+            }
+            String s = a;
+            int paren = s.indexOf('(');
+            if (paren >= 0) {
+                s = s.substring(0, paren);
+            }
+            int dot = s.lastIndexOf('.');
+            if (dot >= 0) {
+                s = s.substring(dot + 1);
+            }
+            if (names.contains(s)) {
                 return true;
             }
         }

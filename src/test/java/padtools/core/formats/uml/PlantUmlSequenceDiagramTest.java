@@ -619,4 +619,35 @@ public class PlantUmlSequenceDiagramTest {
         assertTrue(ps.toString(), ps.contains("B"));
         assertTrue(ps.toString(), ps.contains("Service"));
     }
+
+    @Test
+    public void testAidlBinderImplGetsBinderStereotype() {
+        // CarFooService が ICarFoo.Stub を継承している場合、参加者宣言に
+        // <<binder>> ステレオタイプが付く。色付けより後に追加されるため、
+        // 名前と <<binder>> が同じ participant 行にあることを確認する。
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { CarFooService s; void run() { s.act(); } } "
+                        + "class CarFooService extends ICarFoo.Stub {"
+                        + "  public void act() { } "
+                        + "}");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        boolean found = false;
+        for (String line : puml.split("\n")) {
+            if (line.startsWith("participant \"CarFooService\"")
+                    && line.contains("<<binder>>")) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue(puml, found);
+    }
+
+    @Test
+    public void testNonBinderParticipantDoesNotGetBinderStereotype() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; void run() { b.act(); } } "
+                        + "class B { void act() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertFalse(puml, puml.contains("<<binder>>"));
+    }
 }

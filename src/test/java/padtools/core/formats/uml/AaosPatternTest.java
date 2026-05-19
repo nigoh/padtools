@@ -88,4 +88,114 @@ public class AaosPatternTest {
     public void testNullClassInfo() {
         assertNull(AaosPattern.categorize(null));
     }
+
+    // -------- API 可視性 (@SystemApi / @TestApi / @hide) --------
+
+    @Test
+    public void testSystemApiByAnnotation() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("SystemApi");
+        assertEquals("SystemApi", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testSystemApiByFqnAnnotation() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("android.annotation.SystemApi");
+        assertEquals("SystemApi", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testSystemApiWithArguments() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("SystemApi(client=PRIVILEGED_APPS)");
+        assertEquals("SystemApi", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testTestApiByAnnotation() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("TestApi");
+        assertEquals("TestApi", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testHiddenByJavadoc() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.setComment("/**\n * Internal helper.\n * @hide\n */");
+        assertEquals("Hidden", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testHiddenTakesPrecedenceOverSystemApi() {
+        // @SystemApi だが JavaDoc に @hide があるケース。Hidden を優先表示。
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.getAnnotations().add("SystemApi");
+        c.setComment("/** @hide */");
+        assertEquals("Hidden", AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testNoVisibilityStereotype() {
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        assertNull(AaosPattern.apiVisibilityStereotype(c));
+        c.getAnnotations().add("Override");
+        assertNull(AaosPattern.apiVisibilityStereotype(c));
+        c.setComment("/** Some javadoc with @hidemention but not the tag. */");
+        assertNull(AaosPattern.apiVisibilityStereotype(c));
+    }
+
+    @Test
+    public void testNullForApiVisibility() {
+        assertNull(AaosPattern.apiVisibilityStereotype(null));
+    }
+
+    // -------- AIDL binder impl 判定 --------
+
+    @Test
+    public void testAidlBinderImpl() {
+        JavaClassInfo c = make("com.android.car", "CarAudioService",
+                JavaClassInfo.Kind.CLASS);
+        c.setSuperClass("ICarAudio.Stub");
+        assertTrue(AaosPattern.isAidlBinderImpl(c));
+    }
+
+    @Test
+    public void testAidlBinderImplWithGenerics() {
+        JavaClassInfo c = make("com.android.car", "CarFooService",
+                JavaClassInfo.Kind.CLASS);
+        c.setSuperClass("ICarFoo.Stub<Bar>");
+        assertTrue(AaosPattern.isAidlBinderImpl(c));
+    }
+
+    @Test
+    public void testAidlBinderImplDeeplyNested() {
+        JavaClassInfo c = make("com.android.car", "Inner",
+                JavaClassInfo.Kind.CLASS);
+        c.setSuperClass("com.android.aidl.Outer.Inner.Stub");
+        assertTrue(AaosPattern.isAidlBinderImpl(c));
+    }
+
+    @Test
+    public void testNotBinderImpl() {
+        JavaClassInfo c = make("com.android.car", "CarFooService",
+                JavaClassInfo.Kind.CLASS);
+        c.setSuperClass("BaseService");
+        assertFalse(AaosPattern.isAidlBinderImpl(c));
+    }
+
+    @Test
+    public void testBareStubNotBinderImpl() {
+        // 単独 "Stub" (前段なし) は AIDL 生成名のパターンに合わないので除外
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        c.setSuperClass("Stub");
+        assertFalse(AaosPattern.isAidlBinderImpl(c));
+    }
+
+    @Test
+    public void testNullForBinderImpl() {
+        assertFalse(AaosPattern.isAidlBinderImpl(null));
+        JavaClassInfo c = make("com.x", "Foo", JavaClassInfo.Kind.CLASS);
+        assertFalse(AaosPattern.isAidlBinderImpl(c));
+    }
 }

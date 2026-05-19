@@ -4,6 +4,14 @@ Change log
 Unreleased
 --------
 
+* **AAOS Phase 2.1: Android API 可視性マーカー + AIDL binder impl ステレオタイプ** (`AaosPattern` / `PlantUmlClassDiagram` / `PlantUmlSequenceDiagram`)
+    * `AaosPattern.apiVisibilityStereotype(JavaClassInfo)` を新設。クラスの annotation 短名 (`@SystemApi` / FQN `android.annotation.SystemApi` / 引数有り `@SystemApi(client=...)` も吸収) と JavaDoc コメント中の `@hide` マーカーから `Hidden` / `SystemApi` / `TestApi` のいずれかを返す。`@SystemApi` 付きでも JavaDoc に `@hide` があれば `Hidden` を優先表示する (より制限の強い側を優先)。Android プラットフォーム API 全般のマーカーだが、AAOS の CarService / 内部 SDK で多用されるため `AaosPattern` に同居。
+    * `AaosPattern.isAidlBinderImpl(JavaClassInfo)` を新設。superClass の末尾セグメントが `Stub` (ジェネリクス後置可) で前段が 1 セグメント以上ある場合に true を返す。`class CarFooService extends ICarFoo.Stub` や深くネストした `Outer.Inner.Stub<T>` も検出。前段なしの単独 `Stub` は誤検出を避けるため除外。
+    * **クラス図への反映** (`PlantUmlClassDiagram.stereotype`): `markAaosCategories=true` (既定) のとき、既存 `<<CarManager>>`/`<<CarService>>`/`<<AaosApi>>` カテゴリに加えて `<<SystemApi>>`/`<<TestApi>>`/`<<Hidden>>`/`<<binder>>` を追記。`<<CarService>><<SystemApi>><<binder>>` のような重ね掛けも可能。`markAaosCategories=false` で全 AAOS 系ステレオタイプを抑制できる。
+    * **シーケンス図への反映** (`PlantUmlSequenceDiagram`): participant 宣言時に対象クラスが `isAidlBinderImpl` のとき `<<binder>>` ステレオタイプを付与し、IPC 境界が一目で分かるようにする。既存の `<<external>>` / `<<missing>>` / 色付けと独立に追加。
+    * テスト: `AaosPatternTest` に 14 ケース追加 (annotation 短名 / FQN / 引数有り、JavaDoc `@hide`、優先順位、Stub 継承パターン)。新規 `PlantUmlClassDiagramAaosStereotypeTest` 7 ケースと `PlantUmlSequenceDiagramTest` に 2 ケースで UML 出力への反映を回帰防止。既存 863 件全 PASS。
+    * 目的: AAOS / Android プラットフォーム案件で「内部 SDK か」「IPC 境界はどこか」を図上で一目把握できるようにする。Phase 2 残項目 (Car App Library `Session`/`Screen` パターン、VHAL property 定数解決、`@ApiRequirements` API レベルバッジ) は別 PR で順次対応する。
+
 * **Java 9+/14+/21+ 言語機能のパース範囲を拡張** (`JavaClassInfo.Kind.MODULE` 新規 / `JavaModuleDirective` 新規 / `JavaMethodInfo.Yield` 新規 / `JavaStructureExtractor`)
     * **`module-info.java` のパース対応** (JLS §7.7): `[open] module Foo.Bar { ... }` をトップレベルで認識し、新 `Kind.MODULE` を持つ `JavaClassInfo` として返す。本体の各ディレクティブ (`requires [transitive] [static] X` / `exports X [to Y, Z]` / `opens X [to Y, Z]` / `uses X` / `provides X with Y, Z`) を `JavaModuleDirective` のリストとして `getModuleDirectives()` に保持。`@Deprecated module ...` のアノテーション、`open` 修飾子も取り込む。`extractHeadersOnly()` でも directive は保持する (モジュールグラフ集計用)。
     * **switch 式 (Java 14+) の構造化解析**: `int x = switch(y) { case 1 -> 100; default -> 0; };` のような代入 RHS、`return switch(...)` / `throw switch(...)` / `yield switch(...)` の各経路で switch 本体を `JavaMethodInfo.Block.Kind.SWITCH` として構造化して取り込むようにした (以前は `{}` 内ブロックとして flatten され、case 構造が失われていた)。`case 1, 2, 3 -> ...` の複数ラベルや `case Integer i when i > 0 -> ...` (Java 21+ パターン case + when ガード) のラベル文字列も括弧深度を加味して正しく終端まで読み取る。

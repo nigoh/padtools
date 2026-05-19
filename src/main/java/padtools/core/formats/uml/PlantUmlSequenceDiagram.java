@@ -199,6 +199,13 @@ public final class PlantUmlSequenceDiagram {
             } else if (colorize && findClass(classes, p) != null) {
                 out.append(' ').append(o.projectClassColor);
             }
+            // AIDL 生成 stub を継承する binder service 実装は、`<<binder>>`
+            // ステレオタイプを付与して participant 上で IPC 境界を示す。
+            // 既存色付け・external/missing と独立に追加する。
+            JavaClassInfo pCls = findClass(classes, p);
+            if (pCls != null && AaosPattern.isAidlBinderImpl(pCls)) {
+                out.append(" <<binder>>");
+            }
             out.append('\n');
         }
         // PARTICIPANT_TOP モードのときだけ、participant 宣言の直後に集約 note を発行する。

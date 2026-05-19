@@ -474,4 +474,277 @@ public class JavaStructureExtractorTest {
                 "package p.q; class C {}");
         assertEquals("p.q.C", cs.get(0).getQualifiedName());
     }
+
+    @Test
+    public void testTextBlockFieldDoesNotBreakParsing() {
+        String src = "class A {\n"
+                + "  String s = \"\"\"\n"
+                + "    hello\n"
+                + "    world\n"
+                + "    \"\"\";\n"
+                + "  void m() {}\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        assertEquals(1, cs.size());
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("s", cs.get(0).getFields().get(0).getName());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("m", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testRecordTopLevel() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "package p; record Point(int x, int y) {}");
+        assertEquals(1, cs.size());
+        JavaClassInfo c = cs.get(0);
+        assertEquals("Point", c.getSimpleName());
+        assertEquals(JavaClassInfo.Kind.RECORD, c.getKind());
+        assertEquals("p", c.getPackageName());
+    }
+
+    @Test
+    public void testRecordWithBody() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "record Pair(String a, String b) { int sum() { return 0; } }");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.RECORD, cs.get(0).getKind());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("sum", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testRecordImplementsInterface() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "record Foo(int x) implements Comparable<Foo> {}");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.RECORD, cs.get(0).getKind());
+        assertEquals(1, cs.get(0).getInterfaces().size());
+    }
+
+    @Test
+    public void testRecordNested() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { record Inner(int x) {} }");
+        assertEquals(2, cs.size());
+        JavaClassInfo inner = cs.stream()
+                .filter(c -> c.getKind() == JavaClassInfo.Kind.RECORD)
+                .findFirst().orElse(null);
+        assertNotNull(inner);
+        assertEquals("Inner", inner.getSimpleName());
+        assertEquals("A", inner.getEnclosingClass());
+    }
+
+    @Test
+    public void testMethodReferenceCall() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { list.forEach(Foo::bar); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        long barCalls = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "bar".equals(c.getMethodName()))
+                .count();
+        assertEquals(1, barCalls);
+    }
+
+    @Test
+    public void testMethodReferenceReceiver() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { x(a.b.c::meth); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        JavaMethodInfo.Call methCall = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "meth".equals(c.getMethodName()))
+                .findFirst().orElse(null);
+        assertNotNull(methCall);
+        assertEquals("a.b.c", methCall.getReceiver());
+    }
+
+    @Test
+    public void testConstructorReferenceIsExcluded() {
+        // String::new はコンストラクタ参照なので Call として記録しない
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { x(String::new); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        long newCalls = m.getStatements().stream()
+                .filter(s -> s instanceof JavaMethodInfo.Call)
+                .map(s -> (JavaMethodInfo.Call) s)
+                .filter(c -> "new".equals(c.getMethodName()))
+                .count();
+        assertEquals(0, newCalls);
+    }
+
+    @Test
+    public void testMultiVarFieldSimple() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a, b; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("int", cs.get(0).getFields().get(0).getType());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+        assertEquals("int", cs.get(0).getFields().get(1).getType());
+    }
+
+    @Test
+    public void testMultiVarFieldWithInitializers() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a = 1, b = 2; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+    }
+
+    @Test
+    public void testMultiVarFieldWithModifiers() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { public static final int X = 1, Y = 2, Z = 3; }");
+        assertEquals(3, cs.get(0).getFields().size());
+        for (JavaFieldInfo f : cs.get(0).getFields()) {
+            assertTrue(f.isStatic());
+            assertTrue(f.isFinal());
+            assertEquals("int", f.getType());
+        }
+    }
+
+    @Test
+    public void testMultiVarFieldWithArrayBrackets() {
+        // int a[], b: a は int[], b は int
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int a[], b; }");
+        assertEquals(2, cs.get(0).getFields().size());
+        assertEquals("a", cs.get(0).getFields().get(0).getName());
+        assertEquals("b", cs.get(0).getFields().get(1).getName());
+        assertEquals("int", cs.get(0).getFields().get(1).getType());
+    }
+
+    @Test
+    public void testSealedClassModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "public sealed class Shape permits Circle, Rectangle {}");
+        assertEquals(1, cs.size());
+        JavaClassInfo c = cs.get(0);
+        assertTrue(c.getModifiers().contains("public"));
+        assertTrue(c.getModifiers().contains("sealed"));
+        assertEquals("Shape", c.getSimpleName());
+        assertTrue(c.getInterfaces().contains("Circle"));
+        assertTrue(c.getInterfaces().contains("Rectangle"));
+    }
+
+    @Test
+    public void testSealedInterfaceModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "sealed interface Result permits Ok, Err {}");
+        assertEquals(1, cs.size());
+        assertEquals(JavaClassInfo.Kind.INTERFACE, cs.get(0).getKind());
+        assertTrue(cs.get(0).getModifiers().contains("sealed"));
+    }
+
+    @Test
+    public void testNestedAnnotationInFieldType() {
+        // ネストアノテーション @Foo(bar = @Baz("x")) で stripAnnotations が
+        // 早期終了せず最終的に型 (String) のみが残ること
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { @Foo(bar = @Baz(\"x\")) String s; }");
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("s", cs.get(0).getFields().get(0).getName());
+        assertEquals("String", cs.get(0).getFields().get(0).getType());
+    }
+
+    @Test
+    public void testDeeplyNestedGenericsTriggers3CloseAngles() {
+        // Foo<Bar<Baz<Qux>>> は `>>>` 1 トークンで 3 階層閉じる。
+        // skipBalanced / readTypeName が depth 補正で早期終了しないこと
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { Foo<Bar<Baz<Qux>>> field; void m() {} }");
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("field", cs.get(0).getFields().get(0).getName());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("m", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testLocalClassInMethodBody() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class Outer { void m() { class Local { int x; } } }");
+        assertEquals(2, cs.size());
+        JavaClassInfo local = cs.stream()
+                .filter(c -> "Local".equals(c.getSimpleName()))
+                .findFirst().orElse(null);
+        assertNotNull(local);
+        assertEquals(JavaClassInfo.Kind.CLASS, local.getKind());
+        assertEquals(1, local.getFields().size());
+    }
+
+    @Test
+    public void testLocalRecordWithModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class Outer { void m() { final record P(int x) {} } }");
+        JavaClassInfo p = cs.stream()
+                .filter(c -> "P".equals(c.getSimpleName()))
+                .findFirst().orElse(null);
+        assertNotNull(p);
+        assertEquals(JavaClassInfo.Kind.RECORD, p.getKind());
+        assertTrue(p.getModifiers().contains("final"));
+    }
+
+    @Test
+    public void testThrowsClauseSingle() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() throws java.io.IOException {} }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        assertEquals(1, m.getThrowsTypes().size());
+        assertEquals("java.io.IOException", m.getThrowsTypes().get(0));
+    }
+
+    @Test
+    public void testThrowsClauseMultiple() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() throws IOException, SQLException, RuntimeException; }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        assertEquals(3, m.getThrowsTypes().size());
+        assertEquals("IOException", m.getThrowsTypes().get(0));
+        assertEquals("SQLException", m.getThrowsTypes().get(1));
+        assertEquals("RuntimeException", m.getThrowsTypes().get(2));
+    }
+
+    @Test
+    public void testThrowsClauseAbsent() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() {} }");
+        assertTrue(cs.get(0).getMethods().get(0).getThrowsTypes().isEmpty());
+    }
+
+    @Test
+    public void testUnicodeEscapeInClassName() {
+        // Foo → Foo
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class \\u0046oo { int x; }");
+        assertEquals(1, cs.size());
+        assertEquals("Foo", cs.get(0).getSimpleName());
+    }
+
+    @Test
+    public void testUnicodeEscapedKeyword() {
+        // class → class
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "\\u0063lass Bar {}");
+        assertEquals(1, cs.size());
+        assertEquals("Bar", cs.get(0).getSimpleName());
+    }
+
+    @Test
+    public void testTextBlockWithBracesAndQuotes() {
+        // テキストブロック内の { } や " は構造を壊さない
+        String src = "class A {\n"
+                + "  String json = \"\"\"\n"
+                + "    { \"key\": \"value\" }\n"
+                + "    \"\"\";\n"
+                + "  int x;\n"
+                + "}";
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(src);
+        assertEquals(1, cs.size());
+        assertEquals(2, cs.get(0).getFields().size());
+    }
 }

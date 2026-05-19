@@ -165,6 +165,82 @@ public class JavaLexerTest {
     }
 
     @Test
+    public void testTextBlockSingleLine() {
+        String src = "\"\"\"hello\"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+        assertEquals(JavaToken.Type.EOF, toks.get(1).type);
+    }
+
+    @Test
+    public void testTextBlockMultiline() {
+        String src = "\"\"\"\n  line1\n  line2\n  \"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+        assertEquals(JavaToken.Type.EOF, toks.get(1).type);
+    }
+
+    @Test
+    public void testTextBlockWithEmbeddedQuote() {
+        // テキストブロック内の "" は終端ではない (3 連続 " のみ終端)
+        String src = "\"\"\"he said \"hi\" here\"\"\"";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.STRING, src);
+    }
+
+    @Test
+    public void testTextBlockDoesNotBreakSubsequentTokens() {
+        String src = "a = \"\"\"\n  body\n  \"\"\"; b";
+        List<JavaToken> toks = tokenize(src);
+        assertToken(toks.get(0), JavaToken.Type.IDENT, "a");
+        assertToken(toks.get(1), JavaToken.Type.OP, "=");
+        assertToken(toks.get(2), JavaToken.Type.STRING, "\"\"\"\n  body\n  \"\"\"");
+        assertToken(toks.get(3), JavaToken.Type.PUNCT, ";");
+        assertToken(toks.get(4), JavaToken.Type.IDENT, "b");
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeSimple() {
+        // A == 'A'
+        assertEquals("A", JavaLexer.expandUnicodeEscapes("\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeInIdentifier() {
+        // class A {} → class A {}
+        assertEquals("class A {}", JavaLexer.expandUnicodeEscapes("class \\u0041 {}"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeMultipleUs() {
+        // \uuu0041 も有効 (UnicodeMarker: u {u})
+        assertEquals("A", JavaLexer.expandUnicodeEscapes("\\uuu0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeEscapedBackslash() {
+        // \\u0041 は \\ + u0041 のままで、エスケープ展開されない
+        assertEquals("\\\\u0041", JavaLexer.expandUnicodeEscapes("\\\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeOddBackslashes() {
+        // \\A → \\ + A (3 個の \\ は 2 個のリテラル + 1 個のエスケープ開始)
+        assertEquals("\\\\A", JavaLexer.expandUnicodeEscapes("\\\\\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeNoEscape() {
+        assertEquals("hello", JavaLexer.expandUnicodeEscapes("hello"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeInvalid() {
+        // 妥当な 4 桁の 16 進数でない場合は展開しない
+        assertEquals("\\u123z", JavaLexer.expandUnicodeEscapes("\\u123z"));
+    }
+
+    @Test
     public void testGetSource() {
         JavaLexer lex = new JavaLexer("abc");
         lex.tokenize();

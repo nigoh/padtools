@@ -9,7 +9,7 @@ import java.util.List;
 public class JavaClassInfo {
 
     /** 種別。 */
-    public enum Kind { CLASS, INTERFACE, ENUM, ANNOTATION, AIDL_INTERFACE }
+    public enum Kind { CLASS, INTERFACE, ENUM, ANNOTATION, AIDL_INTERFACE, RECORD }
 
     /**
      * クラス情報の出所。

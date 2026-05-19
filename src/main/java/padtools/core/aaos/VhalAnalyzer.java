@@ -72,6 +72,21 @@ public final class VhalAnalyzer {
             "(?:^|[\\s;{,])(?:private|protected|public)?\\s*(?:final|static)*\\s*"
                     + "CarPropertyManager\\s+([A-Za-z_$][A-Za-z0-9_$]*)");
 
+    /**
+     * Kotlin の {@code val/var name: CarPropertyManager} 型フィールドパターン。
+     * {@code lateinit var}, アノテーション前置、private/protected/internal 修飾子も許容。
+     */
+    private static final Pattern KOTLIN_FIELD_DECL_PATTERN = Pattern.compile(
+            "(?:^|[\\s;{,])(?:private|protected|public|internal)?\\s*"
+                    + "(?:lateinit\\s+|const\\s+)?(?:val|var)\\s+"
+                    + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*:\\s*CarPropertyManager\\b");
+
+    /** Kotlin の {@code fun name(...): ReturnType { ... }} 形式。 */
+    private static final Pattern KOTLIN_FUN_DECL_PATTERN = Pattern.compile(
+            "\\bfun\\s+(?:<[^>]+>\\s+)?"
+                    + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\([^)]*\\)"
+                    + "(?:\\s*:\\s*[^{=]+)?\\s*\\{");
+
     /** {@code CarPropertyManager.METHOD} のような static 呼出パターン (単語境界付き)。 */
     private static final Pattern STATIC_CALL_PATTERN = Pattern.compile(
             "(?<![A-Za-z0-9_$])CarPropertyManager\\s*\\.\\s*("
@@ -83,18 +98,19 @@ public final class VhalAnalyzer {
                     + "[A-Za-z_$<][A-Za-z0-9_$<>,\\s\\[\\]\\?]*\\s+"
                     + "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{");
 
-    /** プロジェクト内の Java ソースをスキャンして全 VHAL アクセスを返す。 */
+    /** プロジェクト内の Java / Kotlin ソースをスキャンして全 VHAL アクセスを返す。 */
     public List<VhalAccess> analyzeProject(File projectRoot) throws IOException {
         if (projectRoot == null || !projectRoot.isDirectory()) {
             return Collections.emptyList();
         }
         AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
         opts.includeAidl = false;
+        opts.includeKotlin = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
         List<VhalAccess> all = new ArrayList<>();
         for (File f : files) {
             String name = f.getName().toLowerCase();
-            if (!name.endsWith(".java")) {
+            if (!name.endsWith(".java") && !name.endsWith(".kt")) {
                 continue;
             }
             String src;
@@ -119,24 +135,36 @@ public final class VhalAnalyzer {
         String fqn = packageName.isEmpty() ? className
                 : packageName + "." + className;
 
-        // CarPropertyManager 型のフィールド名を収集
+        // CarPropertyManager 型のフィールド名を収集 (Java + Kotlin)
         java.util.Set<String> mgrFields = new java.util.LinkedHashSet<>();
         Matcher fm = FIELD_DECL_PATTERN.matcher(src);
         while (fm.find()) {
             mgrFields.add(fm.group(1));
         }
+        Matcher kfm = KOTLIN_FIELD_DECL_PATTERN.matcher(src);
+        while (kfm.find()) {
+            mgrFields.add(kfm.group(1));
+        }
 
-        // メソッド宣言の開始位置をすべて収集してオフセットから caller method 名を引けるようにする
+        // メソッド宣言の開始位置を収集 (Java と Kotlin 両方)
         List<int[]> methodSpans = new ArrayList<>();
         List<String> methodNames = new ArrayList<>();
         Matcher mm = METHOD_DECL_PATTERN.matcher(src);
         while (mm.find()) {
-            // 当該メソッドの "{" 位置から対応する "}" までを span として保持
             int braceStart = mm.end() - 1;
             int braceEnd = findMatchingBrace(src, braceStart);
             if (braceEnd > braceStart) {
                 methodSpans.add(new int[]{braceStart, braceEnd});
                 methodNames.add(mm.group(1));
+            }
+        }
+        Matcher km = KOTLIN_FUN_DECL_PATTERN.matcher(src);
+        while (km.find()) {
+            int braceStart = km.end() - 1;
+            int braceEnd = findMatchingBrace(src, braceStart);
+            if (braceEnd > braceStart) {
+                methodSpans.add(new int[]{braceStart, braceEnd});
+                methodNames.add(km.group(1));
             }
         }
 
@@ -220,15 +248,18 @@ public final class VhalAnalyzer {
     }
 
     private static String readPackage(String src) {
-        Matcher m = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;",
+        // Java は ; で終わる、Kotlin は ; なし。両方を許容。
+        Matcher m = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;?\\s*$",
                 Pattern.MULTILINE).matcher(src);
         return m.find() ? m.group(1) : "";
     }
 
     private static String readPrimaryClassName(String src) {
+        // Java: class/interface/enum, Kotlin: class/interface/object/enum class/data class
         Matcher m = Pattern.compile(
-                "(?:public\\s+)?(?:final\\s+|abstract\\s+)?"
-                        + "(?:class|interface|enum)\\s+([A-Za-z_$][A-Za-z0-9_$]*)").matcher(src);
+                "(?:public|protected|private|internal|final|abstract|open|sealed|data|inner)?"
+                        + "\\s*(?:enum\\s+|annotation\\s+)?(?:class|interface|object|enum)"
+                        + "\\s+([A-Za-z_$][A-Za-z0-9_$]*)").matcher(src);
         return m.find() ? m.group(1) : "Unknown";
     }
 

@@ -4,15 +4,48 @@ Change log
 Unreleased
 --------
 
-* **AAOS Phase 2.2: Car App Library パターン認識** (`CarAppLibraryPattern` 新規 / `PlantUmlClassDiagram`)
-    * `androidx.car.app.*` の Car App Library ベース型を継承するクラスを検出し、クラス図に `<<CarAppService>>` / `<<CarAppSession>>` / `<<CarAppScreen>>` ステレオタイプを付与する。`JetpackPattern` と同じ単純名末尾一致 + パッケージヒントの構造を採用。
-    * 判定ロジック:
-        * `CarAppService` は車載特有の名前なので superClass の単純名マッチだけで採用 (`extends CarAppService` でも `extends androidx.car.app.CarAppService` でも検出)
-        * `Session` / `Screen` は汎用名なので、(a) superClass が FQN で `androidx.car.app.*` であるか、(b) 自クラスが `androidx.car.app.*` パッケージ配下にある、のいずれかを満たす場合だけ採用 (例: `class BackgroundSession extends Session` は採用しないが、`class HomeScreen extends androidx.car.app.Screen` は採用)
-        * ジェネリクス後置 (`extends androidx.car.app.Screen<MyTemplate>`) も `JetpackPattern.simpleName` で除去して比較
-    * `PlantUmlClassDiagram.stereotype` に組み込み、既存の `<<CarManager>>` / `<<SystemApi>>` / API レベルバッジと併記可能 (重複は除去)。`markAaosCategories=false` で抑制可。
-    * テスト: 新規 `CarAppLibraryPatternTest` 13 ケース (CarAppService 単純名/FQN、Session/Screen の FQN 経由・パッケージ経由・誤検出回避、ジェネリクス、null セーフ、ヘルパー単体)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力反映 + suppress)。既存 894 件全 PASS。
-    * 目的: AAOS の Car App Library を使うモバイル UI コンポーネント (`CarAppService` / `Session` / `Screen`) を、ユーザコード側で簡単な命名規約に従っていなくても図上で識別できるようにする。
+* **AOSP Phase 3.4: Android.mk (legacy) パーサー** (`AndroidMkParser` 新規)
+    * AOSP の legacy GNU Make 形式 `Android.mk` から `LOCAL_MODULE` / `LOCAL_SRC_FILES` / 各種 `LOCAL_*_LIBRARIES` を抽出し、{@link AndroidBpModule} 出力モデルを **再利用** することで Soong (Phase 3.1) の解析結果と統一されたモジュールグラフを構築可能にする。
+    * 戦略は完全な make 評価ではなく AOSP のお決まりパターン (Boilerplate) に特化:
+        1. 行ベースでパース、末尾 `\` の継続行を 1 行に結合 (`joinContinuations`)
+        2. `#` で始まる行とインラインコメントを除去
+        3. `include $(CLEAR_VARS)` で `LOCAL_*` 蓄積をリセット (新モジュール開始)
+        4. `LOCAL_xxx := / = / += / ?= 値` を捕捉 (`parseAssignment`)
+        5. `include $(BUILD_XXX)` で現モジュールを完成させ、`BUILD_XXX` を Soong 風 type にマップ
+    * `BUILD_XXX` → Soong type 対応表 (`BUILD_SHARED_LIBRARY` → `cc_library_shared` / `BUILD_STATIC_LIBRARY` → `cc_library_static` / `BUILD_EXECUTABLE` → `cc_binary` / `BUILD_HOST_*` 系 / `BUILD_JAVA_LIBRARY` → `java_library` / `BUILD_PACKAGE` → `android_app` / `BUILD_PREBUILT` → `prebuilt` 等)。未知の `BUILD_XXX` は小文字化して fall-through (例 `build_raw_blob`)。
+    * `BUILD_PACKAGE` のとき `LOCAL_PACKAGE_NAME` を `LOCAL_MODULE` の代替として採用。
+    * `splitValues` で値を空白分割、Make の変数参照 (`$(LOCAL_PATH)/foo.c`) は括弧深度を加味して 1 トークン扱い。
+    * テスト: 新規 `AndroidMkParserTest` 22 ケース (空入力 / 単純 shared library / `BUILD_PACKAGE` + `LOCAL_PACKAGE_NAME` / java library / static + executable / 複数モジュール / 行継続 / `+=` / コメント / 不完全モジュール除外 / `CLEAR_VARS` リセット / 未知 BUILD_XXX / 非 BUILD include 無視 / 4 種類の deps 混在 / category 分類 / prebuilt / host executable / file path 記録 / `joinContinuations` ヘルパ / `parseAssignment` ヘルパ / `splitValues` ヘルパ)。既存 1003 件全 PASS。
+    * 目的: AOSP の Android.bp と Android.mk が混在する状況でも一貫したモジュールビュー (`AndroidBpModule` のリスト) を提供し、`category()` 分類 (`cc` / `java` / `android` / `aidl` / `hidl` / `build` / `other`) を Soong/legacy 横断で適用可能にする。Phase 3 (AOSP ビルドシステム最小カバー) の完結 PR。
+
+* **AOSP Phase 3.3: VINTF manifest パーサー** (`VintfManifest` / `VintfHal` / `VintfInterface` / `VintfManifestParser` 新規 / `AndroidProjectScanner.includeVintf`)
+    * AOSP の VINTF (Vendor Interface Object) XML — デバイス側 `manifest.xml` (`<manifest type="device">`)、フレームワーク側 `<manifest type="framework">`、`<compatibility-matrix type="..." level="N">` — を統一モデルでパースする。`<hal>` 配下の `name` / `transport` / 複数 `version` / `<interface>` (name + 複数 instance) / `optional` 属性に対応。`<kernel version="...">` と `<sepolicy><version>...</version></sepolicy>` も取り込む。
+    * AndroidManifest.xml ({@code <manifest package="...">}, type 属性なし) との混同を避けるためルート要素名 + type 属性で `VintfManifest.Kind` を判定。type 属性が無い `<manifest>` は `Kind.UNKNOWN` を返して空のままにする。
+    * セキュア XML パーサ設定 (DOCTYPE 禁止 / 外部エンティティ無効) を `AndroidManifestParser` と同等に適用。
+    * `AndroidProjectScanner.Options.includeVintf` (既定 false) を追加し、`manifest.xml` / `compatibility_matrix.xml` ファイル名を opt-in で収集。`AndroidManifest.xml` と区別される。
+    * テスト: 新規 `VintfManifestParserTest` 17 ケース (null セーフ / 空入力 / 不正 XML / AndroidManifest 誤検出回避 / device manifest / framework manifest / compatibility-matrix + level / HIDL 完全構造 / AIDL HAL / 複数 instance / 複数 version + 範囲 / optional 属性 / optional null / kernel + sepolicy / 複数 HAL / interface なし HAL / name なし HAL の除外 / DOCTYPE 拒否)、`AndroidProjectScannerTest` に 3 ケース追加 (`includeVintf` で収集 / 既定無効 / AndroidManifest と独立)。既存 951 件全 PASS。
+    * 目的: AOSP の HAL 要求/宣言マッピングを Phase 3.1 (Android.bp) + Phase 3.2 (HIDL) の解析結果と組み合わせて「このデバイスがどの HAL を実装/必要としているか」を図化できる土台を作る。
+
+* **AOSP Phase 3.2: HIDL (`*.hal`) パーサー** (`HidlParser` 新規 / `AndroidProjectScanner.includeHidl`)
+    * AOSP の HAL (Hardware Abstraction Layer) で歴史的に使われてきた `.hal` (HIDL: HAL Interface Definition Language) ファイルから、パッケージ宣言・import・interface 宣言とそのメソッドを抽出し、{@link JavaClassInfo} (Kind = `AIDL_INTERFACE`) のリストとして返す。Kind は AIDL と統一することで既存のクラス図・シーケンス図描画ロジックが HIDL にもそのまま適用される。
+    * HIDL 固有構文への対応:
+        * バージョン付きパッケージ `package android.hardware.foo@1.0;` を `packageName` にそのまま保持 (HIDL と AIDL の判別は `@N.M` suffix の有無で可能)
+        * `import android.hardware.foo@1.0::types;` の末尾 `::types` も含めて読む
+        * `methodName(params) generates (return_params);` の `generates` 句から戻り値型を取り出す (複数戻り値は最初の 1 つを `returnType` に圧縮)
+        * `oneway` 修飾子はメソッド annotation に追加
+        * `interface IFooExtra extends IFoo` の単一継承を `superClass` に取り込む (バージョン付き `android.hardware.foo@1.0::IFoo` も保持)
+        * ネスト宣言 (`struct` / `enum` / `union` / `typedef`) は本体スキップ。interface 内のメソッドだけ取り込む
+        * ジェネリクス `vec<int32_t>` の括弧深度を考慮
+    * `AndroidProjectScanner.Options.includeHidl` (既定 false) を追加し、`.hal` ファイルの収集を opt-in でサポート。
+    * テスト: 新規 `HidlParserTest` 15 ケース (空入力 / null セーフ / バージョン付きパッケージ / import 各種 / `getValue() generates (...)` / `oneway` / `extends IBase` / バージョン付き parent / ネスト struct/enum/union/typedef のスキップ / 多戻り値 / `vec<T>` / 複数 interface / ファイル先頭 typedef のスキップ / 空 generates)、`AndroidProjectScannerTest` に 2 ケース追加 (`includeHidl=true` で `.hal` を拾う / 既定では拾わない)。既存 920 件全 PASS。
+    * 目的: AOSP の HAL 層を AIDL と並列に図化できるようにし、`Android.bp` (PR #61 で既に対応済み) と組み合わせて HAL モジュール → HAL interface のクロスレイヤ解析の入口を開く。
+
+* **AAOS Phase 2.4: シーケンス図に第 1 引数の定数シンボルを併記** (`JavaMethodInfo.Call.firstArgLabel` 新規 / `JavaStructureExtractor` / `PlantUmlSequenceDiagram.formatCallLabel`)
+    * `JavaMethodInfo.Call` に nullable な `firstArgLabel` フィールドを追加 (`getFirstArgLabel` / `setFirstArgLabel`)。呼び出しの第 1 引数が単独の定数シンボル参照 (例 `VehiclePropertyIds.HVAC_TEMPERATURE_SET`, `Manifest.permission.READ_PHONE_STATE`, 単独 `MAX_VALUE`) のときにそのフルパス文字列を保持する。
+    * `JavaStructureExtractor` に `tryCaptureFirstConstantArgument` を新設。probe-only (idx を進めない) で先頭引数を覗き、ドット区切りの IDENT 連鎖を組み立てて、末尾セグメントが `UPPER_CASE_WITH_UNDERSCORES` 形式 (大文字始まり、英大文字・数字・アンダースコアのみ、長さ 2 以上) で、直後に `,` または `)` が続く場合だけ採用。`FOO + 1` のような複合式や `T` のような 1 文字 (型パラメータの可能性)、`Foo.class` (小文字末尾) は誤検出を避けて拒否。
+    * `PlantUmlSequenceDiagram.formatCallLabel` に第 1 引数ラベル対応のオーバーロードを追加し、`emitCall` から `call.getFirstArgLabel()` を渡す。`firstArgLabel` があれば `getProperty(VehiclePropertyIds.HVAC_TEMPERATURE_SET)` のように引数まで表示、無ければ従来通り `getProperty()`。
+    * テスト: 新規 `JavaStructureExtractorConstantArgTest` 13 ケース (ドット定数 / 単独定数 / 3 段ドット / 小文字変数の拒否 / 数値・文字列リテラル拒否 / `Foo.class` 拒否 / 単一文字 `T` 拒否 / 複合式拒否 / 後続引数があっても先頭を拾う / 数字を含む定数 / 別呼び出し戻り値の拒否)、`PlantUmlSequenceDiagramTest` に 2 ケース追加 (UML 出力反映 + ローカル変数引数のフォールバック)。既存 893 件全 PASS。
+    * 目的: AAOS の {@code CarPropertyManager.getProperty(VehiclePropertyIds.XXX)} のような「シンボル定数 1 つを渡す呼び出し」をシーケンス図ラベルに引数まで載せて表示し、VHAL や Permission のシーケンス図を読み取り易くする。
 
 * **AAOS Phase 2.3: AAOS API レベルバッジ** (`AaosPattern.apiLevelBadge` / `PlantUmlClassDiagram`)
     * クラスに付与された AAOS / Android API 要件アノテーションから、{@code "API 33+"} / {@code "Car 34+"} / {@code "Plat TIRAMISU+/Car TIRAMISU+"} のような短いバッジ文字列を生成し、クラス図にステレオタイプとして併記する。
@@ -22,6 +55,16 @@ Unreleased
     * `markAaosCategories=false` で他の AAOS 系ステレオタイプと一括抑制可能。
     * テスト: `AaosPatternTest` に 12 ケース追加 (named arg / positional / 空白許容 / OrBefore / Plat+Car 組み合わせ / 優先順位 / FQN annotation / 未指定 / null)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力への反映 + suppress)。既存 878 件全 PASS。
     * 目的: AAOS クラス図で「このクラスが利用できる最小 API レベル」を一目で確認できるようにし、互換性検討の往復を減らす。
+
+* **AAOS Phase 2.2: Car App Library パターン認識** (`CarAppLibraryPattern` 新規 / `PlantUmlClassDiagram`)
+    * `androidx.car.app.*` の Car App Library ベース型を継承するクラスを検出し、クラス図に `<<CarAppService>>` / `<<CarAppSession>>` / `<<CarAppScreen>>` ステレオタイプを付与する。`JetpackPattern` と同じ単純名末尾一致 + パッケージヒントの構造を採用。
+    * 判定ロジック:
+        * `CarAppService` は車載特有の名前なので superClass の単純名マッチだけで採用 (`extends CarAppService` でも `extends androidx.car.app.CarAppService` でも検出)
+        * `Session` / `Screen` は汎用名なので、(a) superClass が FQN で `androidx.car.app.*` であるか、(b) 自クラスが `androidx.car.app.*` パッケージ配下にある、のいずれかを満たす場合だけ採用 (例: `class BackgroundSession extends Session` は採用しないが、`class HomeScreen extends androidx.car.app.Screen` は採用)
+        * ジェネリクス後置 (`extends androidx.car.app.Screen<MyTemplate>`) も `JetpackPattern.simpleName` で除去して比較
+    * `PlantUmlClassDiagram.stereotype` に組み込み、既存の `<<CarManager>>` / `<<SystemApi>>` / API レベルバッジと併記可能 (重複は除去)。`markAaosCategories=false` で抑制可。
+    * テスト: 新規 `CarAppLibraryPatternTest` 13 ケース (CarAppService 単純名/FQN、Session/Screen の FQN 経由・パッケージ経由・誤検出回避、ジェネリクス、null セーフ、ヘルパー単体)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力反映 + suppress)。既存 894 件全 PASS。
+    * 目的: AAOS の Car App Library を使うモバイル UI コンポーネント (`CarAppService` / `Session` / `Screen`) を、ユーザコード側で簡単な命名規約に従っていなくても図上で識別できるようにする。
 
 * **AAOS Phase 2.1: Android API 可視性マーカー + AIDL binder impl ステレオタイプ** (`AaosPattern` / `PlantUmlClassDiagram` / `PlantUmlSequenceDiagram`)
     * `AaosPattern.apiVisibilityStereotype(JavaClassInfo)` を新設。クラスの annotation 短名 (`@SystemApi` / FQN `android.annotation.SystemApi` / 引数有り `@SystemApi(client=...)` も吸収) と JavaDoc コメント中の `@hide` マーカーから `Hidden` / `SystemApi` / `TestApi` のいずれかを返す。`@SystemApi` 付きでも JavaDoc に `@hide` があれば `Hidden` を優先表示する (より制限の強い側を優先)。Android プラットフォーム API 全般のマーカーだが、AAOS の CarService / 内部 SDK で多用されるため `AaosPattern` に同居。

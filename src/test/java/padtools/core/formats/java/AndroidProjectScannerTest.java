@@ -358,4 +358,111 @@ public class AndroidProjectScannerTest {
         assertTrue(foundV21);
     }
 
+    // --- HIDL (.hal) 走査 (includeHidl) ---
+
+    @Test
+    public void testIncludeHidlPicksUpHalFiles() throws IOException {
+        File hidlDir = new File(root, "hidl/android/hardware/foo");
+        assertTrue(hidlDir.mkdirs());
+        writeFile(new File(hidlDir, "IFoo.hal"),
+                "package android.hardware.foo@1.0;\ninterface IFoo {};");
+        writeFile(new File(hidlDir, "IBar.hal"),
+                "package android.hardware.foo@1.0;\ninterface IBar {};");
+
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeHidl = true;
+        List<File> files = AndroidProjectScanner.scan(root, o);
+        int found = 0;
+        for (File f : files) {
+            if (f.getName().endsWith(".hal")) {
+                found++;
+            }
+        }
+        assertEquals(2, found);
+    }
+
+    @Test
+    public void testHidlNotIncludedByDefault() throws IOException {
+        File hidlDir = new File(root, "hidl/android/hardware/foo");
+        assertTrue(hidlDir.mkdirs());
+        writeFile(new File(hidlDir, "IFoo.hal"),
+                "package android.hardware.foo@1.0;\ninterface IFoo {};");
+        List<File> files = AndroidProjectScanner.scan(root);
+        for (File f : files) {
+            assertFalse(".hal should not be returned by default: " + f,
+                    f.getName().endsWith(".hal"));
+        }
+    }
+
+    // --- VINTF (manifest.xml / compatibility_matrix.xml) 走査 (includeVintf) ---
+
+    @Test
+    public void testIncludeVintfPicksUpManifestAndMatrix() throws IOException {
+        File deviceDir = new File(root, "device/vendor/product");
+        assertTrue(deviceDir.mkdirs());
+        writeFile(new File(deviceDir, "manifest.xml"),
+                "<manifest type=\"device\" version=\"1.0\"/>");
+        writeFile(new File(deviceDir, "compatibility_matrix.xml"),
+                "<compatibility-matrix type=\"framework\" version=\"1.0\" level=\"6\"/>");
+
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeVintf = true;
+        List<File> files = AndroidProjectScanner.scan(root, o);
+        boolean foundManifest = false;
+        boolean foundMatrix = false;
+        for (File f : files) {
+            if (f.getName().equals("manifest.xml")) {
+                foundManifest = true;
+            }
+            if (f.getName().equals("compatibility_matrix.xml")) {
+                foundMatrix = true;
+            }
+        }
+        assertTrue("expected manifest.xml", foundManifest);
+        assertTrue("expected compatibility_matrix.xml", foundMatrix);
+    }
+
+    @Test
+    public void testVintfNotIncludedByDefault() throws IOException {
+        File deviceDir = new File(root, "device/vendor/product");
+        assertTrue(deviceDir.mkdirs());
+        writeFile(new File(deviceDir, "manifest.xml"),
+                "<manifest type=\"device\" version=\"1.0\"/>");
+        List<File> files = AndroidProjectScanner.scan(root);
+        for (File f : files) {
+            assertFalse("manifest.xml should not be returned by default: " + f,
+                    f.getName().equals("manifest.xml"));
+        }
+    }
+
+    @Test
+    public void testVintfDoesNotShadowAndroidManifest() throws IOException {
+        // AndroidManifest.xml と VINTF manifest.xml は別ファイルとして
+        // それぞれ別 option で拾われる
+        File appMain = new File(root, "app/src/main");
+        writeFile(new File(appMain, "AndroidManifest.xml"),
+                "<manifest package=\"com.x\"/>");
+        File deviceDir = new File(root, "device/vendor/product");
+        assertTrue(deviceDir.mkdirs());
+        writeFile(new File(deviceDir, "manifest.xml"),
+                "<manifest type=\"device\" version=\"1.0\"/>");
+
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeVintf = true;
+        // includeManifest=false なので AndroidManifest.xml は拾われない
+        List<File> files = AndroidProjectScanner.scan(root, o);
+        boolean foundAndroid = false;
+        boolean foundVintf = false;
+        for (File f : files) {
+            if (f.getName().equals("AndroidManifest.xml")) {
+                foundAndroid = true;
+            }
+            if (f.getName().equals("manifest.xml")) {
+                foundVintf = true;
+            }
+        }
+        assertFalse(foundAndroid);
+        assertTrue(foundVintf);
+    }
+
 }

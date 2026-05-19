@@ -401,7 +401,8 @@ public final class PlantUmlSequenceDiagram {
                 .add(call.getMethodName());
         body.append(indent).append(currentClass.getSimpleName())
                 .append(" -> ").append(target)
-                .append(": ").append(formatCallLabel(target, call.getMethodName(), opts))
+                .append(": ").append(formatCallLabel(target, call.getMethodName(),
+                        call.getFirstArgLabel(), opts))
                 .append('\n');
 
         // 解析済みクラスに該当する呼び出し先メソッドを引いておく (note と再帰展開で共有)
@@ -523,10 +524,24 @@ public final class PlantUmlSequenceDiagram {
 
     /** call ラベルの整形。{@link Options#qualifyMethodNames} 次第で {@code Class.method()} 形に。 */
     private static String formatCallLabel(String target, String methodName, Options o) {
+        return formatCallLabel(target, methodName, null, o);
+    }
+
+    /**
+     * 引数ラベル付きの call ラベル整形。{@code firstArgLabel} に値があれば
+     * {@code method(<arg>)} 形式で添える (例:
+     * {@code getProperty(VehiclePropertyIds.HVAC_TEMPERATURE_SET)})。
+     * null/空のときは引数なし表記 ({@code method()})。
+     */
+    private static String formatCallLabel(String target, String methodName,
+                                            String firstArgLabel, Options o) {
+        String parens = firstArgLabel != null && !firstArgLabel.isEmpty()
+                ? "(" + firstArgLabel + ")"
+                : "()";
         if (o.qualifyMethodNames && target != null && !target.isEmpty()) {
-            return target + "." + methodName + "()";
+            return target + "." + methodName + parens;
         }
-        return methodName + "()";
+        return methodName + parens;
     }
 
     /** {@code o.hiddenParticipants} に含まれているかを安全に判定する。 */

@@ -66,6 +66,14 @@ public final class AndroidProjectScanner {
         public boolean includeKotlin = false;
         /** AIDL (.aidl) ファイルも含める。 */
         public boolean includeAidl = false;
+        /** HIDL (.hal) ファイルも含める。AOSP の HAL レイヤ解析用。 */
+        public boolean includeHidl = false;
+        /**
+         * VINTF manifest ({@code manifest.xml} / {@code compatibility_matrix.xml})
+         * も含める。AOSP の HAL 要求/宣言解析用。AndroidManifest.xml とはルート
+         * 要素で区別する (VINTF パーサ側で判定)。
+         */
+        public boolean includeVintf = false;
         /** Gradle ビルドスクリプト (.gradle / .gradle.kts) を含める。 */
         public boolean includeGradle = false;
         /** AndroidManifest.xml を含める。 */
@@ -202,11 +210,19 @@ public final class AndroidProjectScanner {
         if (opts.includeAidl && name.endsWith(".aidl")) {
             return true;
         }
+        if (opts.includeHidl && name.endsWith(".hal")) {
+            return true;
+        }
         if (opts.includeGradle
                 && (name.endsWith(".gradle") || name.endsWith(".gradle.kts"))) {
             return true;
         }
         if (opts.includeManifest && name.equals("androidmanifest.xml")) {
+            return true;
+        }
+        if (opts.includeVintf
+                && (name.equals("manifest.xml")
+                    || name.equals("compatibility_matrix.xml"))) {
             return true;
         }
         if (opts.includeLayout && name.endsWith(".xml") && isInLayoutDir(f)) {

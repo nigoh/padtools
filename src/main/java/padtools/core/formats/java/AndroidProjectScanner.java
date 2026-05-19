@@ -66,6 +66,8 @@ public final class AndroidProjectScanner {
         public boolean includeKotlin = false;
         /** AIDL (.aidl) ファイルも含める。 */
         public boolean includeAidl = false;
+        /** HIDL (.hal) ファイルも含める。AOSP の HAL レイヤ解析用。 */
+        public boolean includeHidl = false;
         /** Gradle ビルドスクリプト (.gradle / .gradle.kts) を含める。 */
         public boolean includeGradle = false;
         /** AndroidManifest.xml を含める。 */
@@ -200,6 +202,9 @@ public final class AndroidProjectScanner {
             return true;
         }
         if (opts.includeAidl && name.endsWith(".aidl")) {
+            return true;
+        }
+        if (opts.includeHidl && name.endsWith(".hal")) {
             return true;
         }
         if (opts.includeGradle

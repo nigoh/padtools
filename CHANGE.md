@@ -4,6 +4,20 @@ Change log
 Unreleased
 --------
 
+* **AOSP Phase 3.2: HIDL (`*.hal`) パーサー** (`HidlParser` 新規 / `AndroidProjectScanner.includeHidl`)
+    * AOSP の HAL (Hardware Abstraction Layer) で歴史的に使われてきた `.hal` (HIDL: HAL Interface Definition Language) ファイルから、パッケージ宣言・import・interface 宣言とそのメソッドを抽出し、{@link JavaClassInfo} (Kind = `AIDL_INTERFACE`) のリストとして返す。Kind は AIDL と統一することで既存のクラス図・シーケンス図描画ロジックが HIDL にもそのまま適用される。
+    * HIDL 固有構文への対応:
+        * バージョン付きパッケージ `package android.hardware.foo@1.0;` を `packageName` にそのまま保持 (HIDL と AIDL の判別は `@N.M` suffix の有無で可能)
+        * `import android.hardware.foo@1.0::types;` の末尾 `::types` も含めて読む
+        * `methodName(params) generates (return_params);` の `generates` 句から戻り値型を取り出す (複数戻り値は最初の 1 つを `returnType` に圧縮)
+        * `oneway` 修飾子はメソッド annotation に追加
+        * `interface IFooExtra extends IFoo` の単一継承を `superClass` に取り込む (バージョン付き `android.hardware.foo@1.0::IFoo` も保持)
+        * ネスト宣言 (`struct` / `enum` / `union` / `typedef`) は本体スキップ。interface 内のメソッドだけ取り込む
+        * ジェネリクス `vec<int32_t>` の括弧深度を考慮
+    * `AndroidProjectScanner.Options.includeHidl` (既定 false) を追加し、`.hal` ファイルの収集を opt-in でサポート。
+    * テスト: 新規 `HidlParserTest` 15 ケース (空入力 / null セーフ / バージョン付きパッケージ / import 各種 / `getValue() generates (...)` / `oneway` / `extends IBase` / バージョン付き parent / ネスト struct/enum/union/typedef のスキップ / 多戻り値 / `vec<T>` / 複数 interface / ファイル先頭 typedef のスキップ / 空 generates)、`AndroidProjectScannerTest` に 2 ケース追加 (`includeHidl=true` で `.hal` を拾う / 既定では拾わない)。既存 920 件全 PASS。
+    * 目的: AOSP の HAL 層を AIDL と並列に図化できるようにし、`Android.bp` (PR #61 で既に対応済み) と組み合わせて HAL モジュール → HAL interface のクロスレイヤ解析の入口を開く。
+
 * **AAOS Phase 2.4: シーケンス図に第 1 引数の定数シンボルを併記** (`JavaMethodInfo.Call.firstArgLabel` 新規 / `JavaStructureExtractor` / `PlantUmlSequenceDiagram.formatCallLabel`)
     * `JavaMethodInfo.Call` に nullable な `firstArgLabel` フィールドを追加 (`getFirstArgLabel` / `setFirstArgLabel`)。呼び出しの第 1 引数が単独の定数シンボル参照 (例 `VehiclePropertyIds.HVAC_TEMPERATURE_SET`, `Manifest.permission.READ_PHONE_STATE`, 単独 `MAX_VALUE`) のときにそのフルパス文字列を保持する。
     * `JavaStructureExtractor` に `tryCaptureFirstConstantArgument` を新設。probe-only (idx を進めない) で先頭引数を覗き、ドット区切りの IDENT 連鎖を組み立てて、末尾セグメントが `UPPER_CASE_WITH_UNDERSCORES` 形式 (大文字始まり、英大文字・数字・アンダースコアのみ、長さ 2 以上) で、直後に `,` または `)` が続く場合だけ採用。`FOO + 1` のような複合式や `T` のような 1 文字 (型パラメータの可能性)、`Foo.class` (小文字末尾) は誤検出を避けて拒否。

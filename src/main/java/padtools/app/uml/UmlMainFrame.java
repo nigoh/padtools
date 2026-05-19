@@ -1153,10 +1153,7 @@ public class UmlMainFrame extends JFrame {
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        DiagramScope previous = currentScope;
-        if (previous != null) {
-            scopeHistory.push(previous);
-        }
+        scopeHistory.push(encodeScope(currentScope));
         // 新規ドリルダウン時は forward 履歴をクリア (ブラウザ動作と同じ)
         forwardHistory.clear();
         DiagramScope.Builder b = DiagramScope.builder()

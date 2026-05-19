@@ -38,6 +38,13 @@ public final class PlantUmlClassDiagram {
         public boolean showUsageRelations = true;
         public boolean showFields = true;
         public boolean showMethods = true;
+        /**
+         * 「メンバー変数で関数を変数として設定」している箇所
+         * (フィールド初期化子の匿名クラス/ラムダ/メソッド参照、およびコンストラクタや
+         * メソッド本体内での {@code this.field = ...} 形式の代入) で捕捉した
+         * コールバック本体をクラス図に表示する。
+         */
+        public boolean showInlineFunctions = true;
         public boolean groupByPackage = true;
         public boolean markAaosCategories = true;
         /** 凡例ブロックをダイアグラム右に追加する。 */
@@ -353,6 +360,11 @@ public final class PlantUmlClassDiagram {
                 emitMethod(out, m, o, indent + "  ");
             }
         }
+        // フィールド初期化子・コンストラクタ内代入で捕捉した「関数を変数として設定」する
+        // 匿名クラス/ラムダ/メソッド参照の本体メソッドをフィールド単位でまとめて表示する。
+        if (o.showFields && o.showMethods && o.showInlineFunctions) {
+            emitFieldInlineMethods(out, c, o, indent + "  ");
+        }
         out.append(indent).append("}\n");
         // NOTE 表示時はクラスの外に note ブロックを発行
         if (o.showComments && o.commentStyle == CommentStyle.NOTE && alias != null) {
@@ -572,6 +584,34 @@ public final class PlantUmlClassDiagram {
             s = s.substring(dot + 1);
         }
         return s;
+    }
+
+    /**
+     * フィールドの {@code inlineMethods} (匿名クラス/ラムダ/メソッド参照の本体や、
+     * メソッド本体内で {@code this.field = ...} で代入されたコールバック) を、
+     * フィールド単位の区切り線 {@code .. field: Type ..} に続けて列挙する。
+     * 該当フィールドがゼロなら何も出力しない。
+     */
+    private static void emitFieldInlineMethods(StringBuilder out, JavaClassInfo c,
+                                                Options o, String indent) {
+        for (JavaFieldInfo f : c.getFields()) {
+            List<JavaMethodInfo> inlines = f.getInlineMethods();
+            if (inlines == null || inlines.isEmpty()) {
+                continue;
+            }
+            if (o.publicOnly && f.getVisibility() != Visibility.PUBLIC) {
+                continue;
+            }
+            // フィールドごとの区切り線 (PlantUML: .. text ..)
+            String label = f.getName() == null ? "inline" : f.getName();
+            if (f.getType() != null && !f.getType().isEmpty()) {
+                label = label + ": " + f.getType();
+            }
+            out.append(indent).append(".. ").append(label).append(" ..\n");
+            for (JavaMethodInfo m : inlines) {
+                emitMethod(out, m, o, indent);
+            }
+        }
     }
 
     private static void emitMethod(StringBuilder out, JavaMethodInfo m,

@@ -21,6 +21,7 @@ public class JavaMethodInfo {
     public static class Call implements Statement {
         private final String receiver;
         private final String methodName;
+        private final List<JavaMethodInfo> inlineMethods = new ArrayList<>();
 
         public Call(String receiver, String methodName) {
             this.receiver = receiver;
@@ -33,6 +34,15 @@ public class JavaMethodInfo {
 
         public String getMethodName() {
             return methodName;
+        }
+
+        /**
+         * 呼び出し引数にラムダ/匿名クラス/メソッド参照が渡された場合、その本体から
+         * 抽出したメソッド一覧。{@code button.setOnClickListener(v -> ...)} のような
+         * リスナー登録呼び出しでコールバック本体を保持する。空なら該当なし。
+         */
+        public List<JavaMethodInfo> getInlineMethods() {
+            return inlineMethods;
         }
     }
 

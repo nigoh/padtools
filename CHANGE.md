@@ -4,6 +4,17 @@ Change log
 Unreleased
 --------
 
+* **「関数を変数として設定するメンバー変数」の解析範囲を拡張** (`JavaStructureExtractor` / `JavaMethodInfo.Call` / `PlantUmlClassDiagram`)
+    * これまで匿名クラス/ラムダによるフィールド初期化子のみ inline 解析していたのを、以下のパターンにも拡張
+        * メソッド参照 (`Runnable r = Foo::bar;` / `a.b.c::method`) を `inlineMethods` に取り込む
+        * コンストラクタや任意メソッド内の `this.field = new Listener() {...}` / `this.field = () -> ...` 形式の代入を捕捉し、対応するフィールドの `inlineMethods` に紐づける (宣言順より前で代入されても遅延解決パスでマッチ)
+        * メソッド本体内の `view.setOnXxxListener(new ... {...})` や `view.setOnXxxListener(v -> ...)` を `JavaMethodInfo.Call.inlineMethods` (新規) に取り込み、リスナー登録呼び出しのコールバック本体を構造化保持する
+        * 未知の SAM 型でも `Listener` / `Handler` / `Callback` / `Observer` / `Action` サフィックスをヒューリスティクスで剥がして SAM メソッド名を推定 (`MyCustomListener` → `myCustom`)
+    * クラス図に `showInlineFunctions`（既定 true）を追加し、本機能で捕捉した inline メソッドを `.. fieldName: Type ..` 区切り線の下に列挙
+    * シーケンス図側は既存の `findInlineMethod` が `JavaFieldInfo.inlineMethods` を参照するため、新たに取り込んだ代入/メソッド参照もそのまま展開対象になる
+    * `parseLambdaExpressionBody` が呼び出し引数中の expression-bodied ラムダで外側 `)` / `,` を食い潰していた不具合を併せて修正
+    * 目的: Android / Java で頻出する「フィールドにリスナーをセットする」「コンストラクタでハンドラを差し込む」「`setOnClickListener(v -> ...)` を書く」コードがクラス図・シーケンス図でブラックボックスにならないようにする
+
 * **共通クラス図 (Common Classes Diagram) を追加 + GUI ツールバー導入** (`PlantUmlCommonClassesDiagram` 新規 / `DiagramKind.COMMON` / `DiagramService` / `UmlMainFrame`)
     * 新図種「Common Classes」: プロジェクト内のクラス群を走査し、他クラスから参照される回数 (fan-in) が多い「共通 (= 使い回されている) クラス」を上位 N 件 (既定 20) でハイライト表示する。参照種別は `extends` / `implements` / フィールド型 / メソッド引数型 / 戻り値型を集計し、自己参照は除外、外部ライブラリ (`java.*` / `android.*` / `kotlin.*` 等 + `Origin.EXTERNAL_JAR/MISSING_JAR`) も既定で集計対象外
     * 各ハブクラスは `<<common>>` ステレオタイプ + 黄背景で強調し、ラベルに `N refs` を併記。参照元クラスは破線矢印 `referrer ..> hub : uses` で接続 (`referrersPerClass` で上限制御、既定 5)

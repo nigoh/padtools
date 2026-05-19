@@ -730,4 +730,51 @@ public class PlantUmlClassDiagramTest {
         assertFalse("usage relations should not appear in MINIMAL",
                 puml.contains("-->"));
     }
+
+    @Test
+    public void testInlineFunctionFromFieldInitializerEmitted() {
+        // フィールド初期化子で関数を変数として設定しているケースが
+        // クラス図にインライン関数として描画されること
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class Foo {\n"
+                        + "  private OnClickListener listener = new OnClickListener() {\n"
+                        + "    public void onClick(View v) { doX(); }\n"
+                        + "  };\n"
+                        + "}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("listener separator should appear: " + puml,
+                puml.contains(".. listener: OnClickListener .."));
+        assertTrue("onClick should appear under listener: " + puml,
+                puml.contains("onClick("));
+    }
+
+    @Test
+    public void testInlineFunctionFromConstructorAssignmentEmitted() {
+        // コンストラクタ内で this.field = ... と代入したラムダが
+        // クラス図に描画されること
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class Foo {\n"
+                        + "  private Runnable r;\n"
+                        + "  Foo() { this.r = () -> doX(); }\n"
+                        + "}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("r separator should appear: " + puml,
+                puml.contains(".. r: Runnable .."));
+        assertTrue("run should appear under r: " + puml,
+                puml.contains("run("));
+    }
+
+    @Test
+    public void testInlineFunctionsCanBeSuppressed() {
+        // showInlineFunctions=false で抑制できること
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class Foo {\n"
+                        + "  private Runnable r = () -> doX();\n"
+                        + "}");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showInlineFunctions = false;
+        String puml = PlantUmlClassDiagram.generate(infos, o);
+        assertFalse("separator should not appear when suppressed: " + puml,
+                puml.contains(".. r: Runnable .."));
+    }
 }

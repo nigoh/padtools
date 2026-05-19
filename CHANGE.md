@@ -4,6 +4,20 @@ Change log
 Unreleased
 --------
 
+* **AOSP Phase 3.4: Android.mk (legacy) パーサー** (`AndroidMkParser` 新規)
+    * AOSP の legacy GNU Make 形式 `Android.mk` から `LOCAL_MODULE` / `LOCAL_SRC_FILES` / 各種 `LOCAL_*_LIBRARIES` を抽出し、{@link AndroidBpModule} 出力モデルを **再利用** することで Soong (Phase 3.1) の解析結果と統一されたモジュールグラフを構築可能にする。
+    * 戦略は完全な make 評価ではなく AOSP のお決まりパターン (Boilerplate) に特化:
+        1. 行ベースでパース、末尾 `\` の継続行を 1 行に結合 (`joinContinuations`)
+        2. `#` で始まる行とインラインコメントを除去
+        3. `include $(CLEAR_VARS)` で `LOCAL_*` 蓄積をリセット (新モジュール開始)
+        4. `LOCAL_xxx := / = / += / ?= 値` を捕捉 (`parseAssignment`)
+        5. `include $(BUILD_XXX)` で現モジュールを完成させ、`BUILD_XXX` を Soong 風 type にマップ
+    * `BUILD_XXX` → Soong type 対応表 (`BUILD_SHARED_LIBRARY` → `cc_library_shared` / `BUILD_STATIC_LIBRARY` → `cc_library_static` / `BUILD_EXECUTABLE` → `cc_binary` / `BUILD_HOST_*` 系 / `BUILD_JAVA_LIBRARY` → `java_library` / `BUILD_PACKAGE` → `android_app` / `BUILD_PREBUILT` → `prebuilt` 等)。未知の `BUILD_XXX` は小文字化して fall-through (例 `build_raw_blob`)。
+    * `BUILD_PACKAGE` のとき `LOCAL_PACKAGE_NAME` を `LOCAL_MODULE` の代替として採用。
+    * `splitValues` で値を空白分割、Make の変数参照 (`$(LOCAL_PATH)/foo.c`) は括弧深度を加味して 1 トークン扱い。
+    * テスト: 新規 `AndroidMkParserTest` 22 ケース (空入力 / 単純 shared library / `BUILD_PACKAGE` + `LOCAL_PACKAGE_NAME` / java library / static + executable / 複数モジュール / 行継続 / `+=` / コメント / 不完全モジュール除外 / `CLEAR_VARS` リセット / 未知 BUILD_XXX / 非 BUILD include 無視 / 4 種類の deps 混在 / category 分類 / prebuilt / host executable / file path 記録 / `joinContinuations` ヘルパ / `parseAssignment` ヘルパ / `splitValues` ヘルパ)。既存 1003 件全 PASS。
+    * 目的: AOSP の Android.bp と Android.mk が混在する状況でも一貫したモジュールビュー (`AndroidBpModule` のリスト) を提供し、`category()` 分類 (`cc` / `java` / `android` / `aidl` / `hidl` / `build` / `other`) を Soong/legacy 横断で適用可能にする。Phase 3 (AOSP ビルドシステム最小カバー) の完結 PR。
+
 * **AOSP Phase 3.3: VINTF manifest パーサー** (`VintfManifest` / `VintfHal` / `VintfInterface` / `VintfManifestParser` 新規 / `AndroidProjectScanner.includeVintf`)
     * AOSP の VINTF (Vendor Interface Object) XML — デバイス側 `manifest.xml` (`<manifest type="device">`)、フレームワーク側 `<manifest type="framework">`、`<compatibility-matrix type="..." level="N">` — を統一モデルでパースする。`<hal>` 配下の `name` / `transport` / 複数 `version` / `<interface>` (name + 複数 instance) / `optional` 属性に対応。`<kernel version="...">` と `<sepolicy><version>...</version></sepolicy>` も取り込む。
     * AndroidManifest.xml ({@code <manifest package="...">}, type 属性なし) との混同を避けるためルート要素名 + type 属性で `VintfManifest.Kind` を判定。type 属性が無い `<manifest>` は `Kind.UNKNOWN` を返して空のままにする。

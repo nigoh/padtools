@@ -68,25 +68,96 @@ public final class StyleSettingsDialog extends JDialog {
     private final JCheckBox sequenceQualifyMethodsCheckbox =
             new JCheckBox("Qualify call labels with class name (e.g. Foo.bar())");
 
+    private final JCheckBox classShowFieldsCheckbox = new JCheckBox("Show fields");
+    private final JCheckBox classShowMethodsCheckbox = new JCheckBox("Show methods");
+    private final JCheckBox classShowAnnotationsCheckbox = new JCheckBox("Show annotations");
+    private final JCheckBox classPublicOnlyCheckbox =
+            new JCheckBox("Public only (hide non-public classes and members)");
+    private final JCheckBox classExcludeExternalCheckbox =
+            new JCheckBox("Exclude external libraries (java.*, android.*, kotlin.*, ...)");
+    private final JSpinner classCommentMaxLengthSpinner =
+            new JSpinner(new SpinnerNumberModel(80, 0, 500, 10));
+    private final JTextField classHiddenAnnotationsField = new JTextField(24);
+
     private Result result;
 
-    /** ダイアログの戻り値 (Style + シーケンス図コメント設定)。 */
+    /** クラス図向け Setting 永続化用 DTO (不変)。 */
+    public static final class ClassDiagramPrefs {
+        public final boolean showFields;
+        public final boolean showMethods;
+        public final boolean showAnnotations;
+        public final boolean publicOnly;
+        public final boolean excludeExternal;
+        public final int commentMaxLength;
+        /** 表示しないアノテーション名集合 (大括弧なし、例: {"Override", "Nullable"})。 */
+        public final java.util.Set<String> hiddenAnnotations;
+
+        public ClassDiagramPrefs(boolean showFields, boolean showMethods,
+                                  boolean showAnnotations, boolean publicOnly,
+                                  boolean excludeExternal, int commentMaxLength,
+                                  java.util.Set<String> hiddenAnnotations) {
+            this.showFields = showFields;
+            this.showMethods = showMethods;
+            this.showAnnotations = showAnnotations;
+            this.publicOnly = publicOnly;
+            this.excludeExternal = excludeExternal;
+            this.commentMaxLength = Math.max(0, commentMaxLength);
+            this.hiddenAnnotations = (hiddenAnnotations == null)
+                    ? java.util.Collections.emptySet()
+                    : java.util.Collections.unmodifiableSet(
+                            new java.util.LinkedHashSet<>(hiddenAnnotations));
+        }
+
+        /** カンマ区切り文字列に整形 (CSV)。 */
+        public String hiddenAnnotationsCsv() {
+            return String.join(",", hiddenAnnotations);
+        }
+
+        /** CSV からインスタンスを組み立てるユーティリティ。 */
+        public static java.util.Set<String> parseCsv(String csv) {
+            java.util.Set<String> set = new java.util.LinkedHashSet<>();
+            if (csv == null || csv.isEmpty()) {
+                return set;
+            }
+            for (String tok : csv.split(",")) {
+                String t = tok.trim();
+                if (!t.isEmpty()) {
+                    set.add(t);
+                }
+            }
+            return set;
+        }
+
+        /** 既定値 (PlantUmlClassDiagram.Options の既定 = BALANCED 相当)。 */
+        public static ClassDiagramPrefs defaults() {
+            java.util.Set<String> hidden = new java.util.LinkedHashSet<>();
+            hidden.add("Override");
+            hidden.add("SuppressWarnings");
+            return new ClassDiagramPrefs(true, true, true, false, false, 80, hidden);
+        }
+    }
+
+    /** ダイアログの戻り値 (Style + シーケンス図 + クラス図設定)。 */
     public static final class Result {
         public final DiagramStyle style;
         public final boolean sequenceShowComments;
         public final PlantUmlClassDiagram.CommentStyle sequenceCommentStyle;
         public final PlantUmlSequenceDiagram.CommentPlacement sequenceCommentPlacement;
         public final boolean sequenceQualifyMethodNames;
+        public final ClassDiagramPrefs classDiagram;
 
         public Result(DiagramStyle style, boolean sequenceShowComments,
                       PlantUmlClassDiagram.CommentStyle sequenceCommentStyle,
                       PlantUmlSequenceDiagram.CommentPlacement sequenceCommentPlacement,
-                      boolean sequenceQualifyMethodNames) {
+                      boolean sequenceQualifyMethodNames,
+                      ClassDiagramPrefs classDiagram) {
             this.style = style;
             this.sequenceShowComments = sequenceShowComments;
             this.sequenceCommentStyle = sequenceCommentStyle;
             this.sequenceCommentPlacement = sequenceCommentPlacement;
             this.sequenceQualifyMethodNames = sequenceQualifyMethodNames;
+            this.classDiagram = classDiagram != null
+                    ? classDiagram : ClassDiagramPrefs.defaults();
         }
     }
 
@@ -94,13 +165,25 @@ public final class StyleSettingsDialog extends JDialog {
                                  boolean initialSeqShowComments,
                                  PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle,
                                  PlantUmlSequenceDiagram.CommentPlacement initialSeqPlacement,
-                                 boolean initialSeqQualify) {
+                                 boolean initialSeqQualify,
+                                 ClassDiagramPrefs initialClassPrefs) {
         super(owner, "UML Style Settings", Dialog.ModalityType.APPLICATION_MODAL);
         setLayout(new BorderLayout());
-        add(buildForm(initial, initialSeqShowComments, initialSeqCommentStyle,
-                initialSeqPlacement, initialSeqQualify), BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(buildForm(initial, initialSeqShowComments,
+                initialSeqCommentStyle, initialSeqPlacement, initialSeqQualify,
+                initialClassPrefs));
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(scroll, BorderLayout.CENTER);
         add(buildButtons(), BorderLayout.SOUTH);
         pack();
+        // フォーム高がスクリーンを超えると pack でクリップされるので明示的に上限を入れる
+        java.awt.Dimension pref = getPreferredSize();
+        int maxH = (int) (java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getMaximumWindowBounds().height * 0.9);
+        if (pref.height > maxH) {
+            setSize(pref.width + 30, maxH);
+        }
         setLocationRelativeTo(owner);
     }
 
@@ -108,7 +191,8 @@ public final class StyleSettingsDialog extends JDialog {
                               boolean initialSeqShowComments,
                               PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle,
                               PlantUmlSequenceDiagram.CommentPlacement initialSeqPlacement,
-                              boolean initialSeqQualify) {
+                              boolean initialSeqQualify,
+                              ClassDiagramPrefs initialClassPrefs) {
         JPanel form = new JPanel(new GridBagLayout());
         form.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         GridBagConstraints c = new GridBagConstraints();
@@ -288,6 +372,74 @@ public final class StyleSettingsDialog extends JDialog {
                 e -> sequenceCommentPlacementCombo.setEnabled(
                         sequenceShowCommentsCheckbox.isSelected()));
 
+        // ---- Class Diagram セクション ----
+        row++;
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        c.insets = new Insets(10, 4, 4, 4);
+        form.add(new JSeparator(SwingConstants.HORIZONTAL), c);
+        c.insets = new Insets(4, 4, 4, 4);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        JLabel classHeading = new JLabel("Class Diagram");
+        classHeading.setFont(classHeading.getFont().deriveFont(java.awt.Font.BOLD));
+        form.add(classHeading, c);
+        c.gridwidth = 1;
+        row++;
+
+        ClassDiagramPrefs cp = initialClassPrefs != null
+                ? initialClassPrefs : ClassDiagramPrefs.defaults();
+        classShowFieldsCheckbox.setSelected(cp.showFields);
+        classShowMethodsCheckbox.setSelected(cp.showMethods);
+        classShowAnnotationsCheckbox.setSelected(cp.showAnnotations);
+        classPublicOnlyCheckbox.setSelected(cp.publicOnly);
+        classExcludeExternalCheckbox.setSelected(cp.excludeExternal);
+        classCommentMaxLengthSpinner.setValue(cp.commentMaxLength);
+        classHiddenAnnotationsField.setText(cp.hiddenAnnotationsCsv());
+        classHiddenAnnotationsField.setToolTipText(
+                "Comma-separated annotation names to hide (e.g. Override,Nullable,NonNull)");
+
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Members:"), c);
+        JPanel membersPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        membersPanel.add(classShowFieldsCheckbox);
+        membersPanel.add(classShowMethodsCheckbox);
+        membersPanel.add(classShowAnnotationsCheckbox);
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(membersPanel, c);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Filters:"), c);
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        filterPanel.add(classPublicOnlyCheckbox);
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(filterPanel, c);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(classExcludeExternalCheckbox, c);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Comment max length:"), c);
+        ((JSpinner.DefaultEditor) classCommentMaxLengthSpinner.getEditor()).getTextField()
+                .setToolTipText("0 disables inline comments. 80 is the default.");
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(classCommentMaxLengthSpinner, c);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Hidden annotations:"), c);
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(classHiddenAnnotationsField, c);
+        c.gridwidth = 1;
+
         return form;
     }
 
@@ -326,6 +478,14 @@ public final class StyleSettingsDialog extends JDialog {
         sequenceCommentPlacementCombo.setSelectedItem("AT_CALL_SITE");
         sequenceCommentPlacementCombo.setEnabled(true);
         sequenceQualifyMethodsCheckbox.setSelected(true);
+        ClassDiagramPrefs cp = ClassDiagramPrefs.defaults();
+        classShowFieldsCheckbox.setSelected(cp.showFields);
+        classShowMethodsCheckbox.setSelected(cp.showMethods);
+        classShowAnnotationsCheckbox.setSelected(cp.showAnnotations);
+        classPublicOnlyCheckbox.setSelected(cp.publicOnly);
+        classExcludeExternalCheckbox.setSelected(cp.excludeExternal);
+        classCommentMaxLengthSpinner.setValue(cp.commentMaxLength);
+        classHiddenAnnotationsField.setText(cp.hiddenAnnotationsCsv());
     }
 
     private void pickBackgroundColor() {
@@ -377,19 +537,28 @@ public final class StyleSettingsDialog extends JDialog {
                 "PARTICIPANT_TOP".equals(placeSel)
                         ? PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP
                         : PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
+        ClassDiagramPrefs classPrefs = new ClassDiagramPrefs(
+                classShowFieldsCheckbox.isSelected(),
+                classShowMethodsCheckbox.isSelected(),
+                classShowAnnotationsCheckbox.isSelected(),
+                classPublicOnlyCheckbox.isSelected(),
+                classExcludeExternalCheckbox.isSelected(),
+                ((Number) classCommentMaxLengthSpinner.getValue()).intValue(),
+                ClassDiagramPrefs.parseCsv(classHiddenAnnotationsField.getText()));
         return new Result(s, sequenceShowCommentsCheckbox.isSelected(), cs, cp,
-                sequenceQualifyMethodsCheckbox.isSelected());
+                sequenceQualifyMethodsCheckbox.isSelected(), classPrefs);
     }
 
     /**
-     * モーダルダイアログを開き、編集された {@link Result} (Style + シーケンス図設定) を返す。
+     * モーダルダイアログを開き、編集された {@link Result} (Style + シーケンス図 + クラス図設定) を返す。
      * キャンセル時は null を返す。
      */
     public static Result showDialog(Component parent, DiagramStyle currentStyle,
                                      boolean currentSeqShowComments,
                                      PlantUmlClassDiagram.CommentStyle currentSeqCommentStyle,
                                      PlantUmlSequenceDiagram.CommentPlacement currentSeqPlacement,
-                                     boolean currentSeqQualify) {
+                                     boolean currentSeqQualify,
+                                     ClassDiagramPrefs currentClassPrefs) {
         Window owner = (parent instanceof Window)
                 ? (Window) parent
                 : javax.swing.SwingUtilities.getWindowAncestor(parent);
@@ -402,7 +571,7 @@ public final class StyleSettingsDialog extends JDialog {
                         : PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
         StyleSettingsDialog dlg = new StyleSettingsDialog(owner, initial,
                 currentSeqShowComments, initialSeqStyle, initialSeqPlacement,
-                currentSeqQualify);
+                currentSeqQualify, currentClassPrefs);
         dlg.setVisible(true);
         return dlg.result;
     }

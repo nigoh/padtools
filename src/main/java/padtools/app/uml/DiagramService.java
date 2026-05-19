@@ -103,6 +103,9 @@ public final class DiagramService {
                 o.includeLegend = request.isIncludeLegend();
                 o.maxClasses = maxClasses;
                 o.interactiveLinks = request.isInteractiveLinks();
+                // Setting → Options (GUI で永続化されたクラス図設定の既定)
+                applyClassDiagramSettings(o);
+                // Scope → Options (Scope に明示値があれば上書き)
                 applyScopeToClassOptions(request.getScope(), o);
                 if (scopedTotal < originalTotal) {
                     o.footerWarning = "scope filter: " + scopedTotal + " of "
@@ -216,6 +219,39 @@ public final class DiagramService {
             o.qualifyMethodNames = s.isSequenceQualifyMethodNames();
         } catch (RuntimeException ignored) {
             // 設定取得失敗時は既定値のまま (showComments=true, INLINE, AT_CALL_SITE)
+        }
+    }
+
+    /**
+     * GUI で永続化されたクラス図設定 ({@code classDiagram.*} キー) を
+     * {@link PlantUmlClassDiagram.Options} に反映する。
+     * {@link padtools.SettingManager} が利用できない場合 (テスト / 単体実行) は既定値のまま。
+     */
+    private static void applyClassDiagramSettings(PlantUmlClassDiagram.Options o) {
+        try {
+            padtools.Setting s = padtools.SettingManager.getInstance().getSetting();
+            if (s == null) {
+                return;
+            }
+            o.showFields = s.isClassDiagramShowFields();
+            o.showMethods = s.isClassDiagramShowMethods();
+            o.showAnnotations = s.isClassDiagramShowAnnotations();
+            o.publicOnly = s.isClassDiagramPublicOnly();
+            o.excludeExternalLibraries = s.isClassDiagramExcludeExternal();
+            o.commentMaxLength = s.getClassDiagramCommentMaxLength();
+            String csv = s.getClassDiagramHiddenAnnotations();
+            if (csv != null) {
+                java.util.Set<String> set = new java.util.LinkedHashSet<>();
+                for (String tok : csv.split(",")) {
+                    String t = tok.trim();
+                    if (!t.isEmpty()) {
+                        set.add(t);
+                    }
+                }
+                o.hiddenAnnotations = new java.util.HashSet<>(set);
+            }
+        } catch (RuntimeException ignored) {
+            // 設定取得失敗時は既定値のまま
         }
     }
 

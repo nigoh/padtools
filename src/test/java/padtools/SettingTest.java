@@ -199,4 +199,53 @@ public class SettingTest {
         // PAD 関連キーは無視され、ウィンドウ幅だけ反映される
         assertEquals(999, loaded.getWindowWidth());
     }
+
+    @org.junit.Test
+    public void testClassDiagramSettingsDefaults() {
+        Setting s = new Setting();
+        assertEquals("BALANCED", s.getClassDiagramLastPreset());
+        assertTrue(s.isClassDiagramShowFields());
+        assertTrue(s.isClassDiagramShowMethods());
+        assertTrue(s.isClassDiagramShowAnnotations());
+        assertFalse(s.isClassDiagramPublicOnly());
+        assertFalse(s.isClassDiagramExcludeExternal());
+        assertEquals(80, s.getClassDiagramCommentMaxLength());
+        assertEquals("Override,SuppressWarnings",
+                s.getClassDiagramHiddenAnnotations());
+    }
+
+    @org.junit.Test
+    public void testClassDiagramSettingsRoundTrip() throws java.io.IOException {
+        Setting s = new Setting();
+        s.setClassDiagramLastPreset("MINIMAL");
+        s.setClassDiagramShowFields(false);
+        s.setClassDiagramShowMethods(true);
+        s.setClassDiagramShowAnnotations(false);
+        s.setClassDiagramPublicOnly(true);
+        s.setClassDiagramExcludeExternal(true);
+        s.setClassDiagramCommentMaxLength(0);
+        s.setClassDiagramHiddenAnnotations("Override,Nullable,NonNull");
+
+        java.io.File file = java.io.File.createTempFile("cd-settings", ".xml");
+        file.deleteOnExit();
+        s.saveToFile(file);
+        Setting loaded = Setting.loadFromFile(file);
+
+        assertEquals("MINIMAL", loaded.getClassDiagramLastPreset());
+        assertFalse(loaded.isClassDiagramShowFields());
+        assertTrue(loaded.isClassDiagramShowMethods());
+        assertFalse(loaded.isClassDiagramShowAnnotations());
+        assertTrue(loaded.isClassDiagramPublicOnly());
+        assertTrue(loaded.isClassDiagramExcludeExternal());
+        assertEquals(0, loaded.getClassDiagramCommentMaxLength());
+        assertEquals("Override,Nullable,NonNull",
+                loaded.getClassDiagramHiddenAnnotations());
+    }
+
+    @org.junit.Test
+    public void testClassDiagramSettingsCommentMaxLengthClampsNegative() {
+        Setting s = new Setting();
+        s.setClassDiagramCommentMaxLength(-5);
+        assertEquals(0, s.getClassDiagramCommentMaxLength());
+    }
 }

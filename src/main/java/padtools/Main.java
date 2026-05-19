@@ -16,6 +16,14 @@ import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
+import padtools.core.aaos.AidlBinding;
+import padtools.core.aaos.AidlBindingResolver;
+import padtools.core.aaos.MarkdownAidlBindingReport;
+import padtools.core.aaos.MarkdownVhalReport;
+import padtools.core.aaos.PlantUmlVhalFlowDiagram;
+import padtools.core.aaos.VehiclePropertyCatalog;
+import padtools.core.aaos.VhalAccess;
+import padtools.core.aaos.VhalAnalyzer;
 import padtools.core.impact.ImpactAnalyzer;
 import padtools.core.impact.ImpactGraph;
 import padtools.core.impact.MarkdownImpactReport;
@@ -121,6 +129,8 @@ public class Main {
         final Option optImpact = new Option(null, "impact", true);
         final Option optImpactDepth = new Option(null, "impact-depth", true);
         final Option optRefFind = new Option(null, "ref-find", true);
+        final Option optVhalFlow = new Option(null, "vhal-flow", false);
+        final Option optAidlBinding = new Option(null, "aidl-binding", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -136,7 +146,8 @@ public class Main {
                 optPreset, optNoFields, optNoMethods, optPublicOnly,
                 optExcludeExternal, optExcludePackage, optRelation, optMode,
                 optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
-                optImpact, optImpactDepth, optRefFind});
+                optImpact, optImpactDepth, optRefFind,
+                optVhalFlow, optAidlBinding});
 
         try {
             optParser.parse(args);
@@ -245,6 +256,14 @@ public class Main {
         if (optRefFind.isSet()) {
             handleRefFind(file_in, file_out, optRefFind.getArguments().getLast(),
                     listener);
+            return;
+        }
+        if (optVhalFlow.isSet()) {
+            handleVhalFlow(file_in, file_out, listener);
+            return;
+        }
+        if (optAidlBinding.isSet()) {
+            handleAidlBinding(file_in, file_out, listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -589,6 +608,46 @@ public class Main {
                 result.getIndex(), result.getDependencyIndex(), listener);
         builder.addAll(result.getClasses());
         return idx;
+    }
+
+    /**
+     * {@code --vhal-flow}: プロジェクトを走査して
+     * {@link padtools.core.aaos.CarPropertyManager} 系呼び出しを検出し、
+     * Property 別 GET/SET/SUBSCRIBE フローを Markdown + PlantUML で出力する。
+     */
+    private static void handleVhalFlow(File fileIn, File fileOut,
+                                          ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--vhal-flow requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        VhalAnalyzer analyzer = new VhalAnalyzer();
+        java.util.List<VhalAccess> accesses = analyzer.analyzeProject(fileIn);
+        VehiclePropertyCatalog catalog = VehiclePropertyCatalog.scanProject(fileIn);
+        String md = MarkdownVhalReport.render(accesses, catalog);
+        String puml = PlantUmlVhalFlowDiagram.render(accesses);
+        writeImpactOutput(fileOut, md, puml);
+    }
+
+    /**
+     * {@code --aidl-binding}: プロジェクト内の AIDL インタフェースと、その
+     * {@code Stub} を継承する実装クラスとの対応表を Markdown で出力する。
+     */
+    private static void handleAidlBinding(File fileIn, File fileOut,
+                                            ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--aidl-binding requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        UmlGenerator.ProjectParseResult result =
+                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
+                        null, null, false, UmlGenerator.ParseMode.FULL);
+        java.util.Map<String, java.util.List<AidlBinding>> bindings =
+                new AidlBindingResolver().resolve(result.getClasses());
+        String md = MarkdownAidlBindingReport.render(bindings);
+        writeText(fileOut, md);
     }
 
     /**
@@ -1164,6 +1223,10 @@ public class Main {
         System.err.println("  --impact-depth N: BFS depth for --impact (default 3).");
         System.err.println("  --ref-find SYMBOL: Print every reference site of a class"
                 + " FQN or FQN.method (plain text, grep-friendly).");
+        System.err.println("  --vhal-flow: Detect CarPropertyManager get/set/subscribe"
+                + " usage in the project and emit Markdown + PlantUML flow.");
+        System.err.println("  --aidl-binding: List AIDL interfaces and the classes that"
+                + " extend their Stub (Markdown table).");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

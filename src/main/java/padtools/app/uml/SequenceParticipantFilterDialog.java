@@ -91,11 +91,12 @@ final class SequenceParticipantFilterDialog extends JDialog {
             result = null;
             setVisible(false);
         });
-        right.add(cancel);
         right.add(ok);
+        right.add(cancel);
 
         p.add(left, BorderLayout.WEST);
         p.add(right, BorderLayout.EAST);
+        DialogUtils.installEscapeAndDefault(this, ok);
         return p;
     }
 

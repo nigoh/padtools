@@ -96,6 +96,7 @@ public class LayoutFileChooserDialog extends JDialog {
 
         ok.addActionListener(e -> commit());
         cancel.addActionListener(e -> dispose());
+        DialogUtils.installEscapeAndDefault(this, ok);
 
         list.addMouseListener(new MouseAdapter() {
             @Override

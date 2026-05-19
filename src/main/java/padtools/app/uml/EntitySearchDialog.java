@@ -122,6 +122,7 @@ public class EntitySearchDialog extends JDialog {
         ok.addActionListener(e -> commit());
         drill.addActionListener(e -> commitDrillDown());
         cancel.addActionListener(e -> dispose());
+        DialogUtils.installEscapeAndDefault(this, ok);
 
         tree.addMouseListener(new MouseAdapter() {
             @Override

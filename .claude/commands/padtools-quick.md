@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding` | 図/レポートの種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -35,6 +35,8 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `ref-find` | `--ref-find SYMBOL` | シンボルへの参照箇所 grep 互換テキスト出力 |
 | `vhal-flow` | `--vhal-flow` | CarPropertyManager の get/set/subscribe フロー (Markdown + PlantUML) |
 | `aidl-binding` | `--aidl-binding` | AIDL ↔ Stub 実装クラスの紐付け表 (Markdown) |
+| `er-diagram` | `--er-diagram` | Room @Entity の ER 図 (PlantUML) |
+| `data-flow` | `--data-flow` | Room Entity / DAO / Database 全体レポート (Markdown + ER PlantUML) |
 
 ## 例
 
@@ -68,6 +70,12 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # AAOS: AIDL インタフェースと実装クラスの紐付け
 /padtools-quick aidl-binding ~/AOSP/packages/services/Car
+
+# Room データ層: Entity / DAO / Database を一括レポート
+/padtools-quick data-flow ~/projects/my-android-app
+
+# Room ER 図のみ (PlantUML)
+/padtools-quick er-diagram ~/projects/my-android-app
 ```
 
 ## 出力

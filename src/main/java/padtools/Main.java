@@ -24,6 +24,9 @@ import padtools.core.aaos.PlantUmlVhalFlowDiagram;
 import padtools.core.aaos.VehiclePropertyCatalog;
 import padtools.core.aaos.VhalAccess;
 import padtools.core.aaos.VhalAnalyzer;
+import padtools.core.dataflow.MarkdownDataFlowReport;
+import padtools.core.dataflow.PlantUmlErDiagram;
+import padtools.core.dataflow.RoomAnalyzer;
 import padtools.core.impact.ImpactAnalyzer;
 import padtools.core.impact.ImpactGraph;
 import padtools.core.impact.MarkdownImpactReport;
@@ -131,6 +134,8 @@ public class Main {
         final Option optRefFind = new Option(null, "ref-find", true);
         final Option optVhalFlow = new Option(null, "vhal-flow", false);
         final Option optAidlBinding = new Option(null, "aidl-binding", false);
+        final Option optErDiagram = new Option(null, "er-diagram", false);
+        final Option optDataFlow = new Option(null, "data-flow", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -147,7 +152,7 @@ public class Main {
                 optExcludeExternal, optExcludePackage, optRelation, optMode,
                 optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
                 optImpact, optImpactDepth, optRefFind,
-                optVhalFlow, optAidlBinding});
+                optVhalFlow, optAidlBinding, optErDiagram, optDataFlow});
 
         try {
             optParser.parse(args);
@@ -264,6 +269,14 @@ public class Main {
         }
         if (optAidlBinding.isSet()) {
             handleAidlBinding(file_in, file_out, listener);
+            return;
+        }
+        if (optErDiagram.isSet()) {
+            handleErDiagram(file_in, file_out, listener);
+            return;
+        }
+        if (optDataFlow.isSet()) {
+            handleDataFlow(file_in, file_out, listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -648,6 +661,44 @@ public class Main {
                 new AidlBindingResolver().resolve(result.getClasses());
         String md = MarkdownAidlBindingReport.render(bindings);
         writeText(fileOut, md);
+    }
+
+    /**
+     * {@code --er-diagram}: プロジェクト内 Room {@code @Entity} の ER 図を出力する。
+     */
+    private static void handleErDiagram(File fileIn, File fileOut,
+                                          ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--er-diagram requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        UmlGenerator.ProjectParseResult result =
+                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
+                        null, null, false, UmlGenerator.ParseMode.FULL);
+        RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
+        String puml = PlantUmlErDiagram.render(room);
+        writeUmlOutput(fileOut, puml);
+    }
+
+    /**
+     * {@code --data-flow}: Room の Entity / DAO / Database を集計した
+     * Markdown レポートと ER PlantUML を一括出力する。
+     */
+    private static void handleDataFlow(File fileIn, File fileOut,
+                                         ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--data-flow requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        UmlGenerator.ProjectParseResult result =
+                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
+                        null, null, false, UmlGenerator.ParseMode.FULL);
+        RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
+        String md = MarkdownDataFlowReport.render(room);
+        String puml = PlantUmlErDiagram.render(room);
+        writeImpactOutput(fileOut, md, puml);
     }
 
     /**
@@ -1227,6 +1278,10 @@ public class Main {
                 + " usage in the project and emit Markdown + PlantUML flow.");
         System.err.println("  --aidl-binding: List AIDL interfaces and the classes that"
                 + " extend their Stub (Markdown table).");
+        System.err.println("  --er-diagram: Generate a PlantUML ER diagram for Room"
+                + " @Entity classes grouped by @Database.");
+        System.err.println("  --data-flow: Markdown report + ER diagram covering Room"
+                + " @Entity / @Dao / @Database in the project.");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

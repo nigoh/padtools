@@ -38,7 +38,6 @@ import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
-import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -166,12 +165,11 @@ public class UmlMainFrame extends JFrame {
         // 動的タブ機能 (機能 2) は "Tabs" タブ内に DiagramTabPane を配置する。
         // この設計だと既存ビュー (Preview/Source/Manifest) には触らずに済むため、
         // メソッド差し替えやズーム連動などのリグレッションを最小化できる。
-        tabPane = new DiagramTabPane(cache, status::setText);
+        tabPane = new DiagramTabPane(cache, status::setText,
+                previewPanel, sourcePanel, e -> chooseAndExport());
         rightTabs = new JTabbedPane();
-        rightTabs.addTab("Preview", buildPreviewTabComponent());
-        rightTabs.addTab("PlantUML Source", sourcePanel);
+        rightTabs.addTab("Preview", tabPane);
         rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
-        rightTabs.addTab("Tabs", tabPane);
         dynamicTabsIndex = rightTabs.indexOfComponent(tabPane);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
@@ -193,25 +191,6 @@ public class UmlMainFrame extends JFrame {
         if (initialProject != null && initialProject.isDirectory()) {
             SwingUtilities.invokeLater(() -> loadProject(initialProject));
         }
-    }
-
-    /**
-     * Preview タブの内容物を構築する。プレビュー本体を {@link JScrollPane} に
-     * 入れた上で、上部右端に小さな "Save..." ボタンを {@link BorderLayout} で配置し、
-     * ビューワーから直接 1 クリックでエクスポート ({@link #chooseAndExport()}) を起動できるようにする。
-     */
-    private JComponent buildPreviewTabComponent() {
-        JPanel container = new JPanel(new BorderLayout());
-        JPanel toolbar = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 2));
-        JButton saveButton = new JButton("Save...");
-        saveButton.setToolTipText("Save current diagram as SVG / PNG / PUML (Ctrl+S)");
-        saveButton.setMargin(new Insets(2, 8, 2, 8));
-        saveButton.setFocusable(false);
-        saveButton.addActionListener(e -> chooseAndExport());
-        toolbar.add(saveButton);
-        container.add(toolbar, BorderLayout.NORTH);
-        container.add(new JScrollPane(previewPanel), BorderLayout.CENTER);
-        return container;
     }
 
     // --- メニュー -------------------------------------------------------------
@@ -1174,10 +1153,7 @@ public class UmlMainFrame extends JFrame {
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        DiagramScope previous = currentScope;
-        if (previous != null) {
-            scopeHistory.push(previous);
-        }
+        scopeHistory.push(encodeScope(currentScope));
         // 新規ドリルダウン時は forward 履歴をクリア (ブラウザ動作と同じ)
         forwardHistory.clear();
         DiagramScope.Builder b = DiagramScope.builder()

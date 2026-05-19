@@ -6,6 +6,11 @@ import padtools.core.formats.uml.db.dao.ClassesDao;
 import padtools.core.formats.uml.db.dao.FilesDao;
 import padtools.core.formats.uml.db.dao.MembersDao;
 import padtools.core.formats.uml.db.dao.ModulesDao;
+import padtools.core.formats.uml.db.dao.RefsDao;
+import padtools.core.formats.uml.db.dao.UnresolvedDao;
+import padtools.core.refs.ReferenceIndex;
+import padtools.core.refs.ReferenceKey;
+import padtools.core.refs.ReferenceSite;
 
 import java.io.File;
 import java.sql.Connection;
@@ -13,6 +18,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -106,6 +112,32 @@ public final class IndexReader {
     /** 登録済みモジュール名一覧。 */
     public Map<String, String> modules() throws SQLException {
         return ModulesDao.listAll(conn);
+    }
+
+    /**
+     * DB の refs / unresolved 全件からメモリ {@link ReferenceIndex} を再構成する。
+     *
+     * <p>{@link padtools.core.formats.uml.db.ingest.RefsIngestor#ingest} と対になる
+     * 双方向 round-trip 用 API。{@code ImpactAnalyzer} など既存メモリ前提のコードは
+     * これを介して DB バックのデータを使える (PR4 で本格活用)。</p>
+     */
+    public ReferenceIndex loadReferenceIndex() throws SQLException {
+        ReferenceIndex index = new ReferenceIndex();
+        Map<ReferenceKey, List<ReferenceSite>> all = RefsDao.loadAll(conn);
+        for (Map.Entry<ReferenceKey, List<ReferenceSite>> e : all.entrySet()) {
+            for (ReferenceSite site : e.getValue()) {
+                index.addReference(e.getKey(), site);
+            }
+        }
+        for (String sym : UnresolvedDao.listAllSymbols(conn)) {
+            index.addUnresolved(sym);
+        }
+        return index;
+    }
+
+    /** refs テーブルの総行数 (診断用)。 */
+    public int referenceCount() throws SQLException {
+        return RefsDao.count(conn);
     }
 
     // ---- private ----

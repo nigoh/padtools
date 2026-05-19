@@ -24,9 +24,10 @@ public final class SchemaInitializer {
      *   <li>v1 (PR1): {@code meta} のみ</li>
      *   <li>v2 (PR2): {@code modules / files / classes / class_interfaces /
      *                   class_imports / fields / methods} を追加</li>
+     *   <li>v3 (PR3): {@code refs / unresolved} を追加 (逆参照インデックスを永続化)</li>
      * </ul>
      */
-    public static final int SCHEMA_VERSION = 2;
+    public static final int SCHEMA_VERSION = 3;
 
     private SchemaInitializer() {
     }
@@ -164,6 +165,40 @@ public final class SchemaInitializer {
             );
             st.executeUpdate("CREATE INDEX idx_methods_class ON methods(class_id)");
             st.executeUpdate("CREATE INDEX idx_methods_name  ON methods(name)");
+
+            // 8) refs (逆参照インデックス。最大規模テーブル)
+            //    ReferenceKey (callee 側) と ReferenceSite (caller 側) を 1 行に展開する。
+            //    N-hop 逆引きは idx_refs_callee で「callee_owner_qn + callee_member + sym_kind」
+            //    引きの BFS、増分更新は idx_refs_file (caller 側ファイル) の CASCADE。
+            st.executeUpdate(
+                "CREATE TABLE refs ("
+                + "  id              INTEGER PRIMARY KEY,"
+                + "  callee_owner_qn TEXT NOT NULL,"
+                + "  callee_member   TEXT,"
+                + "  sym_kind        TEXT NOT NULL,"
+                + "  caller_qn       TEXT NOT NULL,"
+                + "  caller_method   TEXT,"
+                + "  file_id         INTEGER REFERENCES files(id) ON DELETE CASCADE,"
+                + "  line_hint       INTEGER NOT NULL DEFAULT -1,"
+                + "  ref_kind        TEXT NOT NULL"
+                + ")"
+            );
+            st.executeUpdate(
+                "CREATE INDEX idx_refs_callee "
+                + "ON refs(callee_owner_qn, callee_member, sym_kind)");
+            st.executeUpdate("CREATE INDEX idx_refs_caller ON refs(caller_qn)");
+            st.executeUpdate("CREATE INDEX idx_refs_file   ON refs(file_id)");
+
+            // 9) unresolved (名前解決失敗の診断ログ)
+            st.executeUpdate(
+                "CREATE TABLE unresolved ("
+                + "  id        INTEGER PRIMARY KEY,"
+                + "  symbol    TEXT NOT NULL,"
+                + "  caller_qn TEXT,"
+                + "  file_id   INTEGER REFERENCES files(id) ON DELETE CASCADE"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_unresolved_symbol ON unresolved(symbol)");
         }
     }
 

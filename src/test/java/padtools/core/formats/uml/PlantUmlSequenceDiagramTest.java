@@ -531,6 +531,31 @@ public class PlantUmlSequenceDiagramTest {
     }
 
     @Test
+    public void testMultiLineBlockCommentAppearsInUml() {
+        // 2行ブロックコメントが両行とも UML の note に出力されることを検証
+        String src =
+                "class A {\n"
+              + "  /** run JavaDoc */\n"
+              + "  void run() {\n"
+              + "    /*\n"
+              + "     * 行1\n"
+              + "     * 行2\n"
+              + "     */\n"
+              + "    b.doIt();\n"
+              + "  }\n"
+              + "  B b;\n"
+              + "}\n"
+              + "class B { void doIt() {} }\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        o.commentPlacement = PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertTrue(puml, puml.contains("// 行1"));
+        assertTrue(puml, puml.contains("// 行2"));
+    }
+
+    @Test
     public void testBodyCommentsCanBeDisabled() {
         String src =
                 "class A {\n"

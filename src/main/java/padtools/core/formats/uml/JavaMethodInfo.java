@@ -168,6 +168,7 @@ public class JavaMethodInfo {
     private boolean isAbstract;
     private boolean isConstructor;
     private final List<String> annotations = new ArrayList<>();
+    private final List<String> throwsTypes = new ArrayList<>();
     private final List<Statement> statements = new ArrayList<>();
     private String comment;
     private final List<String> bodyComments = new ArrayList<>();
@@ -230,6 +231,11 @@ public class JavaMethodInfo {
 
     public List<String> getAnnotations() {
         return annotations;
+    }
+
+    /** {@code throws} 節で宣言された例外型名のリスト (宣言順)。 */
+    public List<String> getThrowsTypes() {
+        return throwsTypes;
     }
 
     /** メソッド本体の構造化された文ツリー。 */

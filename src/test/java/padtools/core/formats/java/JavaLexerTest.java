@@ -200,6 +200,47 @@ public class JavaLexerTest {
     }
 
     @Test
+    public void testExpandUnicodeEscapeSimple() {
+        // A == 'A'
+        assertEquals("A", JavaLexer.expandUnicodeEscapes("\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeInIdentifier() {
+        // class A {} → class A {}
+        assertEquals("class A {}", JavaLexer.expandUnicodeEscapes("class \\u0041 {}"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeMultipleUs() {
+        // \uuu0041 も有効 (UnicodeMarker: u {u})
+        assertEquals("A", JavaLexer.expandUnicodeEscapes("\\uuu0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeEscapedBackslash() {
+        // \\u0041 は \\ + u0041 のままで、エスケープ展開されない
+        assertEquals("\\\\u0041", JavaLexer.expandUnicodeEscapes("\\\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeOddBackslashes() {
+        // \\A → \\ + A (3 個の \\ は 2 個のリテラル + 1 個のエスケープ開始)
+        assertEquals("\\\\A", JavaLexer.expandUnicodeEscapes("\\\\\\u0041"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeNoEscape() {
+        assertEquals("hello", JavaLexer.expandUnicodeEscapes("hello"));
+    }
+
+    @Test
+    public void testExpandUnicodeEscapeInvalid() {
+        // 妥当な 4 桁の 16 進数でない場合は展開しない
+        assertEquals("\\u123z", JavaLexer.expandUnicodeEscapes("\\u123z"));
+    }
+
+    @Test
     public void testGetSource() {
         JavaLexer lex = new JavaLexer("abc");
         lex.tokenize();

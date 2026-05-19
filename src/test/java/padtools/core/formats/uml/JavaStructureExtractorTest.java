@@ -642,6 +642,99 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testNestedAnnotationInFieldType() {
+        // ネストアノテーション @Foo(bar = @Baz("x")) で stripAnnotations が
+        // 早期終了せず最終的に型 (String) のみが残ること
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { @Foo(bar = @Baz(\"x\")) String s; }");
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("s", cs.get(0).getFields().get(0).getName());
+        assertEquals("String", cs.get(0).getFields().get(0).getType());
+    }
+
+    @Test
+    public void testDeeplyNestedGenericsTriggers3CloseAngles() {
+        // Foo<Bar<Baz<Qux>>> は `>>>` 1 トークンで 3 階層閉じる。
+        // skipBalanced / readTypeName が depth 補正で早期終了しないこと
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { Foo<Bar<Baz<Qux>>> field; void m() {} }");
+        assertEquals(1, cs.get(0).getFields().size());
+        assertEquals("field", cs.get(0).getFields().get(0).getName());
+        assertEquals(1, cs.get(0).getMethods().size());
+        assertEquals("m", cs.get(0).getMethods().get(0).getName());
+    }
+
+    @Test
+    public void testLocalClassInMethodBody() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class Outer { void m() { class Local { int x; } } }");
+        assertEquals(2, cs.size());
+        JavaClassInfo local = cs.stream()
+                .filter(c -> "Local".equals(c.getSimpleName()))
+                .findFirst().orElse(null);
+        assertNotNull(local);
+        assertEquals(JavaClassInfo.Kind.CLASS, local.getKind());
+        assertEquals(1, local.getFields().size());
+    }
+
+    @Test
+    public void testLocalRecordWithModifier() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class Outer { void m() { final record P(int x) {} } }");
+        JavaClassInfo p = cs.stream()
+                .filter(c -> "P".equals(c.getSimpleName()))
+                .findFirst().orElse(null);
+        assertNotNull(p);
+        assertEquals(JavaClassInfo.Kind.RECORD, p.getKind());
+        assertTrue(p.getModifiers().contains("final"));
+    }
+
+    @Test
+    public void testThrowsClauseSingle() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() throws java.io.IOException {} }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        assertEquals(1, m.getThrowsTypes().size());
+        assertEquals("java.io.IOException", m.getThrowsTypes().get(0));
+    }
+
+    @Test
+    public void testThrowsClauseMultiple() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() throws IOException, SQLException, RuntimeException; }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        assertEquals(3, m.getThrowsTypes().size());
+        assertEquals("IOException", m.getThrowsTypes().get(0));
+        assertEquals("SQLException", m.getThrowsTypes().get(1));
+        assertEquals("RuntimeException", m.getThrowsTypes().get(2));
+    }
+
+    @Test
+    public void testThrowsClauseAbsent() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() {} }");
+        assertTrue(cs.get(0).getMethods().get(0).getThrowsTypes().isEmpty());
+    }
+
+    @Test
+    public void testUnicodeEscapeInClassName() {
+        // Foo → Foo
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class \\u0046oo { int x; }");
+        assertEquals(1, cs.size());
+        assertEquals("Foo", cs.get(0).getSimpleName());
+    }
+
+    @Test
+    public void testUnicodeEscapedKeyword() {
+        // class → class
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "\\u0063lass Bar {}");
+        assertEquals(1, cs.size());
+        assertEquals("Bar", cs.get(0).getSimpleName());
+    }
+
+    @Test
     public void testTextBlockWithBracesAndQuotes() {
         // テキストブロック内の { } や " は構造を壊さない
         String src = "class A {\n"

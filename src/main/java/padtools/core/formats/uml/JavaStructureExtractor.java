@@ -36,9 +36,12 @@ public final class JavaStructureExtractor {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
-        List<JavaToken> tokens = new JavaLexer(source).tokenize();
-        List<JavaCommentScanner.Comment> comments = JavaCommentScanner.scan(source);
-        Extractor e = new Extractor(tokens, source, comments,
+        // Java の Unicode エスケープは字句解析の前に展開される (JLS 3.3)。
+        // 識別子・キーワードを含むエスケープを正しく扱うため、入口で 1 度だけ展開する。
+        String expanded = JavaLexer.expandUnicodeEscapes(source);
+        List<JavaToken> tokens = new JavaLexer(expanded).tokenize();
+        List<JavaCommentScanner.Comment> comments = JavaCommentScanner.scan(expanded);
+        Extractor e = new Extractor(tokens, expanded, comments,
                 listener != null ? listener : ErrorListener.silent());
         e.parseFile();
         return Collections.unmodifiableList(e.results);
@@ -743,7 +746,12 @@ public final class JavaStructureExtractor {
             m.setComment(comment);
             // パラメータ
             parseParameters(m);
-            // throws ...
+            // throws Foo, Bar.Baz, com.x.Quux
+            if (!atEnd() && peek().isKw("throws")) {
+                next();
+                m.getThrowsTypes().addAll(readTypeList());
+            }
+            // 残り (アノテーション付きパラメータ後の改行ノイズなど) を { または ; までスキップ
             while (!atEnd() && !peek().is("{") && !peek().is(";")) {
                 next();
             }
@@ -884,6 +892,12 @@ public final class JavaStructureExtractor {
             if (peek().is("{")) {
                 next();
                 parseStatementBlock(out);
+                return;
+            }
+            // ローカルクラス / record / interface / enum: 修飾子・アノテーション前置を許容
+            int localDeclKw = peekLocalClassDeclKeyword();
+            if (localDeclKw >= 0) {
+                parseLocalClassDecl();
                 return;
             }
             if (peek().isKw("if")) {
@@ -1052,6 +1066,67 @@ public final class JavaStructureExtractor {
                 next();
             }
             out.add(new JavaMethodInfo.Continue(label));
+        }
+
+        /**
+         * 現在位置がローカルクラス宣言の開始に見える場合、{@code class}/{@code record}/
+         * {@code interface}/{@code enum} キーワードのトークン位置を返す。違えば -1。
+         * 修飾子 ({@code final}, {@code abstract}, {@code static}) とアノテーション
+         * ({@code @Foo} / {@code @Foo(...)}) を間に許容する。
+         */
+        private int peekLocalClassDeclKeyword() {
+            int p = idx;
+            while (p < tokens.size()) {
+                JavaToken t = tokens.get(p);
+                if (t.isKw("class") || t.isKw("interface")
+                        || t.isKw("enum") || t.isKw("record")) {
+                    return p;
+                }
+                if (t.is("@") && p + 1 < tokens.size()
+                        && tokens.get(p + 1).type == JavaToken.Type.IDENT) {
+                    p += 2;
+                    while (p < tokens.size()
+                            && (tokens.get(p).type == JavaToken.Type.IDENT
+                                || tokens.get(p).is("."))) {
+                        p++;
+                    }
+                    if (p < tokens.size() && tokens.get(p).is("(")) {
+                        p = skipBalancedAt(p, "(", ")");
+                    }
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT && MODIFIERS.contains(t.text)) {
+                    p++;
+                    continue;
+                }
+                return -1;
+            }
+            return -1;
+        }
+
+        /**
+         * メソッド本体内のローカル型宣言 ({@code class}/{@code record}/
+         * {@code interface}/{@code enum}) を読み、トップレベル/メンバ宣言と同じく
+         * {@link #results} に追加する。enclosingClass には現在の最も内側のクラス名を
+         * 設定する。
+         */
+        private void parseLocalClassDecl() {
+            int declStart = peek().start;
+            List<String> annotations = readAnnotations();
+            List<String> mods = readModifiers();
+            String comment = findCommentBefore(declStart);
+            if (peek().isKw("class")) {
+                parseClassDecl(JavaClassInfo.Kind.CLASS, mods, annotations, comment);
+            } else if (peek().isKw("interface")) {
+                parseClassDecl(JavaClassInfo.Kind.INTERFACE, mods, annotations, comment);
+            } else if (peek().isKw("enum")) {
+                parseClassDecl(JavaClassInfo.Kind.ENUM, mods, annotations, comment);
+            } else if (peek().isKw("record")) {
+                parseClassDecl(JavaClassInfo.Kind.RECORD, mods, annotations, comment);
+            } else {
+                // 万一一致しない場合は文として進める
+                next();
+            }
         }
 
         /** {@code if (...)} 単体 (else 連鎖含む) を 1 つの {@link JavaMethodInfo.Block} として読む。 */
@@ -1377,8 +1452,77 @@ public final class JavaStructureExtractor {
         }
 
         private static String stripAnnotations(String s) {
-            // 単純に @Foo(...) や @Foo を取り除く
-            return s.replaceAll("@\\w+(\\.\\w+)*(\\([^)]*\\))?", " ").trim();
+            // @Foo / @Foo.Bar / @Foo(args) を取り除く。引数部分はネストした括弧や
+            // 文字列リテラル (@Foo(bar = @Baz("x"))) を考慮して手動で対応する括弧
+            // までスキップする。正規表現の [^)]* だと最初の ) で止まってしまうため。
+            if (s == null || s.indexOf('@') < 0) {
+                return s == null ? null : s.trim();
+            }
+            StringBuilder out = new StringBuilder(s.length());
+            int i = 0;
+            int n = s.length();
+            while (i < n) {
+                char c = s.charAt(i);
+                if (c == '@' && i + 1 < n
+                        && (Character.isJavaIdentifierStart(s.charAt(i + 1)))) {
+                    // @ + 識別子 (a.b.c)
+                    i++;
+                    while (i < n) {
+                        char ic = s.charAt(i);
+                        if (Character.isJavaIdentifierPart(ic) || ic == '.') {
+                            i++;
+                        } else {
+                            break;
+                        }
+                    }
+                    // 引数 (...) はネスト・文字列対応でスキップ
+                    if (i < n && s.charAt(i) == '(') {
+                        i = skipBalancedParens(s, i, n);
+                    }
+                    out.append(' ');
+                    continue;
+                }
+                out.append(c);
+                i++;
+            }
+            return out.toString().trim();
+        }
+
+        /**
+         * {@code s[from]} の {@code (} に対応する {@code )} の次のインデックスを返す。
+         * 文字列リテラルとネストを考慮する。
+         */
+        private static int skipBalancedParens(String s, int from, int n) {
+            int depth = 0;
+            int i = from;
+            while (i < n) {
+                char c = s.charAt(i);
+                if (c == '"' || c == '\'') {
+                    char quote = c;
+                    i++;
+                    while (i < n && s.charAt(i) != quote) {
+                        if (s.charAt(i) == '\\' && i + 1 < n) {
+                            i += 2;
+                        } else {
+                            i++;
+                        }
+                    }
+                    if (i < n) {
+                        i++;
+                    }
+                    continue;
+                }
+                if (c == '(') {
+                    depth++;
+                } else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        return i + 1;
+                    }
+                }
+                i++;
+            }
+            return i;
         }
 
         private static String normalizeType(String s) {

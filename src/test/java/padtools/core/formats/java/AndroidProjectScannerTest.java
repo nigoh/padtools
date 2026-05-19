@@ -358,4 +358,40 @@ public class AndroidProjectScannerTest {
         assertTrue(foundV21);
     }
 
+    // --- HIDL (.hal) 走査 (includeHidl) ---
+
+    @Test
+    public void testIncludeHidlPicksUpHalFiles() throws IOException {
+        File hidlDir = new File(root, "hidl/android/hardware/foo");
+        assertTrue(hidlDir.mkdirs());
+        writeFile(new File(hidlDir, "IFoo.hal"),
+                "package android.hardware.foo@1.0;\ninterface IFoo {};");
+        writeFile(new File(hidlDir, "IBar.hal"),
+                "package android.hardware.foo@1.0;\ninterface IBar {};");
+
+        AndroidProjectScanner.Options o = new AndroidProjectScanner.Options();
+        o.includeHidl = true;
+        List<File> files = AndroidProjectScanner.scan(root, o);
+        int found = 0;
+        for (File f : files) {
+            if (f.getName().endsWith(".hal")) {
+                found++;
+            }
+        }
+        assertEquals(2, found);
+    }
+
+    @Test
+    public void testHidlNotIncludedByDefault() throws IOException {
+        File hidlDir = new File(root, "hidl/android/hardware/foo");
+        assertTrue(hidlDir.mkdirs());
+        writeFile(new File(hidlDir, "IFoo.hal"),
+                "package android.hardware.foo@1.0;\ninterface IFoo {};");
+        List<File> files = AndroidProjectScanner.scan(root);
+        for (File f : files) {
+            assertFalse(".hal should not be returned by default: " + f,
+                    f.getName().endsWith(".hal"));
+        }
+    }
+
 }

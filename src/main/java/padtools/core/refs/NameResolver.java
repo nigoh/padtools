@@ -50,6 +50,10 @@ public final class NameResolver {
         if (name.isEmpty()) {
             return simpleOrFqn;
         }
+        // Kotlin nullable マーカー {@code ?} を除去 (例: {@code Listener?} → {@code Listener})
+        while (name.endsWith("?")) {
+            name = name.substring(0, name.length() - 1).trim();
+        }
         // 配列マークを除去
         while (name.endsWith("[]")) {
             name = name.substring(0, name.length() - 2);

@@ -665,6 +665,23 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
+     * ステータス バー表示用に長文を短縮する。Batik 等が data: URI を本文に含めて
+     * 投げてくる超長文メッセージをそのまま流すと UI が読めなくなるため、
+     * 改行とスペースで折り返した先頭 {@code max} 文字に省略記号を付けて返す。
+     */
+    static String truncateForStatus(String msg, int max) {
+        if (msg == null) {
+            return "";
+        }
+        // 改行・連続空白を 1 スペースに畳んでから長さで切る
+        String oneLine = msg.replaceAll("\\s+", " ").trim();
+        if (oneLine.length() <= max) {
+            return oneLine;
+        }
+        return oneLine.substring(0, Math.max(0, max - 1)) + "…";
+    }
+
+    /**
      * FQN から詳細展開済みの {@link JavaClassInfo} を取得する。
      * ClassIndex があれば Stage B (detail) を返し、メソッド本体まで揃った状態にする。
      */
@@ -791,6 +808,9 @@ public class UmlMainFrame extends JFrame {
         final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
+            // レンダ前にキャプチャしておく puml。例外発生時も PlantUML Source タブに
+            // 残せるようにするための退避先。
+            private String pumlOnError;
 
             @Override
             protected RenderResult doInBackground() {
@@ -805,6 +825,7 @@ public class UmlMainFrame extends JFrame {
                         req = new DiagramRequest(kind, null, null, true, scope, wantLinks);
                     }
                     String puml = DiagramService.generatePuml(req, cache);
+                    pumlOnError = puml;
                     // ベクター SVG として描画して、PlantUML の PNG 4096x4096
                     // キャンバス上限による切り詰めを回避する。
                     RenderedSvg svg = PlantUmlSvgRenderer.render(puml);
@@ -818,10 +839,24 @@ public class UmlMainFrame extends JFrame {
             @Override
             protected void done() {
                 if (error != null) {
-                    JOptionPane.showMessageDialog(UmlMainFrame.this,
-                            "Failed to render: " + error.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    status.setText(" ");
+                    // モーダル ダイアログは出さず、ステータス バー + PlantUML Source タブで
+                    // 通知する。Smetana のフォールバック SVG (Batik が読めない巨大 base64) を
+                    // ダイアログに出すと使い物にならないため、UX 優先で握り潰す。
+                    previewPanel.setSvgGraphicsNode(null, 0, 0);
+                    if (pumlOnError != null) {
+                        sourcePanel.setText(pumlOnError);
+                    }
+                    String reason;
+                    if (error instanceof padtools.core.formats.uml.PlantUmlRenderFailedException) {
+                        reason = "PlantUML layout error (Smetana)";
+                    } else {
+                        String m = error.getMessage();
+                        reason = m == null ? error.getClass().getSimpleName()
+                                : truncateForStatus(m, 120);
+                    }
+                    status.setText(kind.getDisplayName()
+                            + ": rendering failed -- " + reason
+                            + ". See 'PlantUML Source' tab.");
                     return;
                 }
                 try {

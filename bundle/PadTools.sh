@@ -1,6 +1,6 @@
 #!/bin/sh
 
-DIR=`dirname $0`
+DIR=`dirname "$0"`
 
-java -jar $DIR/PadTools.jar -- $@
+java -jar "$DIR/PadTools.jar" "$@"
 

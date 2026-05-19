@@ -72,8 +72,8 @@ public class MainCliTest {
                 javaFile.getAbsolutePath()});
         String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
         assertTrue(puml, puml.contains("@startuml"));
-        assertTrue(puml, puml.contains("Caller -> Bar: run()"));
-        assertTrue(puml, puml.contains("Bar -> Service: go()"));
+        assertTrue(puml, puml.contains("Caller -> Bar: Bar.run()"));
+        assertTrue(puml, puml.contains("Bar -> Service: Service.go()"));
     }
 
     @Test

@@ -135,6 +135,9 @@ public class SettingTest {
         Setting s = new Setting();
         assertTrue(s.isSequenceShowComments());
         assertEquals("INLINE", s.getSequenceCommentStyle());
+        // 新しい既定: AT_CALL_SITE + qualifyMethodNames=true
+        assertEquals("AT_CALL_SITE", s.getSequenceCommentPlacement());
+        assertTrue(s.isSequenceQualifyMethodNames());
     }
 
     @Test
@@ -142,6 +145,8 @@ public class SettingTest {
         Setting original = new Setting();
         original.setSequenceShowComments(false);
         original.setSequenceCommentStyle("NOTE");
+        original.setSequenceCommentPlacement("PARTICIPANT_TOP");
+        original.setSequenceQualifyMethodNames(false);
 
         File file = tempFolder.newFile("settings-seq.xml");
         original.saveToFile(file);
@@ -149,6 +154,8 @@ public class SettingTest {
         Setting loaded = Setting.loadFromFile(file);
         assertFalse(loaded.isSequenceShowComments());
         assertEquals("NOTE", loaded.getSequenceCommentStyle());
+        assertEquals("PARTICIPANT_TOP", loaded.getSequenceCommentPlacement());
+        assertFalse(loaded.isSequenceQualifyMethodNames());
     }
 
     @Test
@@ -167,6 +174,8 @@ public class SettingTest {
         Setting loaded = Setting.loadFromFile(file);
         assertTrue(loaded.isSequenceShowComments());
         assertEquals("INLINE", loaded.getSequenceCommentStyle());
+        assertEquals("AT_CALL_SITE", loaded.getSequenceCommentPlacement());
+        assertTrue(loaded.isSequenceQualifyMethodNames());
     }
 
     @Test

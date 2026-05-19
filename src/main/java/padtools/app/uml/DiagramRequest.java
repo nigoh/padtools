@@ -1,5 +1,9 @@
 package padtools.app.uml;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 /**
  * GUI から {@link DiagramService} に渡す、図種とスコープを束ねた不変リクエスト。
  *
@@ -8,7 +12,9 @@ package padtools.app.uml;
  * {@link #layoutKey} を使用する。それ以外の図種ではこれらの値は無視される。</p>
  *
  * <p>大規模プロジェクトの可読性確保のため、{@link DiagramScope} で表示クラスを
- * 絞り込める。null/未指定は「全件」を意味する。</p>
+ * 絞り込める。null/未指定は「全件」を意味する。
+ * シーケンス図では {@link #sequenceHiddenParticipants} で個別 participant の
+ * 非表示も可能 (コンパクト化)。</p>
  */
 public final class DiagramRequest {
 
@@ -19,33 +25,45 @@ public final class DiagramRequest {
     private final DiagramScope scope;
     private final boolean interactiveLinks;
     private final String layoutKey;
+    private final Set<String> sequenceHiddenParticipants;
 
     public DiagramRequest(DiagramKind kind) {
-        this(kind, null, null, true, null, false, null);
+        this(kind, null, null, true, null, false, null, null);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend) {
-        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, null, false, null);
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, null,
+                false, null, null);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend,
                           DiagramScope scope) {
-        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, scope, false, null);
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, scope,
+                false, null, null);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend,
                           DiagramScope scope, boolean interactiveLinks) {
         this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, scope,
-                interactiveLinks, null);
+                interactiveLinks, null, null);
     }
 
     public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
                           String sequenceEntryMethod, boolean includeLegend,
                           DiagramScope scope, boolean interactiveLinks,
                           String layoutKey) {
+        this(kind, sequenceEntryClass, sequenceEntryMethod, includeLegend, scope,
+                interactiveLinks, layoutKey, null);
+    }
+
+    public DiagramRequest(DiagramKind kind, String sequenceEntryClass,
+                          String sequenceEntryMethod, boolean includeLegend,
+                          DiagramScope scope, boolean interactiveLinks,
+                          String layoutKey,
+                          Set<String> sequenceHiddenParticipants) {
         if (kind == null) {
             throw new IllegalArgumentException("kind is null");
         }
@@ -56,12 +74,17 @@ public final class DiagramRequest {
         this.scope = scope;
         this.interactiveLinks = interactiveLinks;
         this.layoutKey = layoutKey;
+        this.sequenceHiddenParticipants = sequenceHiddenParticipants == null
+                || sequenceHiddenParticipants.isEmpty()
+                        ? Collections.emptySet()
+                        : Collections.unmodifiableSet(
+                                new LinkedHashSet<>(sequenceHiddenParticipants));
     }
 
     /** LAYOUT 図用のショートカットコンストラクタ。 */
     public static DiagramRequest forLayout(String layoutKey, boolean includeLegend) {
         return new DiagramRequest(DiagramKind.LAYOUT, null, null, includeLegend,
-                null, false, layoutKey);
+                null, false, layoutKey, null);
     }
 
     public DiagramKind getKind() {
@@ -99,5 +122,13 @@ public final class DiagramRequest {
      */
     public String getLayoutKey() {
         return layoutKey;
+    }
+
+    /**
+     * シーケンス図で非表示にする participant 名集合 (不変)。
+     * SEQUENCE 図以外では使用されない。空集合なら全 participant 表示。
+     */
+    public Set<String> getSequenceHiddenParticipants() {
+        return sequenceHiddenParticipants;
     }
 }

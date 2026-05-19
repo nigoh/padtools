@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find` | 図/レポートの種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -33,6 +33,8 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `all` | `--all` | 全種類一括出力 |
 | `impact` | `--impact SYMBOL` | 逆参照影響レポート (Markdown + PlantUML)。SYMBOL は FQN もしくは FQN.method |
 | `ref-find` | `--ref-find SYMBOL` | シンボルへの参照箇所 grep 互換テキスト出力 |
+| `vhal-flow` | `--vhal-flow` | CarPropertyManager の get/set/subscribe フロー (Markdown + PlantUML) |
+| `aidl-binding` | `--aidl-binding` | AIDL ↔ Stub 実装クラスの紐付け表 (Markdown) |
 
 ## 例
 
@@ -60,6 +62,12 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # 参照箇所列挙 (grep 互換)
 /padtools-quick ref-find android.car.hardware.CarPropertyManager.getProperty ~/AOSP/packages/services/Car
+
+# AAOS: VHAL Property フロー (CarPropertyManager.get/set/subscribe)
+/padtools-quick vhal-flow ~/AOSP/packages/services/Car
+
+# AAOS: AIDL インタフェースと実装クラスの紐付け
+/padtools-quick aidl-binding ~/AOSP/packages/services/Car
 ```
 
 ## 出力

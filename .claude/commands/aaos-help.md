@@ -52,6 +52,13 @@ AAOS トピック別のクイックリファレンス。
 3. 関連セクションを抽出・説明
 4. 必要に応じて PadTools コマンド例・Grep 例を提示
 
+## 関連 PadTools CLI
+
+- `--vhal-flow`: CarPropertyManager の get/set/subscribe フローを Markdown + PlantUML 図で可視化
+- `--aidl-binding`: プロジェクト内 AIDL インタフェースと、その `Stub` を継承する実装クラスとの対応表 (Markdown)
+- `--impact <FQN[.method]>`: 「このシンボルを消すと何が壊れるか」逆参照 + 推移閉包レポート
+- `--ref-find <FQN[.member]>`: シンボルへの参照箇所を grep 互換で列挙
+
 ## AOSP 知識も必要？
 
 AAOS は AOSP ベースなので、Soong / partition / HAL / sepolicy は共通です。

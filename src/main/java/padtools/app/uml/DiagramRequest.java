@@ -8,8 +8,11 @@ import java.util.Set;
  * GUI から {@link DiagramService} に渡す、図種とスコープを束ねた不変リクエスト。
  *
  * <p>{@link DiagramKind#SEQUENCE} の場合のみ {@link #sequenceEntryClass} と
- * {@link #sequenceEntryMethod} を使用する。{@link DiagramKind#LAYOUT} の場合のみ
- * {@link #layoutKey} を使用する。それ以外の図種ではこれらの値は無視される。</p>
+ * {@link #sequenceEntryMethod} を使用する。{@link DiagramKind#ACTIVITY} の場合は
+ * 同じ {@link #sequenceEntryClass} / {@link #sequenceEntryMethod} スロットを
+ * 「対象クラス・メソッド」として再利用する (両図種が同時に有効になることはない)。
+ * {@link DiagramKind#LAYOUT} の場合のみ {@link #layoutKey} を使用する。
+ * それ以外の図種ではこれらの値は無視される。</p>
  *
  * <p>大規模プロジェクトの可読性確保のため、{@link DiagramScope} で表示クラスを
  * 絞り込める。null/未指定は「全件」を意味する。
@@ -87,6 +90,19 @@ public final class DiagramRequest {
                 null, false, layoutKey, null);
     }
 
+    /**
+     * ACTIVITY 図用のショートカットコンストラクタ。
+     * {@code entryClass} と {@code entryMethod} は {@link #sequenceEntryClass} /
+     * {@link #sequenceEntryMethod} スロットを共用する。SEQUENCE と ACTIVITY は
+     * 同時に有効化されないため、フィールド追加を避けて引数数 (checkstyle: max 8)
+     * を維持するためのデザイン。
+     */
+    public static DiagramRequest forActivity(String entryClass, String entryMethod,
+                                              boolean includeLegend) {
+        return new DiagramRequest(DiagramKind.ACTIVITY, entryClass, entryMethod,
+                includeLegend, null, false, null, null);
+    }
+
     public DiagramKind getKind() {
         return kind;
     }
@@ -130,5 +146,23 @@ public final class DiagramRequest {
      */
     public Set<String> getSequenceHiddenParticipants() {
         return sequenceHiddenParticipants;
+    }
+
+    /**
+     * ACTIVITY 図の起点クラス名 (simple or qualified)。
+     * 内部的には {@link #sequenceEntryClass} スロットを再利用しているため、
+     * {@code kind != ACTIVITY} の場合は SEQUENCE 図用の値が返る点に注意。
+     */
+    public String getActivityEntryClass() {
+        return sequenceEntryClass;
+    }
+
+    /**
+     * ACTIVITY 図の起点メソッド名。
+     * 内部的には {@link #sequenceEntryMethod} スロットを再利用しているため、
+     * {@code kind != ACTIVITY} の場合は SEQUENCE 図用の値が返る点に注意。
+     */
+    public String getActivityEntryMethod() {
+        return sequenceEntryMethod;
     }
 }

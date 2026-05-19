@@ -851,7 +851,144 @@ public final class JavaStructureExtractor {
                 parseSynchronized(out);
                 return;
             }
+            if (peek().isKw("return")) {
+                parseReturn(out);
+                return;
+            }
+            if (peek().isKw("throw")) {
+                parseThrow(out);
+                return;
+            }
+            if (peek().isKw("break")) {
+                parseBreak(out);
+                return;
+            }
+            if (peek().isKw("continue")) {
+                parseContinue(out);
+                return;
+            }
             parseExpressionStatement(out);
+        }
+
+        /**
+         * {@code return [expr];} 文を読む。式中の呼び出しは {@link JavaMethodInfo.Call} として
+         * {@code out} に追加し、最後に {@link JavaMethodInfo.Return} を 1 件追加する。
+         */
+        private void parseReturn(List<JavaMethodInfo.Statement> out) {
+            next(); // return
+            int startPos = atEnd() ? 0 : peek().start;
+            int endPos = startPos;
+            int parenDepth = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (parenDepth == 0 && t.is(";")) {
+                    break;
+                }
+                if (parenDepth == 0 && t.is("}")) {
+                    break;
+                }
+                if (t.is("(") || t.is("[")) {
+                    parenDepth++;
+                } else if (t.is(")") || t.is("]")) {
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                } else if (t.is("{")) {
+                    // 匿名クラス本体・ラムダ本体・配列初期化など
+                    next();
+                    parseStatementBlock(out);
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
+                    String name = t.text;
+                    boolean afterNew = idx > 0 && tokens.get(idx - 1).isKw("new");
+                    if (!isControlKeyword(name) && !afterNew) {
+                        String receiver = findReceiver();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
+                endPos = t.end;
+                next();
+            }
+            String expr = endPos > startPos ? src.substring(startPos, endPos).trim() : "";
+            out.add(new JavaMethodInfo.Return(expr));
+            if (!atEnd() && peek().is(";")) {
+                next();
+            }
+        }
+
+        /**
+         * {@code throw expr;} 文を読む。式中の呼び出しは {@link JavaMethodInfo.Call} として
+         * {@code out} に追加し、最後に {@link JavaMethodInfo.Throw} を 1 件追加する。
+         */
+        private void parseThrow(List<JavaMethodInfo.Statement> out) {
+            next(); // throw
+            int startPos = atEnd() ? 0 : peek().start;
+            int endPos = startPos;
+            int parenDepth = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (parenDepth == 0 && t.is(";")) {
+                    break;
+                }
+                if (parenDepth == 0 && t.is("}")) {
+                    break;
+                }
+                if (t.is("(") || t.is("[")) {
+                    parenDepth++;
+                } else if (t.is(")") || t.is("]")) {
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                } else if (t.is("{")) {
+                    next();
+                    parseStatementBlock(out);
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
+                    String name = t.text;
+                    boolean afterNew = idx > 0 && tokens.get(idx - 1).isKw("new");
+                    if (!isControlKeyword(name) && !afterNew) {
+                        String receiver = findReceiver();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
+                endPos = t.end;
+                next();
+            }
+            String expr = endPos > startPos ? src.substring(startPos, endPos).trim() : "";
+            out.add(new JavaMethodInfo.Throw(expr));
+            if (!atEnd() && peek().is(";")) {
+                next();
+            }
+        }
+
+        /** {@code break [label];} 文を読む。 */
+        private void parseBreak(List<JavaMethodInfo.Statement> out) {
+            next(); // break
+            String label = "";
+            if (!atEnd() && peek().type == JavaToken.Type.IDENT) {
+                label = peek().text;
+                next();
+            }
+            if (!atEnd() && peek().is(";")) {
+                next();
+            }
+            out.add(new JavaMethodInfo.Break(label));
+        }
+
+        /** {@code continue [label];} 文を読む。 */
+        private void parseContinue(List<JavaMethodInfo.Statement> out) {
+            next(); // continue
+            String label = "";
+            if (!atEnd() && peek().type == JavaToken.Type.IDENT) {
+                label = peek().text;
+                next();
+            }
+            if (!atEnd() && peek().is(";")) {
+                next();
+            }
+            out.add(new JavaMethodInfo.Continue(label));
         }
 
         /** {@code if (...)} 単体 (else 連鎖含む) を 1 つの {@link JavaMethodInfo.Block} として読む。 */

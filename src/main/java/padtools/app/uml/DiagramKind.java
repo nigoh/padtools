@@ -13,6 +13,8 @@ public enum DiagramKind {
     PACKAGE("Package Diagram"),
     /** シーケンス図 — 任意の {@code Class.method} を起点とした呼び出しトレース。 */
     SEQUENCE("Sequence Diagram"),
+    /** アクティビティ図 — 任意の {@code Class.method} 内部の制御フロー (if/while/return など)。 */
+    ACTIVITY("Activity Diagram"),
     /** コンポーネント図 — AndroidManifest / Gradle から推定したコンポーネント関係。 */
     COMPONENT("Component Diagram"),
     /** Gradle 依存図 — モジュール間 / ライブラリ依存。 */

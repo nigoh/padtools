@@ -4,6 +4,14 @@ Change log
 Unreleased
 --------
 
+* **Java 9+/14+/21+ 言語機能のパース範囲を拡張** (`JavaClassInfo.Kind.MODULE` 新規 / `JavaModuleDirective` 新規 / `JavaMethodInfo.Yield` 新規 / `JavaStructureExtractor`)
+    * **`module-info.java` のパース対応** (JLS §7.7): `[open] module Foo.Bar { ... }` をトップレベルで認識し、新 `Kind.MODULE` を持つ `JavaClassInfo` として返す。本体の各ディレクティブ (`requires [transitive] [static] X` / `exports X [to Y, Z]` / `opens X [to Y, Z]` / `uses X` / `provides X with Y, Z`) を `JavaModuleDirective` のリストとして `getModuleDirectives()` に保持。`@Deprecated module ...` のアノテーション、`open` 修飾子も取り込む。`extractHeadersOnly()` でも directive は保持する (モジュールグラフ集計用)。
+    * **switch 式 (Java 14+) の構造化解析**: `int x = switch(y) { case 1 -> 100; default -> 0; };` のような代入 RHS、`return switch(...)` / `throw switch(...)` / `yield switch(...)` の各経路で switch 本体を `JavaMethodInfo.Block.Kind.SWITCH` として構造化して取り込むようにした (以前は `{}` 内ブロックとして flatten され、case 構造が失われていた)。`case 1, 2, 3 -> ...` の複数ラベルや `case Integer i when i > 0 -> ...` (Java 21+ パターン case + when ガード) のラベル文字列も括弧深度を加味して正しく終端まで読み取る。
+    * **`yield` 文 (Java 14+)** を新 `JavaMethodInfo.Yield` Statement として認識。`switchDepth` をパーサで追跡し、switch アーム内でだけ `yield expr;` を Yield 化する (switch の外では従来通り識別子扱いとし、`int yield = 10;` のような変数名宣言を壊さない)。`yield(...)` のメソッド呼び出し・`yield.foo` のフィールドアクセス・`yield =` の代入を直後トークンで除外。
+    * **Class 図 / Package 図でモジュール宣言を除外**: `Kind.MODULE` の `JavaClassInfo` は `PlantUmlClassDiagram` / `PlantUmlPackageDiagram` のクラスループから除外し、空パッケージ集計や `class` 描画にノイズが乗らないようにする。モジュールグラフは後続フェーズの専用図種で扱う想定。
+    * テスト: `JavaStructureExtractorModernJavaTest` (新規 12 ケース) で module-info の各ディレクティブ・switch 式 RHS / return / pattern case + when・`yield` の捕捉と switch 外での誤検出回避を回帰防止。`JavaStructureExtractorTest` の既存 76 ケースは全 PASS のまま。
+    * 目的: PadTools の Java パーサーが Java 9 以降の新構文 (module / switch 式 / pattern matching) に追随し、AOSP / AAOS / モダン Android プロジェクトでもクラス図・シーケンス図が穴抜けにならないようにする。後続フェーズの Phase 2 (AAOS の `@SystemApi`/AIDL binder hop 表現) / Phase 3 (AOSP の Android.bp / HIDL) を載せる基盤とする。
+
 * **「関数を変数として設定するメンバー変数」の解析範囲を拡張** (`JavaStructureExtractor` / `JavaMethodInfo.Call` / `PlantUmlClassDiagram`)
     * これまで匿名クラス/ラムダによるフィールド初期化子のみ inline 解析していたのを、以下のパターンにも拡張
         * メソッド参照 (`Runnable r = Foo::bar;` / `a.b.c::method`) を `inlineMethods` に取り込む

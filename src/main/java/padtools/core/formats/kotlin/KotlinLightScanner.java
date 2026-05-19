@@ -224,29 +224,138 @@ public final class KotlinLightScanner {
             mth.setVisibility(Visibility.PUBLIC);
             extractAnnotations(anns, mth.getAnnotations());
             parseParameters(paramsText, mth);
-            // メソッド本体内の呼び出しを抽出
-            int braceStart = findBraceAfter(body, m.end());
-            if (braceStart >= 0) {
-                int braceEnd = matchBrace(body, braceStart);
-                if (braceEnd > braceStart) {
-                    extractCallsFromBody(body.substring(braceStart + 1, braceEnd), mth);
+            // メソッド本体内の呼び出しを抽出。ブロック本体か式本体かを判定。
+            int afterSig = m.end();
+            int next = nextNonSpaceChar(body, afterSig);
+            if (next >= 0 && body.charAt(next) == '{') {
+                int braceEnd = matchBrace(body, next);
+                if (braceEnd > next) {
+                    extractCallsFromBody(body.substring(next + 1, braceEnd), mth);
+                }
+            } else if (next >= 0 && body.charAt(next) == '=') {
+                // 式本体: `fun foo(...) = expression` または
+                // `fun foo(...): Type = expression`
+                int exprEnd = findExpressionBodyEnd(body, next + 1);
+                if (exprEnd > next + 1) {
+                    extractCallsFromBody(body.substring(next + 1, exprEnd), mth);
                 }
             }
             info.getMethods().add(mth);
         }
     }
 
-    /** FUN_DECL マッチ後の位置から最初の {@code &#123;} を探す。式本体 {@code = ...} はスキップ。 */
-    private static int findBraceAfter(String body, int from) {
+    /**
+     * {@code from} 位置以降で空白以外の最初の文字オフセットを返す。改行は空白として扱う。
+     * 見つからなければ -1。
+     */
+    private static int nextNonSpaceChar(String body, int from) {
         for (int i = from; i < body.length(); i++) {
-            char c = body.charAt(i);
-            if (c == '{') return i;
-            if (c == '=' || c == '\n') return -1; // 式本体は走査しない
-            if (!Character.isWhitespace(c)) {
-                // = や { 以外の文字 (例: throws) は通り過ぎる
-            }
+            if (!Character.isWhitespace(body.charAt(i))) return i;
         }
         return -1;
+    }
+
+    /**
+     * 式本体 {@code = expression} の終了オフセットを返す。
+     *
+     * <p>Kotlin の式本体関数 {@code fun foo() = bar.baz()} の終端は、
+     * トップレベル (深さ 0) で次の {@code fun}, {@code val}, {@code var},
+     * {@code class}, {@code object}, {@code @}, {@code }} (クラス閉じ),
+     * もしくはファイル末尾。各種括弧の対応を取りながら走査する。</p>
+     */
+    private static int findExpressionBodyEnd(String body, int from) {
+        int n = body.length();
+        int depth = 0;
+        int braceDepth = 0;
+        boolean inString = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
+        int lastNewline = -1;
+        for (int i = from; i < n; i++) {
+            char c = body.charAt(i);
+            if (inLineComment) {
+                if (c == '\n') { inLineComment = false; lastNewline = i; }
+                continue;
+            }
+            if (inBlockComment) {
+                if (c == '*' && i + 1 < n && body.charAt(i + 1) == '/') {
+                    inBlockComment = false;
+                    i++;
+                }
+                continue;
+            }
+            if (inString) {
+                if (c == '\\' && i + 1 < n) { i++; continue; }
+                if (c == '"') inString = false;
+                continue;
+            }
+            if (c == '/' && i + 1 < n) {
+                if (body.charAt(i + 1) == '/') { inLineComment = true; i++; continue; }
+                if (body.charAt(i + 1) == '*') { inBlockComment = true; i++; continue; }
+            }
+            if (c == '"') { inString = true; continue; }
+            if (c == '(' || c == '[') depth++;
+            else if (c == ')' || c == ']') { if (depth > 0) depth--; }
+            else if (c == '{') braceDepth++;
+            else if (c == '}') {
+                if (braceDepth > 0) braceDepth--;
+                else return i; // クラス本体の閉じ
+            }
+            else if (c == '\n' && depth == 0 && braceDepth == 0) {
+                // 改行後に次の宣言が来るなら式本体終了
+                int j = nextNonSpaceChar(body, i + 1);
+                if (j < 0) return i;
+                if (looksLikeDeclarationStart(body, j)) return i;
+                lastNewline = i;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * 指定位置 {@code at} が宣言の始まりに見えるか? ({@code fun}, {@code val},
+     * {@code var}, {@code class}, {@code object}, {@code @}, {@code private},
+     * {@code protected}, {@code internal}, {@code public}, {@code abstract},
+     * {@code override}, {@code companion} など)。
+     */
+    private static boolean looksLikeDeclarationStart(String body, int at) {
+        if (at < 0 || at >= body.length()) return false;
+        char c = body.charAt(at);
+        if (c == '@' || c == '}') return true;
+        if (!isIdentStart(c)) return false;
+        int end = at;
+        while (end < body.length() && isIdentPart(body.charAt(end))) end++;
+        String word = body.substring(at, end);
+        switch (word) {
+            case "fun":
+            case "val":
+            case "var":
+            case "class":
+            case "interface":
+            case "object":
+            case "private":
+            case "protected":
+            case "internal":
+            case "public":
+            case "abstract":
+            case "override":
+            case "open":
+            case "final":
+            case "sealed":
+            case "data":
+            case "inner":
+            case "companion":
+            case "lateinit":
+            case "const":
+            case "suspend":
+            case "inline":
+            case "operator":
+            case "infix":
+            case "init":
+                return true;
+            default:
+                return false;
+        }
     }
 
     /** {@code name: Type, name2: Type2 = default} を解析してパラメータに追加。 */

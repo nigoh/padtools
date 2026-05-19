@@ -146,7 +146,7 @@ public class KotlinLightScannerCallsTest {
 
     @Test
     public void expressionBodyFunctionsSkipped() {
-        // = で始まる単一式本体は (現状) 走査しないが、メソッド宣言自体は登録される
+        // PR で式本体対応した。本テストは式本体内呼び出しが拾えることを確認。
         String src = "package com.x\n"
                 + "class A {\n"
                 + "  fun greet() = \"hello\".uppercase()\n"
@@ -154,8 +154,63 @@ public class KotlinLightScannerCallsTest {
         List<JavaClassInfo> infos = KotlinLightScanner.scan(src, ErrorListener.silent());
         JavaMethodInfo greet = findMethod(infos.get(0), "greet");
         org.junit.Assert.assertNotNull(greet);
-        // 式本体内の呼び出しは current 実装ではスキップ (= でブロックスキャン拒否)
-        assertEquals(0, greet.getCalls().size());
+        // 式本体内の呼び出しが検出される (リテラル "hello" 受け取りの uppercase)
+        boolean found = false;
+        for (JavaMethodInfo.Call c : greet.getCalls()) {
+            if ("uppercase".equals(c.getMethodName())) found = true;
+        }
+        assertTrue("uppercase call from expression body must be detected", found);
+    }
+
+    @Test
+    public void expressionBodyWithFieldReceiver() {
+        String src = "package com.x\n"
+                + "class A {\n"
+                + "  private val name: String = \"x\"\n"
+                + "  fun shout() = name.uppercase()\n"
+                + "  fun first() = name.first()\n"
+                + "}\n";
+        List<JavaClassInfo> infos = KotlinLightScanner.scan(src, ErrorListener.silent());
+        JavaMethodInfo shout = findMethod(infos.get(0), "shout");
+        JavaMethodInfo first = findMethod(infos.get(0), "first");
+        // shout の本体に name.uppercase() が 1 件、first にも 1 件出ること
+        assertEquals(1, shout.getCalls().size());
+        assertEquals("uppercase", shout.getCalls().get(0).getMethodName());
+        assertEquals("name", shout.getCalls().get(0).getReceiver());
+        assertEquals(1, first.getCalls().size());
+        assertEquals("first", first.getCalls().get(0).getMethodName());
+        assertEquals("name", first.getCalls().get(0).getReceiver());
+    }
+
+    @Test
+    public void expressionBodyDoesNotLeakIntoNextFunction() {
+        String src = "package com.x\n"
+                + "class A {\n"
+                + "  private val dao: Dao = TODO()\n"
+                + "  fun load() = dao.findAll()\n"
+                + "  fun delete(u: User) = dao.delete(u)\n"
+                + "  fun update(u: User) = dao.update(u)\n"
+                + "}\n";
+        List<JavaClassInfo> infos = KotlinLightScanner.scan(src, ErrorListener.silent());
+        // 各 fun が exactly 1 つの call を持つこと (隣の式本体に流れない)
+        for (String name : new String[]{"load", "delete", "update"}) {
+            JavaMethodInfo mth = findMethod(infos.get(0), name);
+            assertEquals("fun " + name + " calls", 1, mth.getCalls().size());
+        }
+    }
+
+    @Test
+    public void expressionBodyWithSafeCall() {
+        String src = "package com.x\n"
+                + "class A {\n"
+                + "  fun nameOf(u: User?) = u?.name()\n"
+                + "}\n";
+        List<JavaClassInfo> infos = KotlinLightScanner.scan(src, ErrorListener.silent());
+        JavaMethodInfo nameOf = findMethod(infos.get(0), "nameOf");
+        assertEquals(1, nameOf.getCalls().size());
+        assertEquals("name", nameOf.getCalls().get(0).getMethodName());
+        // safe-call ?. の ? は receiver から剥がされる
+        assertEquals("u", nameOf.getCalls().get(0).getReceiver());
     }
 
     @Test

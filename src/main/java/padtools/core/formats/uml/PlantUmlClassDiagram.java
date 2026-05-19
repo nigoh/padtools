@@ -497,6 +497,15 @@ public final class PlantUmlClassDiagram {
             if (cat != null) {
                 parts.add(cat);
             }
+            // API 可視性 (`@SystemApi`/`@TestApi`/JavaDoc `@hide`) と AIDL
+            // binder impl を別ステレオタイプとして併記。既存カテゴリと併用可。
+            String visibility = AaosPattern.apiVisibilityStereotype(c);
+            if (visibility != null) {
+                parts.add(visibility);
+            }
+            if (AaosPattern.isAidlBinderImpl(c)) {
+                parts.add("binder");
+            }
         }
         if (c.getAndroidComponentType() != null && !c.getAndroidComponentType().isEmpty()) {
             parts.add(c.getAndroidComponentType());

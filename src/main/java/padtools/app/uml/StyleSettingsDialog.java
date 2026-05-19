@@ -461,6 +461,7 @@ public final class StyleSettingsDialog extends JDialog {
         buttons.add(Box.createHorizontalStrut(20));
         buttons.add(cancel);
         buttons.add(ok);
+        DialogUtils.installEscapeAndDefault(this, ok);
         return buttons;
     }
 

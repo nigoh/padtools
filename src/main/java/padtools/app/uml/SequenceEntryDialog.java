@@ -86,6 +86,7 @@ public class SequenceEntryDialog extends JDialog {
 
         ok.addActionListener(e -> commit());
         cancel.addActionListener(e -> dispose());
+        DialogUtils.installEscapeAndDefault(this, ok);
 
         tree.addMouseListener(new MouseAdapter() {
             @Override

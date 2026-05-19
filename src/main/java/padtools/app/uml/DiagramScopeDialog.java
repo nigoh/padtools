@@ -212,6 +212,7 @@ public final class DiagramScopeDialog extends JDialog {
         });
         bar.add(ok);
         bar.add(cancel);
+        DialogUtils.installEscapeAndDefault(this, ok);
         return bar;
     }
 

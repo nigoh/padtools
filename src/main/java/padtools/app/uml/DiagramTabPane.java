@@ -15,6 +15,8 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Insets;
+import java.awt.event.ActionListener;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -39,11 +41,33 @@ public final class DiagramTabPane extends JPanel {
     private final ProjectAnalysisCache cache;
     private final Consumer<String> statusReporter;
 
-    public DiagramTabPane(ProjectAnalysisCache cache, Consumer<String> statusReporter) {
+    public DiagramTabPane(ProjectAnalysisCache cache, Consumer<String> statusReporter,
+                          SvgPreviewPanel mainPreview, PumlSourcePanel mainSource,
+                          ActionListener saveAction) {
         super(new BorderLayout());
         this.cache = cache;
         this.statusReporter = statusReporter;
         add(tabs, BorderLayout.CENTER);
+
+        // 永続的な "Main" タブ (閉じボタンなし) を先頭に追加する
+        JPanel mainContent = new JPanel(new BorderLayout());
+        JPanel saveBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
+        JButton saveButton = new JButton("Save...");
+        saveButton.setToolTipText("Save current diagram as SVG / PNG / PUML (Ctrl+S)");
+        saveButton.setMargin(new Insets(2, 8, 2, 8));
+        saveButton.setFocusable(false);
+        if (saveAction != null) {
+            saveButton.addActionListener(saveAction);
+        }
+        saveBar.add(saveButton);
+        mainContent.add(saveBar, BorderLayout.NORTH);
+
+        JTabbedPane mainInner = new JTabbedPane();
+        mainInner.addTab("Preview", new JScrollPane(mainPreview));
+        mainInner.addTab("PlantUML Source", mainSource);
+        mainContent.add(mainInner, BorderLayout.CENTER);
+
+        tabs.addTab("Main", mainContent);
     }
 
     /**

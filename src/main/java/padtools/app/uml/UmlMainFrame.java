@@ -94,6 +94,8 @@ public class UmlMainFrame extends JFrame {
     private String currentPuml;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
     private String sequenceEntry;
+    /** 現在選択されているアクティビティ図起点 ({@code Class.method})。null なら未設定。 */
+    private String activityEntry;
     /** 現在選択されている Layout 図のキー ({@link AndroidLayoutInfo#getKey()})。null なら未設定。 */
     private String currentLayoutKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
@@ -248,6 +250,9 @@ public class UmlMainFrame extends JFrame {
             }
         });
         m.add(clearParticipantFilter);
+        JMenuItem pickActivity = new JMenuItem("Choose Activity Method...");
+        pickActivity.addActionListener(e -> pickActivityEntry());
+        m.add(pickActivity);
         JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
         pickLayout.addActionListener(e -> pickLayoutFile());
         m.add(pickLayout);
@@ -464,6 +469,7 @@ public class UmlMainFrame extends JFrame {
                 treePanel.populate(cache.getAnalysis(), cache.getClasses(),
                         root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
+                activityEntry = null;
                 sequenceHiddenParticipants.clear();
                 currentScope = null;
                 updateManifestSummary();
@@ -924,6 +930,38 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
+    /**
+     * アクティビティ図用にメソッドを選択する。SequenceEntryDialog を流用し、
+     * タイトルだけ「Select activity method」に差し替える。
+     */
+    private void pickActivityEntry() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
+        dlg.setTitle("Select activity method");
+        if (dlg.getCandidateCount() == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No methods found in this project.",
+                    "Activity diagram", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        dlg.setVisible(true);
+        String picked = dlg.getSelectedEntry();
+        if (picked != null) {
+            activityEntry = picked;
+            currentKind = DiagramKind.ACTIVITY;
+            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
+            if (item != null) {
+                item.setSelected(true);
+            }
+            refreshDiagram();
+        }
+    }
+
     private void pickLayoutFile() {
         String picked = LayoutFileChooserDialog.chooseLayoutKey(this, cache);
         if (picked == null) {
@@ -954,6 +992,13 @@ public class UmlMainFrame extends JFrame {
             status.setText("Choose a sequence entry from Diagram menu.");
             return;
         }
+        if (kind == DiagramKind.ACTIVITY
+                && (activityEntry == null || activityEntry.isEmpty())) {
+            previewPanel.setSvgGraphicsNode(null, 0, 0);
+            sourcePanel.setText("");
+            status.setText("Choose an activity method from Diagram menu.");
+            return;
+        }
         if (kind == DiagramKind.LAYOUT
                 && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
@@ -963,6 +1008,7 @@ public class UmlMainFrame extends JFrame {
         }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
         final String entry = sequenceEntry;
+        final String activity = activityEntry;
         final String layoutKey = currentLayoutKey;
         final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
@@ -978,6 +1024,8 @@ public class UmlMainFrame extends JFrame {
                     DiagramRequest req;
                     if (kind == DiagramKind.SEQUENCE && entry != null) {
                         req = buildSequenceRequest(entry);
+                    } else if (kind == DiagramKind.ACTIVITY && activity != null) {
+                        req = buildActivityRequest(activity);
                     } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
                         req = DiagramRequest.forLayout(layoutKey, true);
                     } else {
@@ -1055,6 +1103,16 @@ public class UmlMainFrame extends JFrame {
         return new DiagramRequest(DiagramKind.SEQUENCE,
                 entry.substring(0, dot), entry.substring(dot + 1), true,
                 null, false, null, hidden);
+    }
+
+    private DiagramRequest buildActivityRequest(String entry) {
+        int dot = entry.lastIndexOf('.');
+        if (dot < 0) {
+            throw new IllegalArgumentException(
+                    "Activity entry must be in 'Class.method' format: " + entry);
+        }
+        return DiagramRequest.forActivity(
+                entry.substring(0, dot), entry.substring(dot + 1), true);
     }
 
     private void chooseAndExport() {

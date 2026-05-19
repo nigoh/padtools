@@ -37,6 +37,69 @@ public class JavaMethodInfo {
     }
 
     /**
+     * {@code return ...;} 文。
+     *
+     * <p>{@code expression} は {@code return} の右側のソース文字列を整形したもの。
+     * {@code return;} (void) の場合は空文字。アクティビティ図で末端ノードとして描画する。</p>
+     */
+    public static class Return implements Statement {
+        private final String expression;
+
+        public Return(String expression) {
+            this.expression = expression == null ? "" : expression;
+        }
+
+        public String getExpression() {
+            return expression;
+        }
+    }
+
+    /**
+     * {@code throw ...;} 文。
+     *
+     * <p>{@code expression} は {@code throw} の右側のソース文字列を整形したもの
+     * (例: {@code new IllegalArgumentException("..")})。アクティビティ図で
+     * 異常終了ノードとして描画する。</p>
+     */
+    public static class Throw implements Statement {
+        private final String expression;
+
+        public Throw(String expression) {
+            this.expression = expression == null ? "" : expression;
+        }
+
+        public String getExpression() {
+            return expression;
+        }
+    }
+
+    /** {@code break [label];} 文。ループ外の break (switch) でも同じクラスを使う。 */
+    public static class Break implements Statement {
+        private final String label;
+
+        public Break(String label) {
+            this.label = label == null ? "" : label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    /** {@code continue [label];} 文。 */
+    public static class Continue implements Statement {
+        private final String label;
+
+        public Continue(String label) {
+            this.label = label == null ? "" : label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    /**
      * 制御ブロック ({@code if}/{@code while}/{@code for}/{@code do-while}/
      * {@code switch}/{@code try}/{@code synchronized})。
      *

@@ -11,6 +11,7 @@ import padtools.core.formats.uml.DependencyJarIndex;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaFieldInfo;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
+import padtools.core.formats.uml.PlantUmlActivityDiagram;
 import padtools.core.formats.uml.PlantUmlPackageDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.util.ErrorListener;
@@ -133,6 +134,19 @@ public final class DiagramService {
                     o.hiddenParticipants = hidden;
                 }
                 return PlantUmlSequenceDiagram.generate(source, cls, method, o);
+            }
+            case ACTIVITY: {
+                String cls = request.getActivityEntryClass();
+                String method = request.getActivityEntryMethod();
+                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Activity diagram requires entry Class.method");
+                }
+                List<JavaClassInfo> source = classes != null
+                        ? promoteToDetailed(classes, index) : classes;
+                PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlActivityDiagram.generate(source, cls, method, o);
             }
             case COMPONENT: {
                 PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();

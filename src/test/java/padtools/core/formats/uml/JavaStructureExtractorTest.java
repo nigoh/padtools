@@ -228,6 +228,108 @@ public class JavaStructureExtractorTest {
     }
 
     @Test
+    public void testReturnStatementRecorded() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int m() { return 42; } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        // 文ツリーに Return が含まれる
+        boolean found = false;
+        for (JavaMethodInfo.Statement s : m.getStatements()) {
+            if (s instanceof JavaMethodInfo.Return) {
+                assertEquals("42", ((JavaMethodInfo.Return) s).getExpression());
+                found = true;
+            }
+        }
+        assertTrue("Return statement should be recorded", found);
+    }
+
+    @Test
+    public void testVoidReturnStatementRecorded() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { if (x) return; foo(); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        // Block (if) 内の Return
+        JavaMethodInfo.Block block = (JavaMethodInfo.Block) m.getStatements().get(0);
+        JavaMethodInfo.Branch ifBranch = block.getBranches().get(0);
+        boolean found = false;
+        for (JavaMethodInfo.Statement s : ifBranch.getBody()) {
+            if (s instanceof JavaMethodInfo.Return) {
+                assertEquals("", ((JavaMethodInfo.Return) s).getExpression());
+                found = true;
+            }
+        }
+        assertTrue("Void return should be recorded with empty expression", found);
+    }
+
+    @Test
+    public void testReturnPreservesCallInExpression() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { int m() { return compute(x); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        // return 内の compute() 呼び出しは Call として残る
+        assertEquals(1, m.getCalls().size());
+        assertEquals("compute", m.getCalls().get(0).getMethodName());
+    }
+
+    @Test
+    public void testThrowStatementRecorded() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { throw new IllegalArgumentException(\"x\"); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        boolean found = false;
+        for (JavaMethodInfo.Statement s : m.getStatements()) {
+            if (s instanceof JavaMethodInfo.Throw) {
+                String expr = ((JavaMethodInfo.Throw) s).getExpression();
+                assertTrue("expression should contain 'new IllegalArgumentException'",
+                        expr.contains("IllegalArgumentException"));
+                found = true;
+            }
+        }
+        assertTrue("Throw statement should be recorded", found);
+    }
+
+    @Test
+    public void testBreakAndContinueRecorded() {
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() {"
+                        + "  while (true) {"
+                        + "    if (a) break;"
+                        + "    if (b) continue;"
+                        + "  }"
+                        + "} }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        JavaMethodInfo.Block whileBlock = (JavaMethodInfo.Block) m.getStatements().get(0);
+        JavaMethodInfo.Branch whileBody = whileBlock.getBranches().get(0);
+        boolean foundBreak = false;
+        boolean foundContinue = false;
+        for (JavaMethodInfo.Statement s : whileBody.getBody()) {
+            if (s instanceof JavaMethodInfo.Block) {
+                JavaMethodInfo.Block ifb = (JavaMethodInfo.Block) s;
+                for (JavaMethodInfo.Statement inner : ifb.getBranches().get(0).getBody()) {
+                    if (inner instanceof JavaMethodInfo.Break) {
+                        foundBreak = true;
+                    }
+                    if (inner instanceof JavaMethodInfo.Continue) {
+                        foundContinue = true;
+                    }
+                }
+            }
+        }
+        assertTrue("Break should be recorded", foundBreak);
+        assertTrue("Continue should be recorded", foundContinue);
+    }
+
+    @Test
+    public void testGetCallsIgnoresControlFlowStatements() {
+        // Return/Throw/Break/Continue は getCalls() に影響しない
+        List<JavaClassInfo> cs = JavaStructureExtractor.extract(
+                "class A { void m() { foo(); return; bar(); } }");
+        JavaMethodInfo m = cs.get(0).getMethods().get(0);
+        // foo と bar が記録される (return; の後の bar(); は到達不能だがパーサは解析する)
+        assertEquals(2, m.getCalls().size());
+    }
+
+    @Test
     public void testMultipleClassesInFile() {
         List<JavaClassInfo> cs = JavaStructureExtractor.extract(
                 "class A { void a() {} } class B { void b() {} }");

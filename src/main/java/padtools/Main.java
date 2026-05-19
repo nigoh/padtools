@@ -99,6 +99,17 @@ public class Main {
         final Option optSequenceDiagrams = new Option("Q", "sequence-diagrams", false);
         final Option optJetpack = new Option(null, "jetpack", false);
         final Option optPerFolder = new Option("P", "per-folder", false);
+        final Option optPreset = new Option(null, "preset", true);
+        final Option optNoFields = new Option(null, "no-fields", false);
+        final Option optNoMethods = new Option(null, "no-methods", false);
+        final Option optPublicOnly = new Option(null, "public-only", false);
+        final Option optExcludeExternal = new Option(null, "exclude-external", false);
+        final Option optExcludePackage = new Option(null, "exclude-package", true);
+        final Option optRelation = new Option(null, "relation", true);
+        final Option optMode = new Option(null, "mode", true);
+        final Option optInteractiveSvg = new Option(null, "interactive-svg", false);
+        final Option optHiddenAnnotations = new Option(null, "hidden-annotations", true);
+        final Option optCommentMaxLength = new Option(null, "comment-max-length", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -110,7 +121,10 @@ public class Main {
                 optNoComments, optCommentStyle, optNoAnnotations,
                 optNoEnumConstants, optNoFinal,
                 optListMethods, optSeqDepth,
-                optSequenceDiagrams, optJetpack, optPerFolder});
+                optSequenceDiagrams, optJetpack, optPerFolder,
+                optPreset, optNoFields, optNoMethods, optPublicOnly,
+                optExcludeExternal, optExcludePackage, optRelation, optMode,
+                optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength});
 
         try {
             optParser.parse(args);
@@ -153,7 +167,10 @@ public class Main {
         boolean mergeManifest = !optNoManifestMerge.isSet();
         UmlOverrides umlOverrides = UmlOverrides.build(
                 optNoComments, optNoAnnotations, optNoEnumConstants,
-                optNoFinal, optCommentStyle, optSeqDepth, optJetpack);
+                optNoFinal, optCommentStyle, optSeqDepth, optJetpack,
+                optPreset, optNoFields, optNoMethods, optPublicOnly,
+                optExcludeExternal, optExcludePackage, optRelation, optMode,
+                optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength);
         if (umlOverrides == null) {
             return; // 引数エラー: UmlOverrides.build 内で System.exit 済み
         }
@@ -317,11 +334,44 @@ public class Main {
         }
         String spec = sequenceEntry == null ? "" : sequenceEntry.trim();
         java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
+        UmlGenerator.ParseMode parseMode = overrides != null
+                ? overrides.parseMode : UmlGenerator.ParseMode.FULL;
         if (fileIn.isDirectory()) {
-            infos = UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
+            if (parseMode == UmlGenerator.ParseMode.HEADERS_ONLY) {
+                infos = new java.util.ArrayList<>(UmlGenerator.extractFromProjectDetailed(
+                        fileIn, null, listener, null, null,
+                        mergeManifest, parseMode).getClasses());
+            } else {
+                infos = UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
+            }
         } else {
             String src = AndroidProjectScanner.readFile(fileIn);
-            infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
+            if (parseMode == UmlGenerator.ParseMode.HEADERS_ONLY) {
+                infos = UmlGenerator.extractHeadersFromSource(src, fileIn.getName(), listener);
+            } else {
+                infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
+            }
+        }
+        // クラス図モードで --exclude-package が指定されていれば、ここで除外を効かせる。
+        if (classDiagram && overrides != null
+                && overrides.excludedPackages != null
+                && !overrides.excludedPackages.isEmpty()) {
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> filtered =
+                    new java.util.ArrayList<>(infos.size());
+            for (padtools.core.formats.uml.JavaClassInfo c : infos) {
+                String pkg = c.getPackageName() == null ? "" : c.getPackageName();
+                boolean drop = false;
+                for (String ex : overrides.excludedPackages) {
+                    if (pkg.equals(ex) || pkg.startsWith(ex + ".")) {
+                        drop = true;
+                        break;
+                    }
+                }
+                if (!drop) {
+                    filtered.add(c);
+                }
+            }
+            infos = filtered;
         }
 
         String output;
@@ -908,6 +958,25 @@ public class Main {
                 + " Hilt etc.) on class diagram (-c / -A).");
         System.err.println("  -P --per-folder: With -c: write one class diagram (.puml + .svg)"
                 + " per source folder into the -o directory (preserves subfolder layout).");
+        System.err.println("  --preset minimal|balanced|detailed: "
+                + "Apply a readability preset to the class diagram (default: balanced).");
+        System.err.println("  --no-fields: Hide fields in the class diagram.");
+        System.err.println("  --no-methods: Hide methods in the class diagram.");
+        System.err.println("  --public-only: Show only public classes and members.");
+        System.err.println("  --exclude-external: Exclude classes from java.*, android.*,"
+                + " kotlin.* and other external libraries (Origin + prefix).");
+        System.err.println("  --exclude-package PREFIX: Exclude classes whose package"
+                + " matches PREFIX (may be specified multiple times).");
+        System.err.println("  --relation inherit,impl,use: Limit relation lines to the"
+                + " listed kinds (CSV).");
+        System.err.println("  --mode headers-only|full: Use the lightweight headers-only"
+                + " parse mode for projects (default: full).");
+        System.err.println("  --interactive-svg: Embed clickable class hyperlinks in"
+                + " the generated SVG (padtools://class/...).");
+        System.err.println("  --hidden-annotations CSV: Override the list of hidden"
+                + " annotation names (comma-separated).");
+        System.err.println("  --comment-max-length N: Maximum inline comment length"
+                + " (0 disables comments).");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

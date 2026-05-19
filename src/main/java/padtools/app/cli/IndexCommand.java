@@ -1,23 +1,41 @@
 package padtools.app.cli;
 
+import padtools.core.aaos.AidlBindingResolver;
+import padtools.core.formats.android.AndroidManifestInfo;
+import padtools.core.formats.android.AndroidManifestParser;
 import padtools.core.formats.java.AndroidProjectScanner;
+import padtools.core.formats.uml.AidlParser;
+import padtools.core.formats.uml.ClassIndex;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.core.formats.uml.db.DbBootstrap;
 import padtools.core.formats.uml.db.GradleProjectScope;
 import padtools.core.formats.uml.db.IncrementalScanner;
 import padtools.core.formats.uml.db.IndexDatabase;
+import padtools.core.formats.uml.db.IndexReader;
 import padtools.core.formats.uml.db.IndexWriter;
 import padtools.core.formats.uml.db.dao.FilesDao;
+import padtools.core.formats.uml.db.ingest.AidlIngestor;
+import padtools.core.formats.uml.db.ingest.ComponentIngestor;
+import padtools.core.formats.uml.db.ingest.EndpointAggregator;
+import padtools.core.formats.uml.db.ingest.ManifestIngestor;
+import padtools.core.screen.IntentNavigationDetector;
+import padtools.core.screen.ScreenTransition;
 import padtools.util.ErrorListener;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -26,15 +44,21 @@ import java.util.Set;
  * <p>事前フルスキャンに加えて、2 回目以降はファイル mtime/size 差分で
  * 変更されたファイルだけを再パースして DB に流し込む (incremental 更新)。</p>
  *
+ * <p>本コマンドが書き込むテーブル:</p>
+ * <ul>
+ *   <li>classes / fields / methods / class_interfaces / class_imports — .java と .aidl の構造</li>
+ *   <li>files / modules — 入力ファイル台帳</li>
+ *   <li>manifests / intent_filters — AndroidManifest.xml の宣言</li>
+ *   <li>components — Manifest 宣言 + ソース継承 (Activity/Service/Fragment/...) 集約</li>
+ *   <li>aidl_interfaces / aidl_methods / aidl_bindings — AIDL 構造と Stub 実装紐付け</li>
+ *   <li>external_endpoints — Intent / Manifest / AIDL 経由の外部境界俯瞰</li>
+ * </ul>
+ *
  * <p>呼び出し例:</p>
  * <pre>
  *   java -jar PadTools.jar index /path/to/Car
  *   java -jar PadTools.jar index /path/to/Car --db /tmp/x.db
  * </pre>
- *
- * <p>本コマンドは Java ファイルのみ index する (.aidl / AndroidManifest.xml / .gradle は
- * 後続 PR で対応)。プロジェクトに {@code settings.gradle} がある場合は
- * {@link GradleProjectScope} を使って解析対象を絞り、無い場合はルート以下を全走査する。</p>
  */
 public final class IndexCommand {
 
@@ -42,6 +66,10 @@ public final class IndexCommand {
 
     /** コマンド結果。stderr 報告用。 */
     public static final class Result {
+        public final int javaScanned;
+        public final int aidlScanned;
+        public final int manifestScanned;
+        /** PR5 互換: java + aidl + manifest の合算ファイル数。 */
         public final int filesScanned;
         public final int filesAdded;
         public final int filesModified;
@@ -50,9 +78,13 @@ public final class IndexCommand {
         public final long elapsedMs;
         public final File dbFile;
 
-        Result(int filesScanned, int filesAdded, int filesModified, int filesUnchanged,
+        Result(int javaScanned, int aidlScanned, int manifestScanned,
+                int filesAdded, int filesModified, int filesUnchanged,
                 int filesDeleted, long elapsedMs, File dbFile) {
-            this.filesScanned = filesScanned;
+            this.javaScanned = javaScanned;
+            this.aidlScanned = aidlScanned;
+            this.manifestScanned = manifestScanned;
+            this.filesScanned = javaScanned + aidlScanned + manifestScanned;
             this.filesAdded = filesAdded;
             this.filesModified = filesModified;
             this.filesUnchanged = filesUnchanged;
@@ -60,6 +92,13 @@ public final class IndexCommand {
             this.elapsedMs = elapsedMs;
             this.dbFile = dbFile;
         }
+    }
+
+    /** {@link GradleProjectScope} 解決後のターゲット 3 種類。 */
+    static final class Targets {
+        final List<File> javaFiles = new ArrayList<>();
+        final List<File> aidlFiles = new ArrayList<>();
+        final List<File> manifestFiles = new ArrayList<>();
     }
 
     private IndexCommand() {
@@ -107,7 +146,9 @@ public final class IndexCommand {
                 : DbBootstrap.resolveDbFile(root);
         Result result = run(root, dbFile, l);
         System.err.println("[padtools] index complete: db=" + result.dbFile
-                + " files=" + result.filesScanned
+                + " java=" + result.javaScanned
+                + " aidl=" + result.aidlScanned
+                + " manifest=" + result.manifestScanned
                 + " (+" + result.filesAdded
                 + " ~" + result.filesModified
                 + " =" + result.filesUnchanged
@@ -122,7 +163,7 @@ public final class IndexCommand {
         ErrorListener l = listener != null ? listener : ErrorListener.silent();
         long start = System.currentTimeMillis();
 
-        List<File> targets = listJavaFiles(projectRoot, l);
+        Targets targets = listTargets(projectRoot, l);
 
         ensureParent(dbFile);
         int added = 0;
@@ -131,75 +172,172 @@ public final class IndexCommand {
         int deleted = 0;
         try (IndexDatabase db = IndexDatabase.openOrCreate(
                 dbFile, projectRoot.getAbsolutePath(), TOOL_VERSION)) {
-            IncrementalScanner.DiffResult diff = IncrementalScanner.diff(
-                    db.connection(), projectRoot, IndexWriter.KIND_JAVA, targets);
-            added = diff.getAdded().size();
-            modified = diff.getModified().size();
-            unchanged = diff.getUnchanged().size();
-            deleted = diff.getDeletedPaths().size();
 
-            IndexWriter writer = new IndexWriter(db.connection());
+            // 入力ファイル別に diff + 再投入
+            ScanCounts java = scanAndUpsert(db, projectRoot, IndexWriter.KIND_JAVA,
+                    targets.javaFiles, IndexCommand::ingestJava, l);
+            ScanCounts aidl = scanAndUpsert(db, projectRoot, IndexWriter.KIND_AIDL,
+                    targets.aidlFiles, IndexCommand::ingestAidl, l);
+            ScanCounts mani = scanAndUpsert(db, projectRoot, IndexWriter.KIND_MANIFEST,
+                    targets.manifestFiles, IndexCommand::ingestManifest, l);
+            added = java.added + aidl.added + mani.added;
+            modified = java.modified + aidl.modified + mani.modified;
+            unchanged = java.unchanged + aidl.unchanged + mani.unchanged;
+            deleted = java.deleted + aidl.deleted + mani.deleted;
 
-            // 削除されたファイルを DB から落とす (CASCADE で子行も)
-            for (String path : diff.getDeletedPaths()) {
-                try {
-                    deleteFileRow(db, path);
-                } catch (SQLException ex) {
-                    l.onError(path, -1, "failed to delete row: " + ex.getMessage());
-                }
-            }
-
-            // 追加/変更されたファイルを再パース → upsert
-            for (File f : diff.getStale()) {
-                ingestFile(writer, projectRoot, f, l);
-            }
+            // 集約フェーズ: 全 file レベル投入が終わってから、binding / endpoint / component の
+            // 集約テーブルを作り直す (冪等性のため毎回 wipe → 再構築)。
+            runAggregations(db, projectRoot, l);
         } catch (SQLException ex) {
             throw new IOException("Index failed: " + ex.getMessage(), ex);
         }
         long elapsed = System.currentTimeMillis() - start;
-        return new Result(targets.size(), added, modified, unchanged, deleted, elapsed, dbFile);
+        return new Result(
+                targets.javaFiles.size(), targets.aidlFiles.size(), targets.manifestFiles.size(),
+                added, modified, unchanged, deleted, elapsed, dbFile);
     }
 
-    /** {@link GradleProjectScope} 経由で対象パスを決定し、Java ファイルだけ列挙する。 */
-    static List<File> listJavaFiles(File projectRoot, ErrorListener listener) {
+    // ---- target listing ----
+
+    /** {@link GradleProjectScope} 経由で対象パスを決定し、Java / AIDL / Manifest を別個に列挙。 */
+    static Targets listTargets(File projectRoot, ErrorListener listener) {
         ErrorListener l = listener != null ? listener : ErrorListener.silent();
+        Targets t = new Targets();
         GradleProjectScope.Scope scope = GradleProjectScope.resolve(projectRoot, l);
 
         if (scope.isFallback()) {
-            // settings.gradle 無し: ルート全走査 (既存 AndroidProjectScanner を流用)
+            // settings.gradle 無し: ルート全走査
             AndroidProjectScanner.Options opts = new AndroidProjectScanner.Options();
             opts.includeAidl = false;
             opts.includeKotlin = false;
-            return new ArrayList<>(AndroidProjectScanner.scan(projectRoot, opts));
+            t.javaFiles.addAll(AndroidProjectScanner.scan(projectRoot, opts));
+            walkByExtension(projectRoot, ".aidl", t.aidlFiles);
+            walkManifest(projectRoot, t.manifestFiles);
+            return t;
         }
 
-        // Gradle 推定: モジュールごとの src/*/java ディレクトリだけを走査
-        Set<File> out = new LinkedHashSet<>();
+        // Gradle 推定: モジュールごとの src/*/java / aidl / AndroidManifest.xml を走査
         for (GradleProjectScope.ScopePath sp : scope.getPaths()) {
-            if (sp.getKind() != GradleProjectScope.ScopePath.Kind.JAVA) {
-                continue;
+            switch (sp.getKind()) {
+                case JAVA:
+                    walkByExtension(sp.getPath(), ".java", t.javaFiles);
+                    break;
+                case AIDL:
+                    walkByExtension(sp.getPath(), ".aidl", t.aidlFiles);
+                    break;
+                case MANIFEST:
+                    if (sp.getPath().isFile()) {
+                        t.manifestFiles.add(sp.getPath());
+                    }
+                    break;
+                default:
+                    break;
             }
-            walkJava(sp.getPath(), out);
         }
-        return new ArrayList<>(out);
+        dedupe(t.javaFiles);
+        dedupe(t.aidlFiles);
+        dedupe(t.manifestFiles);
+        return t;
     }
 
-    private static void walkJava(File dir, Set<File> sink) {
+    /** PR5 互換: Java ファイルだけ返す。 */
+    static List<File> listJavaFiles(File projectRoot, ErrorListener listener) {
+        return listTargets(projectRoot, listener).javaFiles;
+    }
+
+    private static void walkByExtension(File dir, String suffix, List<File> sink) {
+        if (dir == null) {
+            return;
+        }
+        if (dir.isFile()) {
+            if (dir.getName().endsWith(suffix)) {
+                sink.add(dir);
+            }
+            return;
+        }
         File[] children = dir.listFiles();
         if (children == null) {
             return;
         }
         for (File f : children) {
             if (f.isDirectory()) {
-                walkJava(f, sink);
-            } else if (f.isFile() && f.getName().endsWith(".java")) {
+                walkByExtension(f, suffix, sink);
+            } else if (f.isFile() && f.getName().endsWith(suffix)) {
                 sink.add(f);
             }
         }
     }
 
-    private static void ingestFile(IndexWriter writer, File projectRoot, File source,
-            ErrorListener listener) {
+    /** ルート以下を再帰走査して AndroidManifest.xml を集める (fallback 用)。 */
+    private static void walkManifest(File dir, List<File> sink) {
+        if (dir == null) {
+            return;
+        }
+        File[] children = dir.listFiles();
+        if (children == null) {
+            return;
+        }
+        for (File f : children) {
+            if (f.isDirectory()) {
+                walkManifest(f, sink);
+            } else if (f.isFile() && "AndroidManifest.xml".equals(f.getName())) {
+                sink.add(f);
+            }
+        }
+    }
+
+    private static void dedupe(List<File> files) {
+        Set<File> seen = new LinkedHashSet<>(files);
+        files.clear();
+        files.addAll(seen);
+    }
+
+    // ---- scan + upsert per kind ----
+
+    private static final class ScanCounts {
+        int added;
+        int modified;
+        int unchanged;
+        int deleted;
+    }
+
+    /** kind 別の diff + 再投入を共通化したヘルパー。 */
+    private static ScanCounts scanAndUpsert(IndexDatabase db, File projectRoot, String kind,
+            List<File> current, FileIngestor ingestor, ErrorListener listener) throws SQLException {
+        ScanCounts c = new ScanCounts();
+        IncrementalScanner.DiffResult diff = IncrementalScanner.diff(
+                db.connection(), projectRoot, kind, current);
+        c.added = diff.getAdded().size();
+        c.modified = diff.getModified().size();
+        c.unchanged = diff.getUnchanged().size();
+        c.deleted = diff.getDeletedPaths().size();
+
+        for (String path : diff.getDeletedPaths()) {
+            try {
+                FilesDao.delete(db.connection(), path);
+            } catch (SQLException ex) {
+                listener.onError(path, -1, "failed to delete row: " + ex.getMessage());
+            }
+        }
+
+        IndexWriter writer = new IndexWriter(db.connection());
+        for (File f : diff.getStale()) {
+            ingestor.ingest(db, writer, projectRoot, f, listener);
+        }
+        return c;
+    }
+
+    /** 1 ファイル分の取込み戦略 (kind ごとに違う)。 */
+    @FunctionalInterface
+    interface FileIngestor {
+        void ingest(IndexDatabase db, IndexWriter writer, File projectRoot, File source,
+                ErrorListener listener) throws SQLException;
+    }
+
+    // ---- per-file ingestion strategies ----
+
+    private static void ingestJava(IndexDatabase db, IndexWriter writer, File projectRoot,
+            File source, ErrorListener listener) {
         String relPath = IncrementalScanner.relativize(projectRoot, source);
         long mtime = source.lastModified();
         long size = source.length();
@@ -221,9 +359,155 @@ public final class IndexCommand {
         }
     }
 
-    private static void deleteFileRow(IndexDatabase db, String path) throws SQLException {
-        FilesDao.delete(db.connection(), path);
+    private static void ingestAidl(IndexDatabase db, IndexWriter writer, File projectRoot,
+            File source, ErrorListener listener) throws SQLException {
+        String relPath = IncrementalScanner.relativize(projectRoot, source);
+        long mtime = source.lastModified();
+        long size = source.length();
+        List<JavaClassInfo> classes = Collections.emptyList();
+        String parseError = null;
+        try {
+            String src = new String(Files.readAllBytes(source.toPath()), StandardCharsets.UTF_8);
+            classes = AidlParser.parse(src, listener);
+        } catch (IOException ex) {
+            parseError = "read failed: " + ex.getMessage();
+        } catch (RuntimeException ex) {
+            parseError = "parse failed: " + ex.getMessage();
+        }
+        writer.upsertFile(relPath, IndexWriter.KIND_AIDL, mtime, size,
+                null, null, classes, parseError);
+        // aidl_interfaces / aidl_methods への詳細投入
+        AidlIngestor.ingestInterfaces(db.connection(), classes);
     }
+
+    private static void ingestManifest(IndexDatabase db, IndexWriter writer, File projectRoot,
+            File source, ErrorListener listener) throws SQLException {
+        String relPath = IncrementalScanner.relativize(projectRoot, source);
+        long mtime = source.lastModified();
+        long size = source.length();
+        AndroidManifestInfo manifest = null;
+        String parseError = null;
+        try {
+            String src = new String(Files.readAllBytes(source.toPath()), StandardCharsets.UTF_8);
+            manifest = AndroidManifestParser.parse(src, listener);
+        } catch (IOException ex) {
+            parseError = "read failed: " + ex.getMessage();
+        } catch (RuntimeException ex) {
+            parseError = "parse failed: " + ex.getMessage();
+        }
+        writer.upsertFile(relPath, IndexWriter.KIND_MANIFEST, mtime, size,
+                null, null, Collections.emptyList(), parseError);
+        if (manifest != null) {
+            Long fileId = lookupFileId(db.connection(), relPath);
+            ManifestIngestor.ingest(db.connection(), manifest, fileId);
+        }
+    }
+
+    // ---- post-process aggregation ----
+
+    /**
+     * 全 file 取込み完了後に、集約テーブル (components / aidl_bindings /
+     * external_endpoints) を作り直す。冪等性確保のため毎回 wipe → 再構築する。
+     * 重い処理ではなく、テーブル横断の単純 SELECT + Java 側計算が主。
+     */
+    private static void runAggregations(IndexDatabase db, File projectRoot,
+            ErrorListener listener) throws SQLException {
+        wipeAggregates(db.connection());
+
+        IndexReader reader = new IndexReader(db.connection());
+        ClassIndex classIndex = reader.loadStageAClassIndex(projectRoot);
+        List<JavaClassInfo> allClasses = classIndex.headers();
+
+        // 1) Manifest 由来の境界を external_endpoints に再投入
+        for (FileRowInfo info : listManifestFileInfo(db.connection())) {
+            AndroidManifestInfo manifest = parseManifestFromDisk(projectRoot, info.path, listener);
+            if (manifest != null) {
+                EndpointAggregator.ingestManifest(db.connection(), manifest, info.fileId);
+            }
+        }
+
+        // 2) AIDL binding 解決 + 境界登録
+        AidlBindingResolver resolver = new AidlBindingResolver();
+        Map<String, List<padtools.core.aaos.AidlBinding>> bindings = resolver.resolve(allClasses);
+        AidlIngestor.ingestBindings(db.connection(), bindings);
+        EndpointAggregator.ingestAidl(db.connection(), allClasses, bindings);
+
+        // 3) ソース継承で Activity/Service/Fragment 検出 → components に追記
+        ComponentIngestor.ingest(db.connection(), classIndex);
+
+        // 4) Intent 由来の遷移を external_endpoints に追加
+        try {
+            IntentNavigationDetector detector = new IntentNavigationDetector();
+            List<ScreenTransition> transitions = detector.analyzeProject(projectRoot);
+            EndpointAggregator.ingestIntentTransitions(db.connection(), transitions);
+        } catch (IOException ex) {
+            listener.onError(null, -1,
+                    "intent navigation analysis failed: " + ex.getMessage());
+        }
+    }
+
+    /** 集約テーブルを TRUNCATE (SQLite に TRUNCATE は無いので DELETE)。 */
+    private static void wipeAggregates(Connection conn) throws SQLException {
+        try (Statement st = conn.createStatement()) {
+            st.executeUpdate("DELETE FROM external_endpoints");
+            st.executeUpdate("DELETE FROM aidl_bindings");
+            // components は SUPERCLASS 由来の行だけ消す (MANIFEST 由来は
+            // manifests の CASCADE で別管理。BOTH 行はソース継承部分を取り消し
+            // して MANIFEST 由来に戻す)。
+            st.executeUpdate("DELETE FROM components WHERE detection_src = 'SUPERCLASS'");
+            st.executeUpdate("UPDATE components SET detection_src = 'MANIFEST' "
+                    + "WHERE detection_src = 'BOTH'");
+        }
+    }
+
+    private static final class FileRowInfo {
+        final long fileId;
+        final String path;
+
+        FileRowInfo(long fileId, String path) {
+            this.fileId = fileId;
+            this.path = path;
+        }
+    }
+
+    private static List<FileRowInfo> listManifestFileInfo(Connection conn) throws SQLException {
+        List<FileRowInfo> out = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT id, path FROM files WHERE kind = ? ORDER BY id")) {
+            ps.setString(1, IndexWriter.KIND_MANIFEST);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new FileRowInfo(rs.getLong(1), rs.getString(2)));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static AndroidManifestInfo parseManifestFromDisk(File projectRoot, String relPath,
+            ErrorListener listener) {
+        File f = new File(projectRoot, relPath);
+        if (!f.isFile()) {
+            return null;
+        }
+        try {
+            String src = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            return AndroidManifestParser.parse(src, listener);
+        } catch (IOException ex) {
+            listener.onError(relPath, -1, "manifest re-read failed: " + ex.getMessage());
+            return null;
+        } catch (RuntimeException ex) {
+            listener.onError(relPath, -1, "manifest re-parse failed: " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private static Long lookupFileId(Connection conn, String relPath) throws SQLException {
+        FilesDao.FileRow row = FilesDao.findByPath(conn, relPath);
+        return row == null ? null : row.id;
+    }
+
+    // ---- helpers ----
 
     private static void ensureParent(File f) throws IOException {
         File parent = f.getParentFile();

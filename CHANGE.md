@@ -4,6 +4,14 @@ Change log
 Unreleased
 --------
 
+* **AOSP Phase 3.3: VINTF manifest パーサー** (`VintfManifest` / `VintfHal` / `VintfInterface` / `VintfManifestParser` 新規 / `AndroidProjectScanner.includeVintf`)
+    * AOSP の VINTF (Vendor Interface Object) XML — デバイス側 `manifest.xml` (`<manifest type="device">`)、フレームワーク側 `<manifest type="framework">`、`<compatibility-matrix type="..." level="N">` — を統一モデルでパースする。`<hal>` 配下の `name` / `transport` / 複数 `version` / `<interface>` (name + 複数 instance) / `optional` 属性に対応。`<kernel version="...">` と `<sepolicy><version>...</version></sepolicy>` も取り込む。
+    * AndroidManifest.xml ({@code <manifest package="...">}, type 属性なし) との混同を避けるためルート要素名 + type 属性で `VintfManifest.Kind` を判定。type 属性が無い `<manifest>` は `Kind.UNKNOWN` を返して空のままにする。
+    * セキュア XML パーサ設定 (DOCTYPE 禁止 / 外部エンティティ無効) を `AndroidManifestParser` と同等に適用。
+    * `AndroidProjectScanner.Options.includeVintf` (既定 false) を追加し、`manifest.xml` / `compatibility_matrix.xml` ファイル名を opt-in で収集。`AndroidManifest.xml` と区別される。
+    * テスト: 新規 `VintfManifestParserTest` 17 ケース (null セーフ / 空入力 / 不正 XML / AndroidManifest 誤検出回避 / device manifest / framework manifest / compatibility-matrix + level / HIDL 完全構造 / AIDL HAL / 複数 instance / 複数 version + 範囲 / optional 属性 / optional null / kernel + sepolicy / 複数 HAL / interface なし HAL / name なし HAL の除外 / DOCTYPE 拒否)、`AndroidProjectScannerTest` に 3 ケース追加 (`includeVintf` で収集 / 既定無効 / AndroidManifest と独立)。既存 951 件全 PASS。
+    * 目的: AOSP の HAL 要求/宣言マッピングを Phase 3.1 (Android.bp) + Phase 3.2 (HIDL) の解析結果と組み合わせて「このデバイスがどの HAL を実装/必要としているか」を図化できる土台を作る。
+
 * **AOSP Phase 3.2: HIDL (`*.hal`) パーサー** (`HidlParser` 新規 / `AndroidProjectScanner.includeHidl`)
     * AOSP の HAL (Hardware Abstraction Layer) で歴史的に使われてきた `.hal` (HIDL: HAL Interface Definition Language) ファイルから、パッケージ宣言・import・interface 宣言とそのメソッドを抽出し、{@link JavaClassInfo} (Kind = `AIDL_INTERFACE`) のリストとして返す。Kind は AIDL と統一することで既存のクラス図・シーケンス図描画ロジックが HIDL にもそのまま適用される。
     * HIDL 固有構文への対応:

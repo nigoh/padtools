@@ -9,8 +9,7 @@ import java.util.List;
  *
  * <p>{@code modifiers} / {@code annotations} / {@code param_types} など、
  * 順序を保ちながら少量の文字列列を保存したいときに使う。
- * カンマ自体は {@code \,}、バックスラッシュは {@code \\} にエスケープする
- * ({@link padtools.core.formats.uml.JavaClassInfoCodec} と同じ規則)。</p>
+ * カンマ自体は {@code \,}、バックスラッシュは {@code \\} にエスケープする。</p>
  *
  * <p>多対多の本格的なクエリ対象 (例: {@code class_interfaces} の iface_qn) は
  * 別テーブル化する。本コーデックは「並びを再現するだけで個別検索しない」

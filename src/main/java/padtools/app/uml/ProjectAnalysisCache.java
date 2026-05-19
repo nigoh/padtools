@@ -54,13 +54,13 @@ public final class ProjectAnalysisCache {
     private List<JavaClassInfo> classes = Collections.emptyList();
     private ClassIndex index = new ClassIndex();
     private DependencyJarIndex dependencyIndex = new DependencyJarIndex();
-    private final PersistentAnalysisCache disk;
+    private final DiskAnalysisCache disk;
 
     public ProjectAnalysisCache() {
-        this(new PersistentAnalysisCache());
+        this(new DiskAnalysisCache());
     }
 
-    public ProjectAnalysisCache(PersistentAnalysisCache disk) {
+    public ProjectAnalysisCache(DiskAnalysisCache disk) {
         this.disk = disk;
     }
 
@@ -111,7 +111,7 @@ public final class ProjectAnalysisCache {
         // lazyDetails=true でかつ Hit したら parse をスキップ。
         if (o.lazyDetails && o.useDiskCache && disk != null) {
             try {
-                Optional<PersistentAnalysisCache.Snapshot> snap = disk.load(root, scanOpts, p);
+                Optional<DiskAnalysisCache.Snapshot> snap = disk.load(root, p);
                 if (snap.isPresent()) {
                     this.projectRoot = root;
                     this.analysis = a;
@@ -142,9 +142,7 @@ public final class ProjectAnalysisCache {
         // 解析成功後にディスクキャッシュを更新 (Stage A 情報を永続化)
         if (o.lazyDetails && o.useDiskCache && disk != null) {
             try {
-                List<File> files = AndroidProjectScanner.scan(root, scanOpts);
-                String key = padtools.util.CacheKey.compute(root, files);
-                disk.save(key, this.classes, this.index);
+                disk.save(root, this.classes, this.index);
             } catch (IOException ex) {
                 l.onError(null, -1, "disk cache save failed: " + ex.getMessage());
             }

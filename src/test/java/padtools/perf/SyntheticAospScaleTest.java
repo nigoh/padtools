@@ -5,7 +5,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import padtools.app.uml.PersistentAnalysisCache;
+import padtools.app.uml.DiskAnalysisCache;
 import padtools.app.uml.ProjectAnalysisCache;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.util.CancelToken;
@@ -72,7 +72,7 @@ public class SyntheticAospScaleTest {
         File root = makeSynthAosp();
         File cacheBase = tmp.newFolder("disk-cache");
         ProjectAnalysisCache cache = new ProjectAnalysisCache(
-                new PersistentAnalysisCache(cacheBase));
+                new DiskAnalysisCache(cacheBase));
         ProjectAnalysisCache.LoadOptions opts = new ProjectAnalysisCache.LoadOptions();
         opts.lazyDetails = true;
         opts.useDiskCache = true;
@@ -93,7 +93,7 @@ public class SyntheticAospScaleTest {
 
         // 2 回目: ディスクキャッシュから瞬時復元
         ProjectAnalysisCache cache2 = new ProjectAnalysisCache(
-                new PersistentAnalysisCache(cacheBase));
+                new DiskAnalysisCache(cacheBase));
         long s2 = System.currentTimeMillis();
         cache2.load(root, ErrorListener.silent(), ProgressListener.silent(),
                 CancelToken.NONE, opts);

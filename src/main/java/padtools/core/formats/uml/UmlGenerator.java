@@ -91,8 +91,12 @@ public final class UmlGenerator {
         ErrorListener wrapped = (listener == null) ? ErrorListener.silent()
                 : wrapWithSource(listener, fileName);
         List<JavaClassInfo> infos;
-        if (fileName != null && fileName.toLowerCase().endsWith(".aidl")) {
+        String lowerName = fileName == null ? "" : fileName.toLowerCase();
+        if (lowerName.endsWith(".aidl")) {
             infos = new ArrayList<>(AidlParser.parse(source, wrapped));
+        } else if (lowerName.endsWith(".kt") || lowerName.endsWith(".kts")) {
+            infos = new ArrayList<>(
+                    padtools.core.formats.kotlin.KotlinLightScanner.scan(source, wrapped));
         } else {
             infos = new ArrayList<>(JavaStructureExtractor.extract(source, wrapped));
         }
@@ -115,9 +119,18 @@ public final class UmlGenerator {
         ErrorListener wrapped = (listener == null) ? ErrorListener.silent()
                 : wrapWithSource(listener, fileName);
         List<JavaClassInfo> infos;
-        if (fileName != null && fileName.toLowerCase().endsWith(".aidl")) {
+        String lowerName = fileName == null ? "" : fileName.toLowerCase();
+        if (lowerName.endsWith(".aidl")) {
             // AIDL は元々サイズが小さいのでフル解析からヘッダだけ拾う
             List<JavaClassInfo> full = new ArrayList<>(AidlParser.parse(source, wrapped));
+            infos = new ArrayList<>(full.size());
+            for (JavaClassInfo c : full) {
+                JavaClassInfo h = stripToHeader(c);
+                infos.add(h);
+            }
+        } else if (lowerName.endsWith(".kt") || lowerName.endsWith(".kts")) {
+            List<JavaClassInfo> full = padtools.core.formats.kotlin.KotlinLightScanner
+                    .scan(source, wrapped);
             infos = new ArrayList<>(full.size());
             for (JavaClassInfo c : full) {
                 JavaClassInfo h = stripToHeader(c);
@@ -223,6 +236,7 @@ public final class UmlGenerator {
         AndroidProjectScanner.Options scanOpts = (opts != null) ? opts
                 : new AndroidProjectScanner.Options();
         scanOpts.includeAidl = true;
+        scanOpts.includeKotlin = true;
         if (cancel != null && scanOpts.cancelToken == null) {
             scanOpts.cancelToken = cancel;
         }
@@ -256,7 +270,8 @@ public final class UmlGenerator {
             int submitted = 0;
             for (File f : files) {
                 String name = f.getName().toLowerCase();
-                if (!name.endsWith(".java") && !name.endsWith(".aidl")) {
+                if (!name.endsWith(".java") && !name.endsWith(".aidl")
+                        && !name.endsWith(".kt")) {
                     continue;
                 }
                 if (can.isCancelled()) {

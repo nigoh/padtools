@@ -56,6 +56,16 @@ Unreleased
     * テスト: `AaosPatternTest` に 12 ケース追加 (named arg / positional / 空白許容 / OrBefore / Plat+Car 組み合わせ / 優先順位 / FQN annotation / 未指定 / null)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力への反映 + suppress)。既存 878 件全 PASS。
     * 目的: AAOS クラス図で「このクラスが利用できる最小 API レベル」を一目で確認できるようにし、互換性検討の往復を減らす。
 
+* **AAOS Phase 2.2: Car App Library パターン認識** (`CarAppLibraryPattern` 新規 / `PlantUmlClassDiagram`)
+    * `androidx.car.app.*` の Car App Library ベース型を継承するクラスを検出し、クラス図に `<<CarAppService>>` / `<<CarAppSession>>` / `<<CarAppScreen>>` ステレオタイプを付与する。`JetpackPattern` と同じ単純名末尾一致 + パッケージヒントの構造を採用。
+    * 判定ロジック:
+        * `CarAppService` は車載特有の名前なので superClass の単純名マッチだけで採用 (`extends CarAppService` でも `extends androidx.car.app.CarAppService` でも検出)
+        * `Session` / `Screen` は汎用名なので、(a) superClass が FQN で `androidx.car.app.*` であるか、(b) 自クラスが `androidx.car.app.*` パッケージ配下にある、のいずれかを満たす場合だけ採用 (例: `class BackgroundSession extends Session` は採用しないが、`class HomeScreen extends androidx.car.app.Screen` は採用)
+        * ジェネリクス後置 (`extends androidx.car.app.Screen<MyTemplate>`) も `JetpackPattern.simpleName` で除去して比較
+    * `PlantUmlClassDiagram.stereotype` に組み込み、既存の `<<CarManager>>` / `<<SystemApi>>` / API レベルバッジと併記可能 (重複は除去)。`markAaosCategories=false` で抑制可。
+    * テスト: 新規 `CarAppLibraryPatternTest` 13 ケース (CarAppService 単純名/FQN、Session/Screen の FQN 経由・パッケージ経由・誤検出回避、ジェネリクス、null セーフ、ヘルパー単体)、`PlantUmlClassDiagramAaosStereotypeTest` に 3 ケース追加 (UML 出力反映 + suppress)。既存 894 件全 PASS。
+    * 目的: AAOS の Car App Library を使うモバイル UI コンポーネント (`CarAppService` / `Session` / `Screen`) を、ユーザコード側で簡単な命名規約に従っていなくても図上で識別できるようにする。
+
 * **AAOS Phase 2.1: Android API 可視性マーカー + AIDL binder impl ステレオタイプ** (`AaosPattern` / `PlantUmlClassDiagram` / `PlantUmlSequenceDiagram`)
     * `AaosPattern.apiVisibilityStereotype(JavaClassInfo)` を新設。クラスの annotation 短名 (`@SystemApi` / FQN `android.annotation.SystemApi` / 引数有り `@SystemApi(client=...)` も吸収) と JavaDoc コメント中の `@hide` マーカーから `Hidden` / `SystemApi` / `TestApi` のいずれかを返す。`@SystemApi` 付きでも JavaDoc に `@hide` があれば `Hidden` を優先表示する (より制限の強い側を優先)。Android プラットフォーム API 全般のマーカーだが、AAOS の CarService / 内部 SDK で多用されるため `AaosPattern` に同居。
     * `AaosPattern.isAidlBinderImpl(JavaClassInfo)` を新設。superClass の末尾セグメントが `Stub` (ジェネリクス後置可) で前段が 1 セグメント以上ある場合に true を返す。`class CarFooService extends ICarFoo.Stub` や深くネストした `Outer.Inner.Stub<T>` も検出。前段なしの単独 `Stub` は誤検出を避けるため除外。

@@ -511,6 +511,12 @@ public final class PlantUmlClassDiagram {
             if (apiBadge != null) {
                 parts.add(apiBadge);
             }
+            // Car App Library (androidx.car.app.*) のベース型継承を検出
+            for (String s : CarAppLibraryPattern.classify(c)) {
+                if (!parts.contains(s)) {
+                    parts.add(s);
+                }
+            }
         }
         if (c.getAndroidComponentType() != null && !c.getAndroidComponentType().isEmpty()) {
             parts.add(c.getAndroidComponentType());

@@ -137,6 +137,10 @@ public final class PlantUmlClassDiagram {
             throw new IllegalArgumentException("classes is null");
         }
         Options o = opts != null ? opts : new Options();
+        // 0. module-info 宣言 (Kind.MODULE) はクラス図に描画しない (別図種で扱う想定)
+        classes = classes.stream()
+                .filter(c -> c.getKind() != JavaClassInfo.Kind.MODULE)
+                .collect(java.util.stream.Collectors.toList());
         // 1. 外部ライブラリ除外: Origin が EXTERNAL_JAR / MISSING_JAR か、
         //    パッケージ名が externalPackagePrefixes に前方一致するクラスを除く。
         if (o.excludeExternalLibraries) {

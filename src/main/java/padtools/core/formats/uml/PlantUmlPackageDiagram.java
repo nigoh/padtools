@@ -68,6 +68,9 @@ public final class PlantUmlPackageDiagram {
         // から、依存元パッケージ → 依存先パッケージのペアを LinkedHashSet で重複排除。
         Set<String> emitted = new LinkedHashSet<>();
         for (JavaClassInfo c : classes) {
+            if (c.getKind() == JavaClassInfo.Kind.MODULE) {
+                continue;
+            }
             String srcPkg = ctx.pkgByQn.get(c.getQualifiedName());
             if (srcPkg == null) {
                 continue;
@@ -108,6 +111,10 @@ public final class PlantUmlPackageDiagram {
     private static Context buildContext(List<JavaClassInfo> classes, Options o) {
         Context ctx = new Context(o);
         for (JavaClassInfo c : classes) {
+            // module-info の宣言はパッケージ集計に含めない (パッケージを持たないため)。
+            if (c.getKind() == JavaClassInfo.Kind.MODULE) {
+                continue;
+            }
             String pkg = c.getPackageName() == null ? "" : c.getPackageName();
             ctx.classCount.merge(pkg, 1, Integer::sum);
             ctx.pkgByQn.put(c.getQualifiedName(), pkg);

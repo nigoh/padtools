@@ -83,6 +83,24 @@ public class JavaMethodInfo {
         }
     }
 
+    /**
+     * {@code yield expr;} 文 (Java 14+ switch 式の値返却)。
+     *
+     * <p>switch 式のアーム本体ブロック内でのみ意味を持つ。アクティビティ図では
+     * 値を返すノードとして描画でき、シーケンス図では参考情報として利用できる。</p>
+     */
+    public static class Yield implements Statement {
+        private final String expression;
+
+        public Yield(String expression) {
+            this.expression = expression == null ? "" : expression;
+        }
+
+        public String getExpression() {
+            return expression;
+        }
+    }
+
     /** {@code break [label];} 文。ループ外の break (switch) でも同じクラスを使う。 */
     public static class Break implements Statement {
         private final String label;

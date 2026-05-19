@@ -72,6 +72,9 @@ public final class JavaStructureExtractor {
             h.setEnclosingClass(c.getEnclosingClass());
             h.setAaosCategory(c.getAaosCategory());
             h.setAndroidComponentType(c.getAndroidComponentType());
+            // モジュール宣言の directive は header-only モードでも保持する
+            // (モジュールグラフ系の集計に必要なため)。
+            h.getModuleDirectives().addAll(c.getModuleDirectives());
             // fields / methods / enumConstants / comment は破棄
             h.setDetailed(false);
             headers.add(h);
@@ -100,6 +103,12 @@ public final class JavaStructureExtractor {
         /** ファイルレベルで宣言された import の完全修飾名 (またはワイルドカード)。 */
         private final List<String> imports = new ArrayList<>();
         private int idx;
+        /**
+         * 現在ネスト中の switch 文/式の深さ。{@code yield expr;} を switch アーム
+         * 内でだけ {@link JavaMethodInfo.Yield} として認識するために使う。0 なら
+         * switch の外。
+         */
+        private int switchDepth;
 
         private static final class PendingAssignment {
             final JavaClassInfo cls;
@@ -206,6 +215,14 @@ public final class JavaStructureExtractor {
                     parseClassDecl(JavaClassInfo.Kind.RECORD, mods, ann, comment);
                     continue;
                 }
+                // module-info.java の宣言。`module Foo { ... }` または
+                // `open module Foo { ... }` (JLS §7.7)。`module`/`open` は
+                // 文脈依存キーワード (IDENT) なので isKw で識別する。
+                if (peek().isKw("module")
+                        || (peek().isKw("open") && peek(1).isKw("module"))) {
+                    parseModuleDecl(mods, ann, comment);
+                    continue;
+                }
                 next();
             }
             resolvePendingFieldAssignments();
@@ -291,6 +308,135 @@ public final class JavaStructureExtractor {
                 classStack.remove(classStack.size() - 1);
             }
             results.add(info);
+        }
+
+        /**
+         * {@code [open] module a.b.c { ... }} を解析する (JLS §7.7)。
+         *
+         * <p>本体は {@code requires} / {@code exports} / {@code opens} /
+         * {@code uses} / {@code provides ... with ...} の各ディレクティブで
+         * 構成される。{@code module}/{@code open}/{@code requires} 等は
+         * 文脈依存キーワード (IDENT) なので {@link JavaToken#isKw(String)}
+         * で識別する。</p>
+         */
+        private void parseModuleDecl(List<String> mods, List<String> annotations,
+                                      String comment) {
+            JavaClassInfo info = new JavaClassInfo();
+            info.setKind(JavaClassInfo.Kind.MODULE);
+            info.setPackageName(packageName);
+            info.getModifiers().addAll(mods);
+            info.getAnnotations().addAll(annotations);
+            info.setComment(comment);
+
+            if (peek().isKw("open")) {
+                next();
+                info.getModifiers().add("open");
+            }
+            if (!peek().isKw("module")) {
+                // 万一誤検出だった場合のセーフネット
+                results.add(info);
+                return;
+            }
+            next(); // module
+            String moduleName = readDottedName();
+            info.setSimpleName(moduleName);
+
+            if (!peek().is("{")) {
+                // 本体が無い場合は名前だけ記録して終わる
+                if (peek().is(";")) {
+                    next();
+                }
+                results.add(info);
+                return;
+            }
+            next(); // {
+            parseModuleBody(info);
+            results.add(info);
+        }
+
+        /** {@code module} の本体ディレクティブを {@code }} まで読む。 */
+        private void parseModuleBody(JavaClassInfo info) {
+            while (!atEnd() && !peek().is("}")) {
+                if (peek().is(";")) {
+                    next();
+                    continue;
+                }
+                // 各ディレクティブは contextual keyword で始まる
+                if (peek().isKw("requires")) {
+                    next();
+                    List<String> dmods = new ArrayList<>();
+                    // requires の `transitive`/`static` は contextual keyword なので
+                    // 次のトークンが IDENT (= モジュール名の継続) のときだけ修飾子扱い
+                    while ((peek().isKw("transitive") || peek().isKw("static"))
+                            && peek(1).type == JavaToken.Type.IDENT) {
+                        dmods.add(next().text);
+                    }
+                    String target = readDottedName();
+                    info.getModuleDirectives().add(new JavaModuleDirective(
+                            JavaModuleDirective.Kind.REQUIRES, target, dmods, null));
+                    consume(";");
+                    continue;
+                }
+                if (peek().isKw("exports") || peek().isKw("opens")) {
+                    JavaModuleDirective.Kind k = peek().isKw("exports")
+                            ? JavaModuleDirective.Kind.EXPORTS
+                            : JavaModuleDirective.Kind.OPENS;
+                    next();
+                    String pkg = readDottedName();
+                    List<String> tgts = new ArrayList<>();
+                    if (peek().isKw("to")) {
+                        next();
+                        tgts.addAll(readDottedNameList());
+                    }
+                    info.getModuleDirectives().add(new JavaModuleDirective(
+                            k, pkg, null, tgts));
+                    consume(";");
+                    continue;
+                }
+                if (peek().isKw("uses")) {
+                    next();
+                    String service = readDottedName();
+                    info.getModuleDirectives().add(new JavaModuleDirective(
+                            JavaModuleDirective.Kind.USES, service, null, null));
+                    consume(";");
+                    continue;
+                }
+                if (peek().isKw("provides")) {
+                    next();
+                    String service = readDottedName();
+                    List<String> impls = new ArrayList<>();
+                    if (peek().isKw("with")) {
+                        next();
+                        impls.addAll(readDottedNameList());
+                    }
+                    info.getModuleDirectives().add(new JavaModuleDirective(
+                            JavaModuleDirective.Kind.PROVIDES, service, null, impls));
+                    consume(";");
+                    continue;
+                }
+                // 未知のトークンは 1 つ消費して継続 (前方互換)
+                next();
+            }
+            if (!atEnd() && peek().is("}")) {
+                next();
+            }
+        }
+
+        /** {@code A.b.C, D.e.F, ...} を読み取って文字列リストとして返す。 */
+        private List<String> readDottedNameList() {
+            List<String> out = new ArrayList<>();
+            String first = readDottedName();
+            if (!first.isEmpty()) {
+                out.add(first);
+            }
+            while (peek().is(",")) {
+                next();
+                String n = readDottedName();
+                if (!n.isEmpty()) {
+                    out.add(n);
+                }
+            }
+            return out;
         }
 
         /** enum 定数を ; or } まで読み取り、引数/無名サブクラス body は名前のみ拾って中身はスキップ。 */
@@ -1087,7 +1233,28 @@ public final class JavaStructureExtractor {
                 parseContinue(out);
                 return;
             }
+            // `yield expr;` は switch アーム内でのみ文として意味を持つ
+            // (Java 14+ switch 式)。switch の外では IDENT として扱う。
+            if (switchDepth > 0 && peek().isKw("yield") && looksLikeYieldStatement()) {
+                parseYield(out);
+                return;
+            }
             parseExpressionStatement(out);
+        }
+
+        /**
+         * 現在位置の {@code yield} が文として始まっているかを判定する。
+         * 直後に {@code (} ({@code yield(...)} 呼び出し)、{@code =} (代入)、
+         * {@code .} (フィールド/メソッドアクセス) が続く場合は通常の式と
+         * みなして false を返す。
+         */
+        private boolean looksLikeYieldStatement() {
+            JavaToken nxt = peek(1);
+            if (nxt.is("(") || nxt.is(".") || nxt.is("=") || nxt.is(";")
+                    || nxt.is("::")) {
+                return false;
+            }
+            return true;
         }
 
         /**
@@ -1106,6 +1273,12 @@ public final class JavaStructureExtractor {
                 }
                 if (parenDepth == 0 && t.is("}")) {
                     break;
+                }
+                // Java 14+ switch 式: return switch(x) {...}; を構造化して取り込む
+                if (t.isKw("switch") && peek(1).is("(")) {
+                    endPos = t.end;
+                    parseSwitch(out);
+                    continue;
                 }
                 if (t.is("(") || t.is("[")) {
                     parenDepth++;
@@ -1153,6 +1326,12 @@ public final class JavaStructureExtractor {
                 }
                 if (parenDepth == 0 && t.is("}")) {
                     break;
+                }
+                // Java 14+ switch 式: throw switch(x) {...}; を構造化して取り込む
+                if (t.isKw("switch") && peek(1).is("(")) {
+                    endPos = t.end;
+                    parseSwitch(out);
+                    continue;
                 }
                 if (t.is("(") || t.is("[")) {
                     parenDepth++;
@@ -1357,39 +1536,113 @@ public final class JavaStructureExtractor {
                 return;
             }
             next(); // {
-            JavaMethodInfo.Branch currentCase = null;
-            while (!atEnd() && !peek().is("}")) {
-                if (peek().isKw("case") || peek().isKw("default")) {
-                    String type;
-                    String label;
-                    if (peek().isKw("default")) {
-                        next();
-                        type = "default";
-                        label = "";
-                    } else {
-                        next(); // case
-                        int s = peek().start;
-                        int e = s;
-                        while (!atEnd() && !peek().is(":") && !peek().is("->")) {
-                            e = peek().end;
+            switchDepth++;
+            try {
+                JavaMethodInfo.Branch currentCase = null;
+                while (!atEnd() && !peek().is("}")) {
+                    if (peek().isKw("case") || peek().isKw("default")) {
+                        String type;
+                        String label;
+                        if (peek().isKw("default")) {
+                            next();
+                            type = "default";
+                            label = "";
+                        } else {
+                            next(); // case
+                            int s = peek().start;
+                            int e = s;
+                            // パターン case の `when` ガード (Java 21+) も含めて
+                            // ラベル末端 (`:` か `->`) まで読む。括弧深度を加味して
+                            // ラムダ等での `,` を case 区切りと誤認しない。
+                            int paren = 0;
+                            while (!atEnd()
+                                    && !(paren == 0 && (peek().is(":") || peek().is("->")))) {
+                                JavaToken t = peek();
+                                if (t.is("(") || t.is("[") || t.is("{")) {
+                                    paren++;
+                                } else if (t.is(")") || t.is("]") || t.is("}")) {
+                                    if (paren > 0) {
+                                        paren--;
+                                    }
+                                }
+                                e = t.end;
+                                next();
+                            }
+                            type = "case";
+                            label = src.substring(s, e).trim();
+                        }
+                        if (!atEnd() && (peek().is(":") || peek().is("->"))) {
                             next();
                         }
-                        type = "case";
-                        label = src.substring(s, e).trim();
-                    }
-                    if (!atEnd() && (peek().is(":") || peek().is("->"))) {
+                        currentCase = new JavaMethodInfo.Branch(type, label);
+                        sw.getBranches().add(currentCase);
+                    } else if (currentCase != null) {
+                        parseStatement(currentCase.getBody());
+                    } else {
+                        // case の前に何かある異常系: 1 トークン進めるのみ
                         next();
                     }
-                    currentCase = new JavaMethodInfo.Branch(type, label);
-                    sw.getBranches().add(currentCase);
-                } else if (currentCase != null) {
-                    parseStatement(currentCase.getBody());
-                } else {
-                    // case の前に何かある異常系: 1 トークン進めるのみ
+                }
+                if (!atEnd() && peek().is("}")) {
                     next();
                 }
+            } finally {
+                switchDepth--;
             }
-            if (!atEnd() && peek().is("}")) {
+        }
+
+        /**
+         * {@code yield expr;} 文 (Java 14+ switch 式) を読む。
+         * 式中の呼び出しは {@link JavaMethodInfo.Call} として {@code out} に追加し、
+         * 最後に {@link JavaMethodInfo.Yield} を 1 件追加する。
+         * {@code yield} は文脈依存キーワード (IDENT) なので、呼び出し側で
+         * switch アーム内であることを確認してから呼ぶこと。
+         */
+        private void parseYield(List<JavaMethodInfo.Statement> out) {
+            next(); // yield
+            int startPos = atEnd() ? 0 : peek().start;
+            int endPos = startPos;
+            int parenDepth = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (parenDepth == 0 && t.is(";")) {
+                    break;
+                }
+                if (parenDepth == 0 && t.is("}")) {
+                    break;
+                }
+                // yield switch(...) のネスト switch 式も構造化して取り込む
+                if (t.isKw("switch") && peek(1).is("(")) {
+                    endPos = t.end;
+                    parseSwitch(out);
+                    continue;
+                }
+                if (t.is("(") || t.is("[")) {
+                    parenDepth++;
+                } else if (t.is(")") || t.is("]")) {
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                } else if (t.is("{")) {
+                    // ラムダ本体・匿名クラス・配列初期化など
+                    next();
+                    parseStatementBlock(out);
+                    continue;
+                }
+                if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
+                    String name = t.text;
+                    boolean afterNew = idx > 0 && tokens.get(idx - 1).isKw("new");
+                    if (!isControlKeyword(name) && !afterNew) {
+                        String receiver = findReceiver();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
+                endPos = t.end;
+                next();
+            }
+            String expr = endPos > startPos ? src.substring(startPos, endPos).trim() : "";
+            out.add(new JavaMethodInfo.Yield(expr));
+            if (!atEnd() && peek().is(";")) {
                 next();
             }
         }
@@ -1512,6 +1765,13 @@ public final class JavaStructureExtractor {
                     String name = t.text;
                     boolean afterNew = idx > 0
                             && tokens.get(idx - 1).isKw("new");
+                    // Java 14+ の switch 式 (`int x = switch(y){...};` /
+                    // `foo(switch(y){...})`) を構造化して取り込む。switch 自身は
+                    // 呼び出しではないので Call 化はせず、parseSwitch に委譲。
+                    if ("switch".equals(name) && !afterNew) {
+                        parseSwitch(out);
+                        continue;
+                    }
                     if (!isControlKeyword(name) && !afterNew) {
                         String receiver = findReceiver();
                         JavaMethodInfo.Call call = new JavaMethodInfo.Call(receiver, name);

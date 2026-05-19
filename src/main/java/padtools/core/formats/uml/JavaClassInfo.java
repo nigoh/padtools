@@ -9,7 +9,7 @@ import java.util.List;
 public class JavaClassInfo {
 
     /** 種別。 */
-    public enum Kind { CLASS, INTERFACE, ENUM, ANNOTATION, AIDL_INTERFACE, RECORD }
+    public enum Kind { CLASS, INTERFACE, ENUM, ANNOTATION, AIDL_INTERFACE, RECORD, MODULE }
 
     /**
      * クラス情報の出所。
@@ -40,6 +40,7 @@ public class JavaClassInfo {
     private boolean detailed = true;
     private Origin origin = Origin.SOURCE;
     private String jarPath;
+    private final List<JavaModuleDirective> moduleDirectives = new ArrayList<>();
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
     public String getQualifiedName() {
@@ -197,5 +198,14 @@ public class JavaClassInfo {
 
     public void setJarPath(String jarPath) {
         this.jarPath = jarPath;
+    }
+
+    /**
+     * {@code module-info.java} に書かれた {@code requires} / {@code exports} /
+     * {@code opens} / {@code uses} / {@code provides} ディレクティブの一覧。
+     * {@link Kind#MODULE} のときのみ意味を持つ。
+     */
+    public List<JavaModuleDirective> getModuleDirectives() {
+        return moduleDirectives;
     }
 }

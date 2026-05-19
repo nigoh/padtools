@@ -2,11 +2,15 @@ package padtools.app.uml;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
@@ -18,23 +22,36 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+
+import padtools.core.formats.uml.UmlGenerator;
 
 /**
  * クラス図 / パッケージ図の表示範囲 ({@link DiagramScope}) を編集するダイアログ。
  *
  * <p>大規模プロジェクトで全クラスを描くと PlantUML が完走しないため、
- * パッケージ・モジュール・正規表現・最大クラス数で表示を絞る。</p>
+ * パッケージ・モジュール・正規表現・最大クラス数・外部ライブラリ除外・関連線フィルタで
+ * 表示を絞る。プリセット切替で密度を一括変更できる。</p>
  */
 public final class DiagramScopeDialog extends JDialog {
 
     private final JList<String> packageList;
+    private final JList<String> excludePackageList;
     private final JList<String> moduleList;
     private final JTextField regexField;
     private final JSpinner maxClassesSpinner;
     private final JSpinner neighborHopsSpinner;
+    private final JComboBox<DiagramPreset> presetCombo;
+    private final JCheckBox inheritanceCheckbox;
+    private final JCheckBox implementationCheckbox;
+    private final JCheckBox usageCheckbox;
+    private final JComboBox<VisibilityFilter> visibilityCombo;
+    private final JCheckBox excludeExternalCheckbox;
+    private final JRadioButton parseModeFull;
+    private final JRadioButton parseModeHeaders;
     private DiagramScope result;
 
     public DiagramScopeDialog(Window owner, List<String> packages, List<String> modules,
@@ -44,26 +61,59 @@ public final class DiagramScopeDialog extends JDialog {
         setLayout(new BorderLayout(8, 8));
 
         packageList = new JList<>(packages.toArray(new String[0]));
-        packageList.setVisibleRowCount(10);
+        packageList.setVisibleRowCount(8);
+        excludePackageList = new JList<>(packages.toArray(new String[0]));
+        excludePackageList.setVisibleRowCount(8);
         moduleList = new JList<>(modules.toArray(new String[0]));
-        moduleList.setVisibleRowCount(6);
+        moduleList.setVisibleRowCount(5);
         regexField = new JTextField(20);
         maxClassesSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100_000, 50));
         neighborHopsSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 10, 1));
+        presetCombo = new JComboBox<>(DiagramPreset.values());
+        presetCombo.setSelectedItem(DiagramPreset.CUSTOM);
+        inheritanceCheckbox = new JCheckBox("Inheritance (extends)", true);
+        implementationCheckbox = new JCheckBox("Implementation (implements)", true);
+        usageCheckbox = new JCheckBox("Usage (field / param types)", true);
+        visibilityCombo = new JComboBox<>(VisibilityFilter.values());
+        visibilityCombo.setSelectedItem(VisibilityFilter.ALL);
+        excludeExternalCheckbox = new JCheckBox(
+                "Exclude external libraries (java.*, android.*, kotlin.*, ...)");
+        parseModeFull = new JRadioButton("Full", true);
+        parseModeHeaders = new JRadioButton("Headers only (light)");
+        ButtonGroup pmGroup = new ButtonGroup();
+        pmGroup.add(parseModeFull);
+        pmGroup.add(parseModeHeaders);
 
         if (initial != null) {
             selectAll(packageList, initial.getIncludedPackages());
+            selectAll(excludePackageList, initial.getExcludedPackages());
             selectAll(moduleList, initial.getIncludedModules());
             if (initial.getClassNameRegex() != null) {
                 regexField.setText(initial.getClassNameRegex().pattern());
             }
             maxClassesSpinner.setValue(initial.getMaxClasses());
             neighborHopsSpinner.setValue(initial.getNeighborHops());
+            EnumSet<RelationKind> kinds = initial.getRelationKinds();
+            inheritanceCheckbox.setSelected(kinds.contains(RelationKind.INHERITANCE));
+            implementationCheckbox.setSelected(kinds.contains(RelationKind.IMPLEMENTATION));
+            usageCheckbox.setSelected(kinds.contains(RelationKind.USAGE));
+            visibilityCombo.setSelectedItem(initial.getVisibilityFilter());
+            excludeExternalCheckbox.setSelected(initial.isExcludeExternalLibraries());
+            if (initial.getParseMode() == UmlGenerator.ParseMode.HEADERS_ONLY) {
+                parseModeHeaders.setSelected(true);
+            } else {
+                parseModeFull.setSelected(true);
+            }
+            if (initial.getPreset() != null) {
+                presetCombo.setSelectedItem(initial.getPreset());
+            }
         }
+
+        presetCombo.addActionListener(e -> applyPresetToWidgets());
 
         add(buildForm(), BorderLayout.CENTER);
         add(buildButtons(), BorderLayout.SOUTH);
-        setPreferredSize(new Dimension(520, 480));
+        setPreferredSize(new Dimension(640, 620));
         pack();
         setLocationRelativeTo(owner);
     }
@@ -80,22 +130,35 @@ public final class DiagramScopeDialog extends JDialog {
         c.fill = GridBagConstraints.BOTH;
         c.weightx = 1;
 
+        // Preset row
         c.gridx = 0; c.gridy = 0; c.weighty = 0;
-        p.add(new JLabel("Packages (multi-select):"), c);
-        c.gridy = 1; c.weighty = 1;
+        JPanel presetRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        presetRow.add(new JLabel("Preset:"));
+        presetRow.add(Box.createHorizontalStrut(4));
+        presetRow.add(presetCombo);
+        p.add(presetRow, c);
+
+        c.gridy = 1; c.weighty = 0;
+        p.add(new JLabel("Include packages (multi-select):"), c);
+        c.gridy = 2; c.weighty = 1;
         p.add(new JScrollPane(packageList), c);
 
-        c.gridy = 2; c.weighty = 0;
+        c.gridy = 3; c.weighty = 0;
+        p.add(new JLabel("Exclude packages (multi-select):"), c);
+        c.gridy = 4; c.weighty = 1;
+        p.add(new JScrollPane(excludePackageList), c);
+
+        c.gridy = 5; c.weighty = 0;
         p.add(new JLabel("Modules (multi-select):"), c);
-        c.gridy = 3; c.weighty = 0.5;
+        c.gridy = 6; c.weighty = 0.5;
         p.add(new JScrollPane(moduleList), c);
 
-        c.gridy = 4; c.weighty = 0;
+        c.gridy = 7; c.weighty = 0;
         p.add(new JLabel("Class name regex (matches simple or qualified name):"), c);
-        c.gridy = 5;
+        c.gridy = 8;
         p.add(regexField, c);
 
-        c.gridy = 6;
+        c.gridy = 9;
         JPanel row = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
         row.add(new JLabel("Max classes (0 = unlimited):"));
         row.add(Box.createHorizontalStrut(4));
@@ -105,6 +168,32 @@ public final class DiagramScopeDialog extends JDialog {
         row.add(Box.createHorizontalStrut(4));
         row.add(neighborHopsSpinner);
         p.add(row, c);
+
+        c.gridy = 10;
+        JPanel relations = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        relations.add(new JLabel("Relation kinds:"));
+        relations.add(Box.createHorizontalStrut(4));
+        relations.add(inheritanceCheckbox);
+        relations.add(implementationCheckbox);
+        relations.add(usageCheckbox);
+        p.add(relations, c);
+
+        c.gridy = 11;
+        JPanel vis = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        vis.add(new JLabel("Visibility:"));
+        vis.add(Box.createHorizontalStrut(4));
+        vis.add(visibilityCombo);
+        vis.add(Box.createHorizontalStrut(12));
+        vis.add(excludeExternalCheckbox);
+        p.add(vis, c);
+
+        c.gridy = 12;
+        JPanel mode = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        mode.add(new JLabel("Parse mode:"));
+        mode.add(Box.createHorizontalStrut(4));
+        mode.add(parseModeFull);
+        mode.add(parseModeHeaders);
+        p.add(mode, c);
 
         return p;
     }
@@ -126,10 +215,39 @@ public final class DiagramScopeDialog extends JDialog {
         return bar;
     }
 
+    /** プリセットセレクタが変わったとき、他ウィジェットに既定値を反映する。 */
+    private void applyPresetToWidgets() {
+        Object sel = presetCombo.getSelectedItem();
+        if (!(sel instanceof DiagramPreset)) {
+            return;
+        }
+        DiagramPreset p = (DiagramPreset) sel;
+        if (p == DiagramPreset.CUSTOM) {
+            return;
+        }
+        DiagramScope.Builder b = DiagramScope.builder();
+        p.applyTo(b);
+        DiagramScope tmp = b.build();
+        EnumSet<RelationKind> kinds = tmp.getRelationKinds();
+        inheritanceCheckbox.setSelected(kinds.contains(RelationKind.INHERITANCE));
+        implementationCheckbox.setSelected(kinds.contains(RelationKind.IMPLEMENTATION));
+        usageCheckbox.setSelected(kinds.contains(RelationKind.USAGE));
+        visibilityCombo.setSelectedItem(tmp.getVisibilityFilter());
+        excludeExternalCheckbox.setSelected(tmp.isExcludeExternalLibraries());
+        if (tmp.getParseMode() == UmlGenerator.ParseMode.HEADERS_ONLY) {
+            parseModeHeaders.setSelected(true);
+        } else {
+            parseModeFull.setSelected(true);
+        }
+        maxClassesSpinner.setValue(tmp.getMaxClasses());
+    }
+
     private DiagramScope buildScope() {
         DiagramScope.Builder b = DiagramScope.builder();
         Set<String> pkgs = new LinkedHashSet<>(packageList.getSelectedValuesList());
         b.includePackages(pkgs);
+        Set<String> excluded = new LinkedHashSet<>(excludePackageList.getSelectedValuesList());
+        b.excludePackages(excluded);
         Set<String> mods = new LinkedHashSet<>(moduleList.getSelectedValuesList());
         b.includeModules(mods);
         String regex = regexField.getText().trim();
@@ -144,6 +262,25 @@ public final class DiagramScopeDialog extends JDialog {
         }
         b.maxClasses(((Number) maxClassesSpinner.getValue()).intValue());
         b.neighborHops(((Number) neighborHopsSpinner.getValue()).intValue());
+        EnumSet<RelationKind> kinds = EnumSet.noneOf(RelationKind.class);
+        if (inheritanceCheckbox.isSelected()) kinds.add(RelationKind.INHERITANCE);
+        if (implementationCheckbox.isSelected()) kinds.add(RelationKind.IMPLEMENTATION);
+        if (usageCheckbox.isSelected()) kinds.add(RelationKind.USAGE);
+        if (kinds.isEmpty()) {
+            // 全部 off は意味がないので all on に戻す
+            kinds = EnumSet.allOf(RelationKind.class);
+        }
+        b.relationKinds(kinds);
+        Object visSel = visibilityCombo.getSelectedItem();
+        b.visibilityFilter(visSel instanceof VisibilityFilter
+                ? (VisibilityFilter) visSel : VisibilityFilter.ALL);
+        b.excludeExternalLibraries(excludeExternalCheckbox.isSelected());
+        b.parseMode(parseModeHeaders.isSelected()
+                ? UmlGenerator.ParseMode.HEADERS_ONLY
+                : UmlGenerator.ParseMode.FULL);
+        Object presetSel = presetCombo.getSelectedItem();
+        b.preset(presetSel instanceof DiagramPreset
+                ? (DiagramPreset) presetSel : DiagramPreset.CUSTOM);
         return b.build();
     }
 

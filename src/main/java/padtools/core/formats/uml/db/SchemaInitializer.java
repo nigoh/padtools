@@ -27,9 +27,12 @@ public final class SchemaInitializer {
      *   <li>v3 (PR3): {@code refs / unresolved} を追加 (逆参照インデックスを永続化)</li>
      *   <li>v4 (PR6a): {@code manifests / intent_filters / components} を追加
      *                  (Activity/Service/Fragment 集約と Manifest メタデータ)</li>
+     *   <li>v5 (PR6b): {@code aidl_interfaces / aidl_methods / aidl_bindings /
+     *                  external_endpoints} を追加 (AIDL 構造と Intent/Manifest/AIDL
+     *                  を統合した外部境界俯瞰)</li>
      * </ul>
      */
-    public static final int SCHEMA_VERSION = 4;
+    public static final int SCHEMA_VERSION = 5;
 
     private SchemaInitializer() {
     }
@@ -251,6 +254,69 @@ public final class SchemaInitializer {
                 + ")"
             );
             st.executeUpdate("CREATE INDEX idx_intent_actions ON intent_filters(actions)");
+
+            // 13) aidl_interfaces (.aidl ソースから抽出した interface)
+            //     1 行 = 1 interface。class_id は classes(Kind.AIDL_INTERFACE) を指す。
+            //     interface 単体での検索 (実装が無い AIDL を見つけたい等) に使えるよう独立テーブル。
+            st.executeUpdate(
+                "CREATE TABLE aidl_interfaces ("
+                + "  id           INTEGER PRIMARY KEY,"
+                + "  class_id     INTEGER UNIQUE REFERENCES classes(id) ON DELETE CASCADE,"
+                + "  package_name TEXT NOT NULL,"
+                + "  simple_name  TEXT NOT NULL"
+                + ")"
+            );
+
+            // 14) aidl_methods (interface のメソッドシグネチャ)
+            //     methods テーブルと別にする理由: AIDL はソースの (oneway / in/out/inout)
+            //     等の修飾子情報を保持したいが、Java メソッドと意味論が違う。
+            st.executeUpdate(
+                "CREATE TABLE aidl_methods ("
+                + "  id          INTEGER PRIMARY KEY,"
+                + "  aidl_id     INTEGER NOT NULL REFERENCES aidl_interfaces(id) ON DELETE CASCADE,"
+                + "  name        TEXT NOT NULL,"
+                + "  oneway      INTEGER NOT NULL,"
+                + "  return_type TEXT,"
+                + "  param_sig   TEXT"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_aidl_methods_aidl ON aidl_methods(aidl_id)");
+
+            // 15) aidl_bindings (AIDL ↔ 実装クラスの紐付け)
+            //     AidlBindingResolver.resolve の結果を保持。1 つの AIDL が複数 Stub に
+            //     紐付くケース (process 別実装等) に備えて UNIQUE(aidl_qn, impl_qn)。
+            st.executeUpdate(
+                "CREATE TABLE aidl_bindings ("
+                + "  id      INTEGER PRIMARY KEY,"
+                + "  aidl_qn TEXT NOT NULL,"
+                + "  impl_qn TEXT NOT NULL,"
+                + "  UNIQUE(aidl_qn, impl_qn)"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_aidl_bind_aidl ON aidl_bindings(aidl_qn)");
+            st.executeUpdate("CREATE INDEX idx_aidl_bind_impl ON aidl_bindings(impl_qn)");
+
+            // 16) external_endpoints (Intent/Manifest/AIDL を統合した外部境界の一覧)
+            //     source_kind:
+            //       MANIFEST_ACTIVITY / MANIFEST_SERVICE / MANIFEST_RECEIVER / MANIFEST_PROVIDER
+            //       INTENT_START_ACTIVITY / INTENT_START_FOR_RESULT / INTENT_SET_CLASS
+            //       AIDL_INTERFACE / AIDL_BINDING
+            //     from_qn は発火側 (manifest 宣言の場合は null), to_qn は到達側。
+            st.executeUpdate(
+                "CREATE TABLE external_endpoints ("
+                + "  id          INTEGER PRIMARY KEY,"
+                + "  source_kind TEXT NOT NULL,"
+                + "  from_qn     TEXT,"
+                + "  from_method TEXT,"
+                + "  to_qn       TEXT NOT NULL,"
+                + "  attributes  TEXT,"
+                + "  file_id     INTEGER REFERENCES files(id) ON DELETE CASCADE,"
+                + "  line_hint   INTEGER NOT NULL DEFAULT -1"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_ep_from ON external_endpoints(from_qn)");
+            st.executeUpdate("CREATE INDEX idx_ep_to   ON external_endpoints(to_qn)");
+            st.executeUpdate("CREATE INDEX idx_ep_kind ON external_endpoints(source_kind)");
         }
     }
 

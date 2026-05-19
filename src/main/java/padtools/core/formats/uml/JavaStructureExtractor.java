@@ -64,6 +64,7 @@ public final class JavaStructureExtractor {
             h.setPackageName(c.getPackageName());
             h.setSimpleName(c.getSimpleName());
             h.setKind(c.getKind());
+            h.getImports().addAll(c.getImports());
             h.getModifiers().addAll(c.getModifiers());
             h.getAnnotations().addAll(c.getAnnotations());
             h.setSuperClass(c.getSuperClass());
@@ -96,6 +97,8 @@ public final class JavaStructureExtractor {
          */
         private final List<PendingAssignment> pendingFieldAssignments = new ArrayList<>();
         private String packageName = "";
+        /** ファイルレベルで宣言された import の完全修飾名 (またはワイルドカード)。 */
+        private final List<String> imports = new ArrayList<>();
         private int idx;
 
         private static final class PendingAssignment {
@@ -163,7 +166,16 @@ public final class JavaStructureExtractor {
                     continue;
                 }
                 if (peek().isKw("import")) {
-                    skipUntilSemicolon();
+                    next(); // import
+                    boolean isStatic = peek().isKw("static");
+                    if (isStatic) {
+                        next();
+                    }
+                    String imp = readImportName();
+                    if (!imp.isEmpty()) {
+                        imports.add(isStatic ? "static " + imp : imp);
+                    }
+                    consume(";");
                     continue;
                 }
                 int declStart = atEnd() ? -1 : peek().start;
@@ -225,6 +237,7 @@ public final class JavaStructureExtractor {
             info.setKind(kind);
             info.setSimpleName(name);
             info.setPackageName(packageName);
+            info.getImports().addAll(imports);
             info.getModifiers().addAll(mods);
             info.getAnnotations().addAll(annotations);
             info.setComment(comment);
@@ -1807,6 +1820,29 @@ public final class JavaStructureExtractor {
                 if (peek().is(".")) {
                     next();
                     sb.append('.');
+                } else {
+                    break;
+                }
+            }
+            return sb.toString();
+        }
+
+        /**
+         * import 宣言の本体 ({@code foo.bar.Baz} もしくは {@code foo.bar.*}) を読み取る。
+         * 末尾の {@code ;} は呼び出し側で消費する。
+         */
+        private String readImportName() {
+            StringBuilder sb = new StringBuilder();
+            while (!atEnd() && peek().type == JavaToken.Type.IDENT) {
+                sb.append(next().text);
+                if (peek().is(".")) {
+                    next();
+                    sb.append('.');
+                    if (peek().is("*")) {
+                        next();
+                        sb.append('*');
+                        break;
+                    }
                 } else {
                     break;
                 }

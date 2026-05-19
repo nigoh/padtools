@@ -16,6 +16,14 @@ import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
+import padtools.core.impact.ImpactAnalyzer;
+import padtools.core.impact.ImpactGraph;
+import padtools.core.impact.MarkdownImpactReport;
+import padtools.core.impact.PlantUmlImpactDiagram;
+import padtools.core.refs.ReferenceIndex;
+import padtools.core.refs.ReferenceIndexBuilder;
+import padtools.core.refs.ReferenceKey;
+import padtools.core.refs.ReferenceSite;
 import padtools.util.ErrorListener;
 import padtools.util.Option;
 import padtools.util.OptionParser;
@@ -110,6 +118,9 @@ public class Main {
         final Option optInteractiveSvg = new Option(null, "interactive-svg", false);
         final Option optHiddenAnnotations = new Option(null, "hidden-annotations", true);
         final Option optCommentMaxLength = new Option(null, "comment-max-length", true);
+        final Option optImpact = new Option(null, "impact", true);
+        final Option optImpactDepth = new Option(null, "impact-depth", true);
+        final Option optRefFind = new Option(null, "ref-find", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -124,7 +135,8 @@ public class Main {
                 optSequenceDiagrams, optJetpack, optPerFolder,
                 optPreset, optNoFields, optNoMethods, optPublicOnly,
                 optExcludeExternal, optExcludePackage, optRelation, optMode,
-                optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength});
+                optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
+                optImpact, optImpactDepth, optRefFind});
 
         try {
             optParser.parse(args);
@@ -214,6 +226,25 @@ public class Main {
         }
         if (optSummary.isSet()) {
             handleSummary(file_in, file_out, listener);
+            return;
+        }
+        if (optImpact.isSet()) {
+            int depth = 3;
+            if (!optImpactDepth.getArguments().isEmpty()) {
+                try {
+                    depth = Integer.parseInt(optImpactDepth.getArguments().getLast());
+                } catch (NumberFormatException ex) {
+                    System.err.println("--impact-depth must be an integer");
+                    System.exit(1);
+                }
+            }
+            handleImpact(file_in, file_out, optImpact.getArguments().getLast(),
+                    depth, listener);
+            return;
+        }
+        if (optRefFind.isSet()) {
+            handleRefFind(file_in, file_out, optRefFind.getArguments().getLast(),
+                    listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -440,6 +471,157 @@ public class Main {
                     .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
         }
         writeText(fileOut, sb.toString());
+    }
+
+    /**
+     * {@code --impact <FQN[.method]>}: 指定シンボルを起点に逆参照を辿り、
+     * 影響を受けるクラスを推移閉包で列挙する。
+     *
+     * <p>出力先:</p>
+     * <ul>
+     *   <li>{@code -o foo.md}: Markdown レポート 1 ファイル</li>
+     *   <li>{@code -o foo.puml}: PlantUML 影響図 1 ファイル</li>
+     *   <li>{@code -o foo}: 拡張子なし → {@code foo.md} と {@code foo.puml} を両方書く</li>
+     *   <li>{@code -o} 省略: Markdown を標準出力</li>
+     * </ul>
+     */
+    private static void handleImpact(File fileIn, File fileOut, String target,
+                                       int depth, ErrorListener listener)
+            throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--impact requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        if (target == null || target.isEmpty()) {
+            System.err.println("--impact requires a symbol target (FQN or FQN.method).");
+            System.exit(1);
+            return;
+        }
+        ReferenceIndex refIndex = buildReferenceIndex(fileIn, listener);
+
+        ImpactGraph graph;
+        ImpactAnalyzer analyzer = new ImpactAnalyzer(refIndex);
+        // FQN.method の区別: 最後のドット以降が小文字始まりかつクラスが存在 → method
+        int lastDot = target.lastIndexOf('.');
+        if (lastDot > 0 && lastDot < target.length() - 1) {
+            String maybeOwner = target.substring(0, lastDot);
+            String maybeMember = target.substring(lastDot + 1);
+            if (!maybeMember.isEmpty()
+                    && Character.isLowerCase(maybeMember.charAt(0))) {
+                graph = analyzer.analyzeMethod(maybeOwner, maybeMember, depth);
+            } else {
+                graph = analyzer.analyzeClass(target, depth);
+            }
+        } else {
+            graph = analyzer.analyzeClass(target, depth);
+        }
+
+        String markdown = MarkdownImpactReport.render(graph);
+        String puml = PlantUmlImpactDiagram.render(graph);
+        writeImpactOutput(fileOut, markdown, puml);
+    }
+
+    /**
+     * {@code --ref-find <FQN[.member]>}: シンボルを参照している箇所を 1 行ずつ
+     * プレーンテキストで列挙する (grep 互換)。
+     */
+    private static void handleRefFind(File fileIn, File fileOut, String target,
+                                        ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--ref-find requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        if (target == null || target.isEmpty()) {
+            System.err.println("--ref-find requires a symbol target.");
+            System.exit(1);
+            return;
+        }
+        ReferenceIndex refIndex = buildReferenceIndex(fileIn, listener);
+
+        java.util.List<ReferenceSite> sites;
+        int lastDot = target.lastIndexOf('.');
+        if (lastDot > 0 && lastDot < target.length() - 1) {
+            String maybeOwner = target.substring(0, lastDot);
+            String maybeMember = target.substring(lastDot + 1);
+            if (!maybeMember.isEmpty()
+                    && Character.isLowerCase(maybeMember.charAt(0))) {
+                sites = refIndex.sites(
+                        ReferenceKey.ofMethod(maybeOwner, maybeMember));
+            } else {
+                sites = refIndex.sitesForClass(target);
+            }
+        } else {
+            sites = refIndex.sitesForClass(target);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (ReferenceSite s : sites) {
+            sb.append(s.getCallerFqn());
+            if (!s.getCallerMethod().isEmpty()) {
+                sb.append('.').append(s.getCallerMethod());
+            }
+            sb.append('\t').append(s.getKind().name());
+            if (!s.getFile().isEmpty()) {
+                sb.append('\t').append(s.getFile());
+            }
+            sb.append('\n');
+        }
+        if (sb.length() == 0) {
+            sb.append("(no references found for ").append(target).append(")\n");
+        }
+        writeText(fileOut, sb.toString());
+    }
+
+    /**
+     * プロジェクトをパースして {@link ReferenceIndex} を構築する。
+     * Stage B 化されたクラスをすべて {@link ReferenceIndexBuilder} に流す。
+     */
+    private static ReferenceIndex buildReferenceIndex(File projectDir,
+                                                        ErrorListener listener)
+            throws IOException {
+        UmlGenerator.ProjectParseResult result =
+                UmlGenerator.extractFromProjectDetailed(projectDir, null, listener,
+                        null, null, false, UmlGenerator.ParseMode.FULL);
+        ReferenceIndex idx = new ReferenceIndex();
+        ReferenceIndexBuilder builder = new ReferenceIndexBuilder(idx,
+                result.getIndex(), result.getDependencyIndex(), listener);
+        builder.addAll(result.getClasses());
+        return idx;
+    }
+
+    /**
+     * Impact レポートの書き出し。出力先の拡張子を見て .md / .puml / 両方を切り替える。
+     */
+    private static void writeImpactOutput(File fileOut, String markdown, String puml)
+            throws IOException {
+        if (fileOut == null) {
+            writeText(null, markdown);
+            return;
+        }
+        String name = fileOut.getName().toLowerCase();
+        if (name.endsWith(".md") || name.endsWith(".markdown")) {
+            writeText(fileOut, markdown);
+        } else if (name.endsWith(".puml") || name.endsWith(".plantuml")) {
+            writeText(fileOut, puml);
+        } else if (name.endsWith(".svg")) {
+            writeUmlOutput(fileOut, puml);
+        } else {
+            // 拡張子なし: 同じディレクトリ・同じベース名で .md と .puml を両方書く
+            File parent = fileOut.getParentFile();
+            String base = fileOut.getName();
+            int dot = base.lastIndexOf('.');
+            if (dot >= 0) {
+                base = base.substring(0, dot);
+            }
+            File mdFile = parent == null ? new File(base + ".md")
+                    : new File(parent, base + ".md");
+            File pumlFile = parent == null ? new File(base + ".puml")
+                    : new File(parent, base + ".puml");
+            writeText(mdFile, markdown);
+            writeText(pumlFile, puml);
+        }
     }
 
     /**
@@ -977,6 +1159,11 @@ public class Main {
                 + " annotation names (comma-separated).");
         System.err.println("  --comment-max-length N: Maximum inline comment length"
                 + " (0 disables comments).");
+        System.err.println("  --impact SYMBOL: Show reverse-reference impact for a class"
+                + " FQN or FQN.method (Markdown + PlantUML).");
+        System.err.println("  --impact-depth N: BFS depth for --impact (default 3).");
+        System.err.println("  --ref-find SYMBOL: Print every reference site of a class"
+                + " FQN or FQN.method (plain text, grep-friendly).");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all` | 図の種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -31,6 +31,8 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `deps` | `-G` | Gradle 依存図 |
 | `summary` | `--summary` | Markdown サマリー |
 | `all` | `--all` | 全種類一括出力 |
+| `impact` | `--impact SYMBOL` | 逆参照影響レポート (Markdown + PlantUML)。SYMBOL は FQN もしくは FQN.method |
+| `ref-find` | `--ref-find SYMBOL` | シンボルへの参照箇所 grep 互換テキスト出力 |
 
 ## 例
 
@@ -49,6 +51,15 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # Gradle 依存図
 /padtools-quick deps ~/AOSP/packages/services/Car
+
+# 影響範囲解析 (このクラスを消すと何が壊れる?)
+/padtools-quick impact android.car.hardware.CarPropertyManager ~/AOSP/packages/services/Car
+
+# 影響範囲解析 (メソッド単位)
+/padtools-quick impact android.car.hardware.CarPropertyManager.getProperty ~/AOSP/packages/services/Car
+
+# 参照箇所列挙 (grep 互換)
+/padtools-quick ref-find android.car.hardware.CarPropertyManager.getProperty ~/AOSP/packages/services/Car
 ```
 
 ## 出力

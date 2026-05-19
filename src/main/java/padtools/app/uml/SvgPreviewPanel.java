@@ -67,6 +67,8 @@ public class SvgPreviewPanel extends JPanel {
     private List<LinkArea> linkAreas = Collections.emptyList();
     /** 右クリックでリンク領域にヒットしたときに呼ばれるリスナ。 */
     private BiConsumer<LinkArea, MouseEvent> linkPopupListener;
+    /** 左クリックでリンク領域にヒットしたときに呼ばれるリスナ (ドリルダウン用)。 */
+    private BiConsumer<LinkArea, MouseEvent> linkClickListener;
 
     public SvgPreviewPanel() {
         setBackground(new Color(0xF7, 0xF7, 0xF7));
@@ -127,6 +129,14 @@ public class SvgPreviewPanel extends JPanel {
      */
     public void setOnLinkPopup(BiConsumer<LinkArea, MouseEvent> listener) {
         this.linkPopupListener = listener;
+    }
+
+    /**
+     * SVG リンク領域 ({@link LinkArea}) を左クリックしたときに呼ばれるリスナを設定する。
+     * {@code null} で解除。ドリルダウン用 (左クリック = リンク先クラスへの遷移)。
+     */
+    public void setOnLinkClick(BiConsumer<LinkArea, MouseEvent> listener) {
+        this.linkClickListener = listener;
     }
 
     /**
@@ -347,6 +357,9 @@ public class SvgPreviewPanel extends JPanel {
                 if (maybeFireLinkPopup(e)) {
                     return;
                 }
+                if (maybeFireLinkClick(e)) {
+                    return;
+                }
                 if (SwingUtilities.isMiddleMouseButton(e)
                         || SwingUtilities.isLeftMouseButton(e)) {
                     dragStart = e.getPoint();
@@ -414,6 +427,25 @@ public class SvgPreviewPanel extends JPanel {
             return false;
         }
         linkPopupListener.accept(hit, e);
+        return true;
+    }
+
+    /**
+     * 左クリックがリンク領域内なら登録済みリスナを発火し、ドラッグ開始を抑止する。
+     * @return リンククリックを発火した場合 true
+     */
+    private boolean maybeFireLinkClick(MouseEvent e) {
+        if (e.isPopupTrigger()
+                || linkClickListener == null
+                || linkAreas.isEmpty()
+                || !SwingUtilities.isLeftMouseButton(e)) {
+            return false;
+        }
+        LinkArea hit = hitTestLink(e.getPoint());
+        if (hit == null) {
+            return false;
+        }
+        linkClickListener.accept(hit, e);
         return true;
     }
 

@@ -103,6 +103,7 @@ public final class DiagramService {
                 o.includeLegend = request.isIncludeLegend();
                 o.maxClasses = maxClasses;
                 o.interactiveLinks = request.isInteractiveLinks();
+                applyScopeToClassOptions(request.getScope(), o);
                 if (scopedTotal < originalTotal) {
                     o.footerWarning = "scope filter: " + scopedTotal + " of "
                             + originalTotal + " classes";
@@ -219,9 +220,31 @@ public final class DiagramService {
     }
 
     /**
+     * スコープに保持された関連線フィルタ・可視性フィルタを
+     * {@link PlantUmlClassDiagram.Options} に転写する。
+     * クラスリストの除外は {@link #applyScope} で完了している前提なので、
+     * Options 側の {@code excludeExternalLibraries} は触らない (二重除外を避ける)。
+     */
+    static void applyScopeToClassOptions(DiagramScope scope, PlantUmlClassDiagram.Options o) {
+        if (scope == null || o == null) {
+            return;
+        }
+        java.util.EnumSet<RelationKind> kinds = scope.getRelationKinds();
+        if (!kinds.containsAll(java.util.EnumSet.allOf(RelationKind.class))) {
+            o.showInheritance = kinds.contains(RelationKind.INHERITANCE);
+            o.showImplementations = kinds.contains(RelationKind.IMPLEMENTATION);
+            o.showUsageRelations = kinds.contains(RelationKind.USAGE);
+        }
+        if (scope.getVisibilityFilter() == VisibilityFilter.PUBLIC_ONLY) {
+            o.publicOnly = true;
+        }
+    }
+
+    /**
      * スコープに従って ClassInfo リストを絞り込む。
      *
-     * <p>順序: module → package include → regex → seed + BFS by neighborHops。
+     * <p>順序: module → package include → package exclude → external libraries →
+     * regex → seed + BFS by neighborHops。
      * maxClasses 上限は呼び出し側 (PlantUmlClassDiagram.Options.maxClasses) で適用する。</p>
      */
     static List<JavaClassInfo> applyScope(List<JavaClassInfo> classes, DiagramScope scope,
@@ -256,6 +279,44 @@ public final class DiagramService {
                         break;
                     }
                 }
+            }
+            result = next;
+        }
+
+        // 2.5. package exclude (前方一致または完全一致)
+        if (!scope.getExcludedPackages().isEmpty()) {
+            Set<String> excluded = scope.getExcludedPackages();
+            List<JavaClassInfo> next = new ArrayList<>(result.size());
+            for (JavaClassInfo c : result) {
+                String pkg = c.getPackageName() == null ? "" : c.getPackageName();
+                boolean drop = false;
+                for (String ex : excluded) {
+                    if (pkg.equals(ex) || pkg.startsWith(ex + ".")) {
+                        drop = true;
+                        break;
+                    }
+                }
+                if (!drop) {
+                    next.add(c);
+                }
+            }
+            result = next;
+        }
+
+        // 2.6. exclude external libraries (Origin + prefix の 2 段判定)
+        if (scope.isExcludeExternalLibraries()) {
+            List<JavaClassInfo> next = new ArrayList<>(result.size());
+            for (JavaClassInfo c : result) {
+                JavaClassInfo.Origin origin = c.getOrigin();
+                if (origin == JavaClassInfo.Origin.EXTERNAL_JAR
+                        || origin == JavaClassInfo.Origin.MISSING_JAR) {
+                    continue;
+                }
+                if (padtools.core.formats.uml.ExternalPackageMatcher.isExternal(
+                        c.getPackageName(), scope.getExternalPackagePrefixes())) {
+                    continue;
+                }
+                next.add(c);
             }
             result = next;
         }

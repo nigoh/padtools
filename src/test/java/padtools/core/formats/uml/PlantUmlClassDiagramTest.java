@@ -568,4 +568,166 @@ public class PlantUmlClassDiagramTest {
         assertTrue(puml, puml.contains("<<Fragment>>"));
         assertTrue(puml, puml.contains("Jetpack ステレオタイプ"));
     }
+
+    // ---- Class diagram readability work (PR2) ----
+
+    @Test
+    public void testExcludeExternalLibrariesFiltersByOrigin() {
+        JavaClassInfo internal = new JavaClassInfo();
+        internal.setPackageName("com.example");
+        internal.setSimpleName("Foo");
+        internal.setKind(JavaClassInfo.Kind.CLASS);
+        internal.getModifiers().add("public");
+
+        JavaClassInfo external = new JavaClassInfo();
+        external.setPackageName("com.example.dep");
+        external.setSimpleName("DepClass");
+        external.setKind(JavaClassInfo.Kind.CLASS);
+        external.setOrigin(JavaClassInfo.Origin.EXTERNAL_JAR);
+
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.excludeExternalLibraries = true;
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(internal, external), o);
+        assertTrue(puml, puml.contains("Foo"));
+        assertFalse("external JAR class should be filtered out",
+                puml.contains("DepClass"));
+    }
+
+    @Test
+    public void testExcludeExternalLibrariesFiltersByPackagePrefix() {
+        JavaClassInfo project = new JavaClassInfo();
+        project.setPackageName("com.example");
+        project.setSimpleName("App");
+        project.setKind(JavaClassInfo.Kind.CLASS);
+
+        JavaClassInfo androidView = new JavaClassInfo();
+        androidView.setPackageName("android.view");
+        androidView.setSimpleName("View");
+        androidView.setKind(JavaClassInfo.Kind.CLASS);
+
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.excludeExternalLibraries = true;
+        String puml = PlantUmlClassDiagram.generate(Arrays.asList(project, androidView), o);
+        assertTrue(puml, puml.contains("App"));
+        assertFalse("android.view.View should be filtered out by prefix",
+                puml.contains("android.view"));
+    }
+
+    @Test
+    public void testExcludeExternalDisabledByDefault() {
+        JavaClassInfo external = new JavaClassInfo();
+        external.setPackageName("java.util");
+        external.setSimpleName("HashMap");
+        external.setKind(JavaClassInfo.Kind.CLASS);
+        external.setOrigin(JavaClassInfo.Origin.EXTERNAL_JAR);
+
+        // default Options: excludeExternalLibraries=false → still emitted
+        String puml = PlantUmlClassDiagram.generate(
+                java.util.Collections.singletonList(external));
+        assertTrue("external class should be shown when filter is off",
+                puml.contains("HashMap"));
+    }
+
+    @Test
+    public void testShowImplementationsToggleSeparatesExtendsAndImplements() {
+        JavaClassInfo parent = new JavaClassInfo();
+        parent.setPackageName("com.x");
+        parent.setSimpleName("Base");
+        parent.setKind(JavaClassInfo.Kind.CLASS);
+
+        JavaClassInfo iface = new JavaClassInfo();
+        iface.setPackageName("com.x");
+        iface.setSimpleName("Runnable");
+        iface.setKind(JavaClassInfo.Kind.INTERFACE);
+
+        JavaClassInfo child = new JavaClassInfo();
+        child.setPackageName("com.x");
+        child.setSimpleName("Child");
+        child.setKind(JavaClassInfo.Kind.CLASS);
+        child.setSuperClass("com.x.Base");
+        child.getInterfaces().add("com.x.Runnable");
+
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showInheritance = true;
+        o.showImplementations = false;
+        o.includeLegend = false; // legend に <|.. 説明があるので無効化
+        String puml = PlantUmlClassDiagram.generate(
+                Arrays.asList(parent, iface, child), o);
+        assertTrue("extends should still be emitted", puml.contains("<|--"));
+        assertFalse("implements should be suppressed", puml.contains("<|.."));
+    }
+
+    @Test
+    public void testShowInheritanceOffStillEmitsImplements() {
+        JavaClassInfo parent = new JavaClassInfo();
+        parent.setPackageName("com.x");
+        parent.setSimpleName("Base");
+        parent.setKind(JavaClassInfo.Kind.CLASS);
+
+        JavaClassInfo iface = new JavaClassInfo();
+        iface.setPackageName("com.x");
+        iface.setSimpleName("Runnable");
+        iface.setKind(JavaClassInfo.Kind.INTERFACE);
+
+        JavaClassInfo child = new JavaClassInfo();
+        child.setPackageName("com.x");
+        child.setSimpleName("Child");
+        child.setKind(JavaClassInfo.Kind.CLASS);
+        child.setSuperClass("com.x.Base");
+        child.getInterfaces().add("com.x.Runnable");
+
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.showInheritance = false;
+        o.showImplementations = true;
+        o.includeLegend = false; // legend に <|-- 説明があるので無効化
+        String puml = PlantUmlClassDiagram.generate(
+                Arrays.asList(parent, iface, child), o);
+        assertFalse("extends should be suppressed", puml.contains("<|--"));
+        assertTrue("implements should still be emitted", puml.contains("<|.."));
+    }
+
+    @Test
+    public void testPublicOnlyFiltersNonPublicClasses() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; public class Pub {} class Pkg {} ");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.publicOnly = true;
+        String puml = PlantUmlClassDiagram.generate(infos, o);
+        assertTrue(puml, puml.contains("Pub"));
+        assertFalse("package-private class should be hidden", puml.contains("Pkg"));
+    }
+
+    @Test
+    public void testPublicOnlySuppressesPrivateMembers() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; public class Holder {"
+                        + " public int a; private int b; protected int c; int d;"
+                        + " public void m() {} private void n() {}"
+                        + " }");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        o.publicOnly = true;
+        String puml = PlantUmlClassDiagram.generate(infos, o);
+        assertTrue(puml, puml.contains("a: int"));
+        assertFalse("private field b should be hidden",
+                puml.contains("b: int"));
+        assertFalse("protected field c should be hidden",
+                puml.contains("c: int"));
+        assertFalse("package-private field d should be hidden",
+                puml.contains("d: int"));
+        assertTrue(puml.contains("m("));
+        assertFalse("private method n should be hidden", puml.contains("n("));
+    }
+
+    @Test
+    public void testPresetMinimalSuppressesFieldsAndUsage() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; public class Foo { Bar b; public void m() {} }"
+                        + "public class Bar {}");
+        PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+        padtools.app.uml.DiagramPreset.MINIMAL.applyTo(o);
+        String puml = PlantUmlClassDiagram.generate(infos, o);
+        assertFalse("fields should not appear in MINIMAL", puml.contains("b: Bar"));
+        assertFalse("usage relations should not appear in MINIMAL",
+                puml.contains("-->"));
+    }
 }

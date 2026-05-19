@@ -30,6 +30,11 @@ public final class PlantUmlClassDiagram {
     public static class Options {
         public boolean showVisibility = true;
         public boolean showInheritance = true;
+        /**
+         * {@code implements} によるインタフェース実装線を出力する。既定 true。
+         * 関連線種別フィルタで extends と implements を別々に制御したい場合に使う。
+         */
+        public boolean showImplementations = true;
         public boolean showUsageRelations = true;
         public boolean showFields = true;
         public boolean showMethods = true;
@@ -81,6 +86,30 @@ public final class PlantUmlClassDiagram {
          * SVG 上の {@code href} から FQN を取り出す側 (GUI) と揃える。
          */
         public String interactiveLinkPrefix = "padtools://class/";
+        /**
+         * 外部ライブラリ (java.*, android.*, kotlin.* など) を完全に除外する。
+         * 既定 false (除外せず {@code <<external>>} / {@code <<missing>>} ステレオタイプで区別表示する
+         * 既存挙動を維持)。
+         *
+         * <p>判定は 2 段で行う:
+         * <ol>
+         *   <li>{@link JavaClassInfo#getOrigin()} が {@code EXTERNAL_JAR} / {@code MISSING_JAR}</li>
+         *   <li>パッケージ名が {@link #externalPackagePrefixes} のいずれかに前方一致</li>
+         * </ol>
+         * いずれかに該当すれば除外される。</p>
+         */
+        public boolean excludeExternalLibraries = false;
+        /**
+         * 外部ライブラリ判定のパッケージ prefix セット。
+         * null/空のときは {@link ExternalPackageMatcher#DEFAULT_PREFIXES} が使われる。
+         */
+        public Set<String> externalPackagePrefixes =
+                new LinkedHashSet<>(ExternalPackageMatcher.DEFAULT_PREFIXES);
+        /**
+         * {@code public} 可視性のクラス / フィールド / メソッドのみを表示する。
+         * 既定 false (全可視性を表示)。
+         */
+        public boolean publicOnly = false;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -101,7 +130,29 @@ public final class PlantUmlClassDiagram {
             throw new IllegalArgumentException("classes is null");
         }
         Options o = opts != null ? opts : new Options();
-        // maxClasses が指定されていれば先頭から切り詰める。
+        // 1. 外部ライブラリ除外: Origin が EXTERNAL_JAR / MISSING_JAR か、
+        //    パッケージ名が externalPackagePrefixes に前方一致するクラスを除く。
+        if (o.excludeExternalLibraries) {
+            List<JavaClassInfo> next = new ArrayList<>(classes.size());
+            for (JavaClassInfo c : classes) {
+                if (isExternalClass(c, o)) {
+                    continue;
+                }
+                next.add(c);
+            }
+            classes = next;
+        }
+        // 2. publicOnly: クラス自体の public 修飾子で絞る。
+        if (o.publicOnly) {
+            List<JavaClassInfo> next = new ArrayList<>(classes.size());
+            for (JavaClassInfo c : classes) {
+                if (isPublicLike(c)) {
+                    next.add(c);
+                }
+            }
+            classes = next;
+        }
+        // 3. maxClasses が指定されていれば先頭から切り詰める。
         int originalTotal = classes.size();
         if (o.maxClasses > 0 && classes.size() > o.maxClasses) {
             classes = classes.subList(0, o.maxClasses);
@@ -166,9 +217,9 @@ public final class PlantUmlClassDiagram {
         }
 
         // 関係線
-        if (o.showInheritance) {
+        if (o.showInheritance || o.showImplementations) {
             for (JavaClassInfo c : classes) {
-                emitInheritance(out, c, aliasByQn, qnBySimple);
+                emitInheritance(out, c, o, aliasByQn, qnBySimple);
             }
         }
         if (o.showUsageRelations) {
@@ -468,6 +519,9 @@ public final class PlantUmlClassDiagram {
 
     private static void emitField(StringBuilder out, JavaFieldInfo f,
                                    Options o, String indent) {
+        if (o.publicOnly && f.getVisibility() != Visibility.PUBLIC) {
+            return;
+        }
         out.append(indent);
         if (o.showVisibility) {
             out.append(f.getVisibility().mark());
@@ -522,6 +576,9 @@ public final class PlantUmlClassDiagram {
 
     private static void emitMethod(StringBuilder out, JavaMethodInfo m,
                                     Options o, String indent) {
+        if (o.publicOnly && m.getVisibility() != Visibility.PUBLIC) {
+            return;
+        }
         out.append(indent);
         if (o.showVisibility) {
             out.append(m.getVisibility().mark());
@@ -554,19 +611,23 @@ public final class PlantUmlClassDiagram {
     }
 
     private static void emitInheritance(StringBuilder out, JavaClassInfo c,
+                                         Options o,
                                          java.util.Map<String, String> aliasByQn,
                                          java.util.Map<String, String> qnBySimple) {
         String me = aliasByQn.get(c.getQualifiedName());
         if (me == null) {
             return;
         }
-        if (c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
+        if (o.showInheritance
+                && c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
             String parent = relationId(simplifyTypeRef(c.getSuperClass()), aliasByQn, qnBySimple);
             out.append(parent).append(" <|-- ").append(me).append('\n');
         }
-        for (String iface : c.getInterfaces()) {
-            String parent = relationId(simplifyTypeRef(iface), aliasByQn, qnBySimple);
-            out.append(parent).append(" <|.. ").append(me).append('\n');
+        if (o.showImplementations) {
+            for (String iface : c.getInterfaces()) {
+                String parent = relationId(simplifyTypeRef(iface), aliasByQn, qnBySimple);
+                out.append(parent).append(" <|.. ").append(me).append('\n');
+            }
         }
     }
 
@@ -708,6 +769,26 @@ public final class PlantUmlClassDiagram {
             out.add(cur.toString());
         }
         return out;
+    }
+
+    /**
+     * 外部ライブラリ由来クラス判定。
+     * Origin が EXTERNAL_JAR / MISSING_JAR、またはパッケージ名が
+     * {@link Options#externalPackagePrefixes} に前方一致する場合に true。
+     */
+    private static boolean isExternalClass(JavaClassInfo c, Options o) {
+        JavaClassInfo.Origin origin = c.getOrigin();
+        if (origin == JavaClassInfo.Origin.EXTERNAL_JAR
+                || origin == JavaClassInfo.Origin.MISSING_JAR) {
+            return true;
+        }
+        return ExternalPackageMatcher.isExternal(c.getPackageName(), o.externalPackagePrefixes);
+    }
+
+    /** クラスが {@code public} 修飾子を持つか (publicOnly フィルタ用)。 */
+    private static boolean isPublicLike(JavaClassInfo c) {
+        List<String> mods = c.getModifiers();
+        return mods != null && mods.contains("public");
     }
 
     private PlantUmlClassDiagram() {

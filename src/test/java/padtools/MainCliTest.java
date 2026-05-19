@@ -327,4 +327,116 @@ public class MainCliTest {
         assertTrue(puml, puml.contains("interface \"android.car.ICar\""));
         assertTrue(puml, puml.contains("getVersion(): int"));
     }
+
+    // ---- Class diagram readability work (PR3) ----
+
+    @Test
+    public void testClassDiagramPresetMinimal() throws Exception {
+        File javaFile = tmp.newFile("Foo.java");
+        writeFile(javaFile,
+                "package x; public class Foo { Bar b; public int n; void m() {} } "
+                        + "public class Bar {}");
+        File outPuml = new File(tmp.getRoot(), "min.puml");
+        Main.main(new String[]{"-c", "--preset", "minimal",
+                "-o", outPuml.getAbsolutePath(), javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertFalse("MINIMAL preset should hide fields",
+                puml.contains("n: int"));
+    }
+
+    @Test
+    public void testClassDiagramNoFieldsOption() throws Exception {
+        File javaFile = tmp.newFile("Foo.java");
+        writeFile(javaFile, "package x; public class Foo { public int n; void m() {} }");
+        File outPuml = new File(tmp.getRoot(), "nof.puml");
+        Main.main(new String[]{"-c", "--no-fields",
+                "-o", outPuml.getAbsolutePath(), javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertFalse("--no-fields should hide fields", puml.contains("n: int"));
+        assertTrue("methods still visible", puml.contains("m("));
+    }
+
+    @Test
+    public void testClassDiagramPublicOnly() throws Exception {
+        File javaFile = tmp.newFile("Foo.java");
+        writeFile(javaFile,
+                "package x; public class Pub {} class Pkg {}");
+        File outPuml = new File(tmp.getRoot(), "pubonly.puml");
+        Main.main(new String[]{"-c", "--public-only",
+                "-o", outPuml.getAbsolutePath(), javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("Pub"));
+        assertFalse("package-private class hidden by --public-only",
+                puml.contains("class \"x.Pkg\""));
+    }
+
+    @Test
+    public void testClassDiagramExcludePackage() throws Exception {
+        File dir = tmp.newFolder("proj");
+        File pkgA = new File(dir, "a");
+        File pkgB = new File(dir, "b");
+        assertTrue(pkgA.mkdirs());
+        assertTrue(pkgB.mkdirs());
+        writeFile(new File(pkgA, "A.java"), "package a; public class A {}");
+        writeFile(new File(pkgB, "B.java"), "package b; public class B {}");
+        File outPuml = new File(tmp.getRoot(), "exc.puml");
+        Main.main(new String[]{"-c", "--exclude-package", "b",
+                "-o", outPuml.getAbsolutePath(), dir.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue("a.A remains", puml.contains("class \"a.A\""));
+        assertFalse("b.B excluded by --exclude-package",
+                puml.contains("class \"b.B\""));
+    }
+
+    @Test
+    public void testClassDiagramRelationInheritOnly() throws Exception {
+        File javaFile = tmp.newFile("Hier.java");
+        writeFile(javaFile,
+                "package x; public class Base {} public class Child extends Base {}"
+                        + " public interface I {} public class Impl implements I {}");
+        File outPuml = new File(tmp.getRoot(), "rel.puml");
+        Main.main(new String[]{"-c", "--relation", "inherit", "--no-legend",
+                "-o", outPuml.getAbsolutePath(), javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue("extends arrow present", puml.contains("<|--"));
+        assertFalse("implements arrow suppressed", puml.contains("<|.."));
+    }
+
+    @Test
+    public void testClassDiagramModeHeadersOnly() throws Exception {
+        File dir = tmp.newFolder("proj");
+        writeFile(new File(dir, "Big.java"),
+                "package x; public class Big {"
+                        + " public void heavy() { /* body */ }"
+                        + " public int n;"
+                        + " }");
+        File outPuml = new File(tmp.getRoot(), "ho.puml");
+        Main.main(new String[]{"-c", "--mode", "headers-only",
+                "-o", outPuml.getAbsolutePath(), dir.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        // headers-only でもクラス自身は出る。メソッドは headers のみだと
+        // メソッドシグネチャは抽出されるが、本体内呼び出しは出ない。
+        assertTrue(puml, puml.contains("Big"));
+    }
+
+    @Test
+    public void testClassDiagramInteractiveSvg() throws Exception {
+        File javaFile = tmp.newFile("Foo.java");
+        writeFile(javaFile, "package x; public class Foo {}");
+        File outPuml = new File(tmp.getRoot(), "isvg.puml");
+        Main.main(new String[]{"-c", "--interactive-svg",
+                "-o", outPuml.getAbsolutePath(), javaFile.getAbsolutePath()});
+        String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
+        assertTrue("interactive link present",
+                puml.contains("[[padtools://class/x.Foo]]"));
+    }
+
+    @Test
+    public void testInvalidPresetRejectedByUmlOverrides() {
+        // UmlOverrides.build に対する直接検証は System.exit を呼ぶため Main 経由は
+        // テストできない。代わりに DiagramPreset.fromCli の解析だけを確認する。
+        assertEquals(padtools.app.uml.DiagramPreset.CUSTOM,
+                padtools.app.uml.DiagramPreset.fromCli("bogus"));
+    }
 }

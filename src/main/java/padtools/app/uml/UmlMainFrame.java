@@ -100,6 +100,8 @@ public class UmlMainFrame extends JFrame {
     private String currentLayoutKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
+    /** ドリルダウン履歴 (戻る用)。 */
+    private final java.util.Deque<DiagramScope> scopeHistory = new java.util.ArrayDeque<>();
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
     /**
@@ -123,6 +125,7 @@ public class UmlMainFrame extends JFrame {
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
+        previewPanel.setOnLinkClick(this::onPreviewLinkClick);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnClassSelected(this::onTreeClassSelected);
         treePanel.setOnPackageSelected(this::onTreePackageSelected);
@@ -256,6 +259,8 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
         pickLayout.addActionListener(e -> pickLayoutFile());
         m.add(pickLayout);
+        m.addSeparator();
+        m.add(buildPresetSubMenu());
         JMenuItem scope = new JMenuItem("Scope...");
         scope.addActionListener(e -> openScopeDialog());
         m.add(scope);
@@ -266,6 +271,51 @@ public class UmlMainFrame extends JFrame {
         });
         m.add(clearScope);
         return m;
+    }
+
+    /** クラス図の表示密度プリセット ({@link DiagramPreset}) を切り替えるサブメニュー。 */
+    private JMenu buildPresetSubMenu() {
+        JMenu sub = new JMenu("Preset");
+        sub.setToolTipText("Switch class diagram density "
+                + "(Minimal / Balanced / Detailed)");
+        int seq = 1;
+        for (DiagramPreset p : DiagramPreset.values()) {
+            if (p == DiagramPreset.CUSTOM) {
+                continue;
+            }
+            JMenuItem mi = new JMenuItem(p.getDisplayName());
+            // Ctrl+1 = Minimal, Ctrl+2 = Balanced, Ctrl+3 = Detailed
+            int keyCode;
+            switch (seq) {
+                case 1: keyCode = KeyEvent.VK_1; break;
+                case 2: keyCode = KeyEvent.VK_2; break;
+                case 3: keyCode = KeyEvent.VK_3; break;
+                default: keyCode = KeyEvent.VK_UNDEFINED;
+            }
+            if (keyCode != KeyEvent.VK_UNDEFINED) {
+                mi.setAccelerator(KeyStroke.getKeyStroke(keyCode, MENU_MASK));
+            }
+            seq++;
+            final DiagramPreset preset = p;
+            mi.addActionListener(e -> applyPreset(preset));
+            sub.add(mi);
+        }
+        return sub;
+    }
+
+    /**
+     * 指定された {@link DiagramPreset} を現在のスコープに適用して再描画する。
+     * 既存スコープのフィルタ設定 (パッケージ・seed 等) は維持し、表示密度関連の
+     * 項目だけプリセットで書き換える。
+     */
+    private void applyPreset(DiagramPreset p) {
+        DiagramScope.Builder b = currentScope != null
+                ? currentScope.toBuilder()
+                : DiagramScope.builder();
+        p.applyTo(b);
+        currentScope = b.build();
+        status.setText("Preset: " + p.getDisplayName());
+        refreshDiagram();
     }
 
     private JMenu buildViewMenu() {
@@ -287,7 +337,24 @@ public class UmlMainFrame extends JFrame {
         m.add(zoomOut);
         m.add(zoomReset);
         m.add(zoomFit);
+        m.addSeparator();
+        JMenuItem back = new JMenuItem("Back");
+        back.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT,
+                MENU_MASK | InputEvent.ALT_DOWN_MASK));
+        back.addActionListener(e -> popScopeHistory());
+        m.add(back);
         return m;
+    }
+
+    /** ドリルダウン履歴を 1 段戻す。空のときは無視。 */
+    private void popScopeHistory() {
+        if (scopeHistory.isEmpty()) {
+            status.setText("No drill-down history.");
+            return;
+        }
+        currentScope = scopeHistory.pop();
+        status.setText("Back to previous scope.");
+        refreshDiagram();
     }
 
     private JMenu buildStyleMenu() {
@@ -676,6 +743,45 @@ public class UmlMainFrame extends JFrame {
      * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
      * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
      */
+    private void onPreviewLinkClick(LinkArea link, MouseEvent event) {
+        if (link == null) {
+            return;
+        }
+        String fqn = parseClassFqnFromHref(link.getHref());
+        if (fqn == null) {
+            return;
+        }
+        // 履歴に push して詳細図にドリルダウン
+        DiagramScope previous = currentScope;
+        if (previous != null) {
+            scopeHistory.push(previous);
+        }
+        DiagramScope.Builder b = DiagramScope.builder()
+                .seed(fqn).neighborHops(1);
+        DiagramPreset.DETAILED.applyTo(b);
+        currentScope = b.build();
+        currentKind = DiagramKind.CLASS;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        status.setText("Drill-down: " + fqn);
+        refreshDiagram();
+    }
+
+    /** href 文字列から {@code padtools://class/<FQN>} の FQN 部分を取り出す。 */
+    private static String parseClassFqnFromHref(String href) {
+        if (href == null) {
+            return null;
+        }
+        final String prefix = "padtools://class/";
+        if (href.startsWith(prefix)) {
+            String s = href.substring(prefix.length()).trim();
+            return s.isEmpty() ? null : s;
+        }
+        return null;
+    }
+
     private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
         if (link == null || event == null) {
             return;

@@ -25,9 +25,11 @@ public final class SchemaInitializer {
      *   <li>v2 (PR2): {@code modules / files / classes / class_interfaces /
      *                   class_imports / fields / methods} を追加</li>
      *   <li>v3 (PR3): {@code refs / unresolved} を追加 (逆参照インデックスを永続化)</li>
+     *   <li>v4 (PR6a): {@code manifests / intent_filters / components} を追加
+     *                  (Activity/Service/Fragment 集約と Manifest メタデータ)</li>
      * </ul>
      */
-    public static final int SCHEMA_VERSION = 3;
+    public static final int SCHEMA_VERSION = 4;
 
     private SchemaInitializer() {
     }
@@ -199,6 +201,56 @@ public final class SchemaInitializer {
                 + ")"
             );
             st.executeUpdate("CREATE INDEX idx_unresolved_symbol ON unresolved(symbol)");
+
+            // 10) manifests (AndroidManifest.xml の概要)
+            st.executeUpdate(
+                "CREATE TABLE manifests ("
+                + "  id                INTEGER PRIMARY KEY,"
+                + "  file_id           INTEGER UNIQUE REFERENCES files(id) ON DELETE CASCADE,"
+                + "  package_name      TEXT NOT NULL,"
+                + "  source_set        TEXT NOT NULL,"
+                + "  min_sdk           INTEGER,"
+                + "  target_sdk        INTEGER,"
+                + "  max_sdk           INTEGER,"
+                + "  application_class TEXT"
+                + ")"
+            );
+
+            // 11) components (Activity / Service / Fragment / Receiver / Provider 集約)
+            //     Manifest 由来とソース継承 (AndroidSuperclassDetector) 由来を統合する。
+            //     detection_src で出所を区別 ('MANIFEST' / 'SUPERCLASS' / 'BOTH')。
+            st.executeUpdate(
+                "CREATE TABLE components ("
+                + "  id            INTEGER PRIMARY KEY,"
+                + "  comp_type     TEXT NOT NULL,"
+                + "  class_qn      TEXT NOT NULL,"
+                + "  detection_src TEXT NOT NULL,"
+                + "  manifest_id   INTEGER REFERENCES manifests(id) ON DELETE CASCADE,"
+                + "  exported      INTEGER,"
+                + "  permission    TEXT,"
+                + "  enabled       INTEGER,"
+                + "  UNIQUE(comp_type, class_qn)"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_components_type  ON components(comp_type)");
+            st.executeUpdate("CREATE INDEX idx_components_class ON components(class_qn)");
+
+            // 12) intent_filters (Manifest の <intent-filter>)
+            //     1 filter = 1 行。actions / categories / data_schemes / data_mime_types は
+            //     CSV 連結で保持する。完全に正規化するとテーブル数が膨らむので Phase 1 では
+            //     filter 単位の round-trip を優先する。
+            st.executeUpdate(
+                "CREATE TABLE intent_filters ("
+                + "  id              INTEGER PRIMARY KEY,"
+                + "  component_id    INTEGER NOT NULL REFERENCES components(id) ON DELETE CASCADE,"
+                + "  filter_index    INTEGER NOT NULL,"
+                + "  actions         TEXT,"
+                + "  categories      TEXT,"
+                + "  data_schemes    TEXT,"
+                + "  data_mime_types TEXT"
+                + ")"
+            );
+            st.executeUpdate("CREATE INDEX idx_intent_actions ON intent_filters(actions)");
         }
     }
 

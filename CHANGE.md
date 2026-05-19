@@ -4,6 +4,26 @@ Change log
 Unreleased
 --------
 
+* **クラス・メソッド・フィールド横断検索ダイアログを追加** (`EntitySearchDialog` 新規 / `UmlMainFrame`)
+    * Diagram メニュー → `Search Entities...` (アクセラレータ `Ctrl+Shift+F`) で開くモーダル。クラス・メソッド・フィールドを 1 つの部分一致検索で横断的に絞り込み、Kind チェックボックスで種別を ON/OFF できる
+    * 選択結果に応じて: クラス → seed+1hop でクラス図に切り替え / メソッド → シーケンス図を生成 / フィールド → 所属クラス seed+1hop でクラス図 (フィールド型まで含む)
+    * フィールドが匿名クラス/ラムダの初期化子を持つ場合は `[+inline]` バッジで可視化
+    * ヘッドレス環境 (CI) でも検証できるよう、`EntitySearchDialog.filter(classes, query)` の静的ヘルパを提供 (Swing インスタンスを生成しない)
+    * 目的: AOSP 級プロジェクトでも目的のクラス/メソッド/フィールドへ即座にジャンプし、対応する UML を表示できるようにする
+* **フィールド宣言時の匿名クラス/ラムダ本体をシーケンス図に展開** (`JavaStructureExtractor` / `JavaFieldInfo` / `PlantUmlSequenceDiagram`)
+    * これまで `parseFieldDecl` は `=` の後を `skipUntilSemicolonRespectingBlocks()` で捨てており、`private OnClickListener l = new OnClickListener() { onClick() { ... } };` の本体が解析対象外だった
+    * `JavaFieldInfo.inlineMethods` を追加し、匿名クラス本体を `parseClassBody` で再帰解析して取り込む。ラムダ (`() -> body` / `args -> expr`) は SAM 名 (Runnable→run, OnClickListener→onClick, Consumer→accept など 20 種) を組み込みマップで解決、未知の SAM は `<inline>` で fallback
+    * `PlantUmlSequenceDiagram.emitCall` の `nextCls == null` フォールバックに `findInlineMethod` を追加。フィールド経由の呼び出し (例: `listener.onClick()`) に対し、解決済みフィールド型の participant をアクティベートしつつ inline body を walk する
+    * expression-bodied ラムダ専用の `parseLambdaExpressionBody` を追加 (フィールド終端 `;` を消費しないため安全)
+    * 目的: Android UI コードで頻出するリスナー登録パターンが、シーケンス図でブラックボックスにならないようにする
+* **依存 JAR/AAR の外部クラスを participant に表示** (`DependencyJarIndex` / `ExternalClassReader` 新規、ASM 9.7 を追加)
+    * Gradle 依存宣言 (`implementation 'androidx.appcompat:appcompat:1.7.0'`) から `~/.gradle/caches/modules-2/files-2.1/...` および `~/.m2/repository/...` を再帰探索して JAR/AAR を発見。AAR は内部 `classes.jar` をメモリ展開
+    * ASM `ClassReader` (SKIP_CODE / SKIP_DEBUG / SKIP_FRAMES) で各 `.class` のヘッダ (FQN・superclass・interfaces・public methods・public fields) を取り出して `JavaClassInfo` に変換。`Origin.EXTERNAL_JAR` で印付け
+    * 起動時には ZipEntry 名のカタログだけを構築し、実際の `.class` 読み込みは `resolve(name)` 呼び出し時の lazy 評価。`ConcurrentHashMap` で並列パース耐性
+    * シーケンス図/クラス図で外部クラスは `<<external>>` ステレオタイプ、解決できなかった依存先は `<<missing>> #LightYellow` 警告マーカーで描画 (`PlantUmlSequenceDiagram` / `PlantUmlClassDiagram.stereotype` / `PlantUmlClassLegend.emitOrigins`)
+    * `UmlMainFrame` のステータスバーに「N dependency(ies) not resolved」を追記し、JAR が見つからない原因を可視化
+    * `PlantUmlSequenceDiagram` 本体のサイズ縮小のため、コメント note 出力を `PlantUmlSequenceComments` に切り出し
+    * 目的: `extends AppCompatActivity` のような外部 SDK クラスがクラス図/シーケンス図上で「不在」にならないようにし、依存 JAR が無いプロジェクトでは明示的に警告マーカーで知らせる
 * **左ペインのプロジェクトツリーが左クリックに反応するように修正** (`ProjectTreePanel` / `UmlMainFrame`)
     * これまで `ProjectTreePanel.notifySelection()` はメソッド / クラス / Manifest / Component に対しては該当ハンドラを発火していたが、`UmlMainFrame` 側でクラス用ハンドラ (`setOnClassSelected`) を登録しておらず、また**パッケージ / モジュール** ノードは左クリックでは何も発火しない構造 (`onClassSelected(null)` に落ちるだけ) だった。結果として「左側のリストをクリックしても何も反応しない」状態だった
     * **クラスノードのクリック**: 当該クラスを `seed` + `neighborHops=1` のスコープでクラス図に切り替える (`UmlMainFrame.onTreeClassSelected`)

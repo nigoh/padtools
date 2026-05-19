@@ -407,8 +407,240 @@ public final class JavaStructureExtractor {
             f.getAnnotations().addAll(annotations);
             f.setComment(comment);
             cls.getFields().add(f);
+            // 初期化子が匿名クラス/ラムダなら本体を吸い上げて f.inlineMethods に格納する。
+            // 失敗時は idx を元に戻し、後段の skipUntilSemicolonRespectingBlocks() に委ねる。
+            if (!atEnd() && peek().is("=")) {
+                next(); // '=' を消費
+                tryParseInlineInitializer(f);
+            }
             // ; までスキップ
             skipUntilSemicolonRespectingBlocks();
+        }
+
+        /**
+         * フィールド初期化子が {@code new SomeType(...) {...}} (匿名クラス) または
+         * {@code args -> body} (ラムダ) の場合、その本体内に出現するメソッドを
+         * {@link JavaFieldInfo#getInlineMethods()} に格納する。
+         *
+         * <p>{@code =} は呼び出し側で既に消費済み。本メソッドは消費したトークンを
+         * 巻き戻して呼び出し側の {@link #skipUntilSemicolonRespectingBlocks()} に
+         * 安全に引き継ぐ責務を持つ (異常検出時は何もしない)。</p>
+         */
+        private void tryParseInlineInitializer(JavaFieldInfo f) {
+            int save = idx;
+            // 匿名クラス判定: new TypeName (args) { ... }
+            if (peek().isKw("new")) {
+                int probe = idx + 1;
+                // 型名 (a.b.C<T>) をスキップ
+                while (probe < tokens.size()) {
+                    JavaToken t = tokens.get(probe);
+                    if (t.type == JavaToken.Type.IDENT || t.is(".")) {
+                        probe++;
+                        continue;
+                    }
+                    break;
+                }
+                // ジェネリック型引数
+                if (probe < tokens.size() && tokens.get(probe).is("<")) {
+                    probe = skipBalancedAt(probe, "<", ">");
+                }
+                // 配列の場合 (new int[]{...}) は無視
+                if (probe < tokens.size() && tokens.get(probe).is("[")) {
+                    return;
+                }
+                // 引数 (...)
+                if (probe < tokens.size() && tokens.get(probe).is("(")) {
+                    probe = skipBalancedAt(probe, "(", ")");
+                } else {
+                    return;
+                }
+                // 直後が { なら匿名クラス本体
+                if (probe < tokens.size() && tokens.get(probe).is("{")) {
+                    idx = probe;
+                    next(); // '{' を消費
+                    JavaClassInfo dummy = new JavaClassInfo();
+                    dummy.setSimpleName("$anon");
+                    // classStack には push しない (inner-class 判定の副作用回避)
+                    parseClassBody(dummy);
+                    f.getInlineMethods().addAll(dummy.getMethods());
+                    return;
+                }
+                idx = save;
+                return;
+            }
+            // ラムダ判定: x -> ... または (a, b) -> ...
+            if (looksLikeLambdaStart()) {
+                consumeLambdaParams();
+                if (atEnd() || !peek().is("->")) {
+                    idx = save;
+                    return;
+                }
+                next(); // '->'
+                String samName = resolveSamMethodName(f.getType());
+                JavaMethodInfo m = new JavaMethodInfo();
+                m.setName(samName);
+                m.setVisibility(Visibility.PUBLIC);
+                if (!atEnd() && peek().is("{")) {
+                    next();
+                    parseStatementBlock(m.getStatements());
+                } else {
+                    // expression-bodied lambda: フィールド終端 ';' は消費せず呼び出し元に残す
+                    parseLambdaExpressionBody(m.getStatements());
+                }
+                f.getInlineMethods().add(m);
+                return;
+            }
+            // それ以外の初期化子: 巻き戻して何もしない
+            idx = save;
+        }
+
+        /**
+         * expression-bodied ラムダの本体 ({@code (...) -> EXPR} の EXPR 部) を読む。
+         * 通常の {@link #parseExpressionStatement} と異なり、終端の {@code ;} は消費しない
+         * (フィールド宣言の終端 {@code ;} はフィールドパーサ側で処理させるため)。
+         */
+        private void parseLambdaExpressionBody(List<JavaMethodInfo.Statement> out) {
+            int parenDepth = 0;
+            while (!atEnd()) {
+                JavaToken t = peek();
+                if (parenDepth == 0 && t.is(";")) {
+                    return;
+                }
+                if (parenDepth == 0 && t.is("}")) {
+                    return;
+                }
+                if (t.is("(") || t.is("[")) {
+                    parenDepth++;
+                } else if (t.is(")") || t.is("]")) {
+                    if (parenDepth > 0) {
+                        parenDepth--;
+                    }
+                }
+                if (t.type == JavaToken.Type.IDENT && peek(1).is("(")) {
+                    String name = t.text;
+                    boolean afterNew = idx > 0
+                            && tokens.get(idx - 1).isKw("new");
+                    if (!isControlKeyword(name) && !afterNew) {
+                        String receiver = findReceiver();
+                        out.add(new JavaMethodInfo.Call(receiver, name));
+                    }
+                }
+                next();
+            }
+        }
+
+        /**
+         * 指定位置 {@code from} のトークンが {@code open} なら対応する {@code close} の
+         * 次の位置を返す。バランスしなければ tokens.size() を返す。
+         * {@link #skipBalanced(String, String)} と異なり {@code idx} を変更しない peek 専用。
+         */
+        private int skipBalancedAt(int from, String open, String close) {
+            if (from >= tokens.size() || !tokens.get(from).is(open)) {
+                return from;
+            }
+            int d = 1;
+            int i = from + 1;
+            boolean angle = "<".equals(open);
+            while (i < tokens.size() && d > 0) {
+                JavaToken t = tokens.get(i);
+                if (t.is(open)) {
+                    d++;
+                } else if (t.is(close)) {
+                    d--;
+                    if (d == 0) {
+                        return i + 1;
+                    }
+                } else if (angle && (t.is(">>") || t.is(">>>"))) {
+                    d -= t.text.length();
+                    if (d <= 0) {
+                        return i + 1;
+                    }
+                }
+                i++;
+            }
+            return i;
+        }
+
+        /**
+         * 現在位置から「ラムダ式の開始」に見えるか? を peek で判定する。
+         * 単一識別子の後に {@code ->} が来るか、釣り合った {@code (...)} の後に {@code ->}
+         * が来るパターンを検出する。
+         */
+        private boolean looksLikeLambdaStart() {
+            if (peek().type == JavaToken.Type.IDENT && peek(1).is("->")) {
+                return true;
+            }
+            if (peek().is("(")) {
+                int after = skipBalancedAt(idx, "(", ")");
+                if (after < tokens.size() && tokens.get(after).is("->")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** ラムダのパラメータ部 (識別子 1 個または {@code (a, b)}) を消費する。 */
+        private void consumeLambdaParams() {
+            if (peek().is("(")) {
+                skipBalanced("(", ")");
+            } else if (peek().type == JavaToken.Type.IDENT) {
+                next();
+            }
+        }
+
+        /**
+         * フィールド宣言型から、ラムダに対応する SAM メソッド名を推定する。
+         * よく使う型は組み込みマップで解決し、未知なら {@code "<inline>"} を返す。
+         */
+        private static String resolveSamMethodName(String type) {
+            if (type == null || type.isEmpty()) {
+                return "<inline>";
+            }
+            // ジェネリックを取り除く
+            String t = type;
+            int lt = t.indexOf('<');
+            if (lt >= 0) {
+                t = t.substring(0, lt);
+            }
+            // 配列を取り除く
+            t = t.replace("[]", "").trim();
+            // 末尾のシンプル名にする
+            int dot = t.lastIndexOf('.');
+            if (dot >= 0) {
+                t = t.substring(dot + 1);
+            }
+            String mapped = SAM_FALLBACK.get(t);
+            return mapped != null ? mapped : "<inline>";
+        }
+
+        private static final java.util.Map<String, String> SAM_FALLBACK;
+        static {
+            java.util.Map<String, String> m = new java.util.HashMap<>();
+            m.put("Runnable", "run");
+            m.put("OnClickListener", "onClick");
+            m.put("OnLongClickListener", "onLongClick");
+            m.put("OnFocusChangeListener", "onFocusChange");
+            m.put("OnCheckedChangeListener", "onCheckedChanged");
+            m.put("OnItemSelectedListener", "onItemSelected");
+            m.put("OnItemClickListener", "onItemClick");
+            m.put("OnTouchListener", "onTouch");
+            m.put("OnSeekBarChangeListener", "onProgressChanged");
+            m.put("OnEditorActionListener", "onEditorAction");
+            m.put("OnKeyListener", "onKey");
+            m.put("OnScrollListener", "onScrollStateChanged");
+            m.put("OnRefreshListener", "onRefresh");
+            m.put("Callback", "callback");
+            m.put("Observer", "onChanged");
+            m.put("Consumer", "accept");
+            m.put("Supplier", "get");
+            m.put("Function", "apply");
+            m.put("Predicate", "test");
+            m.put("BiConsumer", "accept");
+            m.put("BiFunction", "apply");
+            m.put("ActionListener", "actionPerformed");
+            m.put("ChangeListener", "stateChanged");
+            m.put("PropertyChangeListener", "propertyChange");
+            SAM_FALLBACK = java.util.Collections.unmodifiableMap(m);
         }
 
         private void parseMethodDecl(JavaClassInfo cls, List<String> mods,

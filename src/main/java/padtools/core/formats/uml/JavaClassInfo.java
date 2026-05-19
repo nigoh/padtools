@@ -11,6 +11,16 @@ public class JavaClassInfo {
     /** 種別。 */
     public enum Kind { CLASS, INTERFACE, ENUM, ANNOTATION, AIDL_INTERFACE }
 
+    /**
+     * クラス情報の出所。
+     * <ul>
+     *   <li>{@link #SOURCE}: プロジェクトの .java / .aidl ソースから解析した既定値。</li>
+     *   <li>{@link #EXTERNAL_JAR}: 依存 JAR/AAR のクラスファイル (ASM ヘッダ抽出) 経由。</li>
+     *   <li>{@link #MISSING_JAR}: 参照されたが対応 JAR/AAR が発見できなかったプレースホルダ。</li>
+     * </ul>
+     */
+    public enum Origin { SOURCE, EXTERNAL_JAR, MISSING_JAR }
+
     private String packageName = "";
     private String simpleName = "";
     private Kind kind = Kind.CLASS;
@@ -27,6 +37,8 @@ public class JavaClassInfo {
     private final List<String> jetpackStereotypes = new ArrayList<>();
     private String comment;
     private boolean detailed = true;
+    private Origin origin = Origin.SOURCE;
+    private String jarPath;
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
     public String getQualifiedName() {
@@ -158,5 +170,23 @@ public class JavaClassInfo {
 
     public void setDetailed(boolean detailed) {
         this.detailed = detailed;
+    }
+
+    /** クラス情報の出所。{@link Origin#SOURCE} がデフォルト。 */
+    public Origin getOrigin() {
+        return origin;
+    }
+
+    public void setOrigin(Origin origin) {
+        this.origin = origin == null ? Origin.SOURCE : origin;
+    }
+
+    /** {@link Origin#EXTERNAL_JAR} 由来の場合に解決された JAR/AAR のパス。それ以外は null。 */
+    public String getJarPath() {
+        return jarPath;
+    }
+
+    public void setJarPath(String jarPath) {
+        this.jarPath = jarPath;
     }
 }

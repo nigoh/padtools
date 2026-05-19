@@ -410,6 +410,18 @@ public final class PlantUmlClassDiagram {
 
     private static String stereotype(JavaClassInfo c, Options o) {
         List<String> parts = new ArrayList<>();
+        // 外部 JAR 由来 / 解決失敗のステレオタイプを先頭に出す (視認性最優先)
+        switch (c.getOrigin()) {
+            case EXTERNAL_JAR:
+                parts.add("external");
+                break;
+            case MISSING_JAR:
+                parts.add("missing");
+                break;
+            case SOURCE:
+            default:
+                break;
+        }
         if (o.markAaosCategories) {
             String cat = c.getAaosCategory();
             if (cat == null) {
@@ -438,6 +450,10 @@ public final class PlantUmlClassDiagram {
         StringBuilder sb = new StringBuilder();
         for (String p : parts) {
             sb.append("<<").append(p).append(">>");
+        }
+        // MISSING_JAR には警告色を suffix で付与
+        if (c.getOrigin() == JavaClassInfo.Origin.MISSING_JAR) {
+            sb.append(" #LightYellow");
         }
         return sb.toString();
     }

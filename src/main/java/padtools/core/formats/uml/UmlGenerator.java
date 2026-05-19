@@ -3,6 +3,8 @@ package padtools.core.formats.uml;
 import padtools.core.formats.android.AndroidComponentInfo;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.AndroidProjectAnalyzer;
+import padtools.core.formats.android.GradleDependency;
+import padtools.core.formats.android.GradleProjectInfo;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.util.CancelToken;
 import padtools.util.ErrorListener;
@@ -42,10 +44,17 @@ public final class UmlGenerator {
     public static final class ProjectParseResult {
         private final List<JavaClassInfo> classes;
         private final ClassIndex index;
+        private final DependencyJarIndex dependencyIndex;
 
         public ProjectParseResult(List<JavaClassInfo> classes, ClassIndex index) {
+            this(classes, index, null);
+        }
+
+        public ProjectParseResult(List<JavaClassInfo> classes, ClassIndex index,
+                                   DependencyJarIndex dependencyIndex) {
             this.classes = classes;
             this.index = index;
+            this.dependencyIndex = dependencyIndex;
         }
 
         public List<JavaClassInfo> getClasses() {
@@ -54,6 +63,14 @@ public final class UmlGenerator {
 
         public ClassIndex getIndex() {
             return index;
+        }
+
+        /**
+         * 依存 JAR/AAR のクラス解決用インデックス。
+         * 依存が無いまたは構築失敗時は null になることがあるので null チェック必須。
+         */
+        public DependencyJarIndex getDependencyIndex() {
+            return dependencyIndex;
         }
     }
 
@@ -295,7 +312,35 @@ public final class UmlGenerator {
                 }
             }
         }
-        return new ProjectParseResult(all, index);
+        // 依存 JAR/AAR の遅延ロード用カタログを構築 (Gradle 依存宣言から)
+        DependencyJarIndex depIndex = buildDependencyIndex(root, err, can);
+        return new ProjectParseResult(all, index, depIndex);
+    }
+
+    /**
+     * プロジェクトの Gradle 解析結果から依存 JAR/AAR のインデックスを構築する。
+     * AndroidProjectAnalyzer の {@link AndroidProjectAnalysis#getGradleByModule()} で
+     * 取得した {@link GradleProjectInfo} の依存をフラットに結合し
+     * {@link DependencyJarIndex#build(List, ErrorListener)} に渡す。
+     * 失敗時は空の {@link DependencyJarIndex} を返す。
+     */
+    private static DependencyJarIndex buildDependencyIndex(File root,
+                                                            ErrorListener err,
+                                                            padtools.util.CancelToken can) {
+        if (root == null || !root.isDirectory() || can.isCancelled()) {
+            return new DependencyJarIndex();
+        }
+        try {
+            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(root, err);
+            List<GradleDependency> all = new ArrayList<>();
+            for (GradleProjectInfo info : analysis.getGradleByModule().values()) {
+                all.addAll(info.getDependencies());
+            }
+            return DependencyJarIndex.build(all, err);
+        } catch (IOException ex) {
+            err.onError(null, -1, "dependency index build failed: " + ex.getMessage());
+            return new DependencyJarIndex();
+        }
     }
 
     private static final class FileParseOutcome {

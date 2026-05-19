@@ -15,6 +15,7 @@ public class JavaFieldInfo {
     private boolean isFinal;
     private final List<String> annotations = new ArrayList<>();
     private String comment;
+    private final List<JavaMethodInfo> inlineMethods = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -67,5 +68,15 @@ public class JavaFieldInfo {
 
     public void setComment(String comment) {
         this.comment = comment;
+    }
+
+    /**
+     * フィールド初期化子が匿名クラスやラムダだった場合、その内部本体から抽出したメソッド一覧。
+     * 例: {@code OnClickListener l = new OnClickListener() { onClick(...) { ... } }} なら、
+     * {@code onClick} の {@link JavaMethodInfo} が 1 件入る。
+     * シーケンス図生成側で {@code l.onClick()} を解決する際に本体を walk するために使う。
+     */
+    public List<JavaMethodInfo> getInlineMethods() {
+        return inlineMethods;
     }
 }

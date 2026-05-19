@@ -27,6 +27,10 @@ import padtools.core.aaos.VhalAnalyzer;
 import padtools.core.dataflow.MarkdownDataFlowReport;
 import padtools.core.dataflow.PlantUmlErDiagram;
 import padtools.core.dataflow.RoomAnalyzer;
+import padtools.core.screen.IntentNavigationDetector;
+import padtools.core.screen.MarkdownScreenFlowReport;
+import padtools.core.screen.PlantUmlScreenFlowDiagram;
+import padtools.core.screen.ScreenTransition;
 import padtools.core.impact.ImpactAnalyzer;
 import padtools.core.impact.ImpactGraph;
 import padtools.core.impact.MarkdownImpactReport;
@@ -136,6 +140,7 @@ public class Main {
         final Option optAidlBinding = new Option(null, "aidl-binding", false);
         final Option optErDiagram = new Option(null, "er-diagram", false);
         final Option optDataFlow = new Option(null, "data-flow", false);
+        final Option optScreenFlow = new Option(null, "screen-flow", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -152,7 +157,8 @@ public class Main {
                 optExcludeExternal, optExcludePackage, optRelation, optMode,
                 optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
                 optImpact, optImpactDepth, optRefFind,
-                optVhalFlow, optAidlBinding, optErDiagram, optDataFlow});
+                optVhalFlow, optAidlBinding, optErDiagram, optDataFlow,
+                optScreenFlow});
 
         try {
             optParser.parse(args);
@@ -277,6 +283,10 @@ public class Main {
         }
         if (optDataFlow.isSet()) {
             handleDataFlow(file_in, file_out, listener);
+            return;
+        }
+        if (optScreenFlow.isSet()) {
+            handleScreenFlow(file_in, file_out, listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -698,6 +708,25 @@ public class Main {
         RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
         String md = MarkdownDataFlowReport.render(room);
         String puml = PlantUmlErDiagram.render(room);
+        writeImpactOutput(fileOut, md, puml);
+    }
+
+    /**
+     * {@code --screen-flow}: プロジェクト内 Java ソースから Intent ベースの画面遷移
+     * (startActivity / setClass / setClassName) を検出し、Markdown + PlantUML
+     * 状態遷移図で出力する。NavGraph XML は別系統 (DiagramService NAVIGATION) で処理。
+     */
+    private static void handleScreenFlow(File fileIn, File fileOut,
+                                            ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--screen-flow requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<ScreenTransition> transitions =
+                new IntentNavigationDetector().analyzeProject(fileIn);
+        String md = MarkdownScreenFlowReport.render(transitions);
+        String puml = PlantUmlScreenFlowDiagram.render(transitions);
         writeImpactOutput(fileOut, md, puml);
     }
 
@@ -1282,6 +1311,8 @@ public class Main {
                 + " @Entity classes grouped by @Database.");
         System.err.println("  --data-flow: Markdown report + ER diagram covering Room"
                 + " @Entity / @Dao / @Database in the project.");
+        System.err.println("  --screen-flow: Intent-based screen transitions"
+                + " (startActivity / setClass) as Markdown + PlantUML state diagram.");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

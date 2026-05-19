@@ -17,7 +17,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 | パラメータ | 値 | 説明 |
 |---|---|---|
-| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow` | 図/レポートの種類 |
+| `<diagram-type>` | `class`, `seq`, `manifest`, `deps`, `summary`, `all`, `impact`, `ref-find`, `vhal-flow`, `aidl-binding`, `er-diagram`, `data-flow`, `screen-flow` | 図/レポートの種類 |
 | `<path>` | ファイル/ディレクトリ | AOSP 内のパス (相対 or 絶対) |
 | `[memory]` | `4g`, `8g`, `16g` | メモリ設定 (デフォ 8g) |
 
@@ -37,6 +37,7 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 | `aidl-binding` | `--aidl-binding` | AIDL ↔ Stub 実装クラスの紐付け表 (Markdown) |
 | `er-diagram` | `--er-diagram` | Room @Entity の ER 図 (PlantUML) |
 | `data-flow` | `--data-flow` | Room Entity / DAO / Database 全体レポート (Markdown + ER PlantUML) |
+| `screen-flow` | `--screen-flow` | Intent ベース画面遷移図 (startActivity / setClass / startActivityForResult) (Markdown + PlantUML) |
 
 ## 例
 
@@ -76,6 +77,9 @@ AOSP/AAOS パスを指定して、直接 PadTools を実行したいときに使
 
 # Room ER 図のみ (PlantUML)
 /padtools-quick er-diagram ~/projects/my-android-app
+
+# Intent ベース画面遷移図 (startActivity / setClass)
+/padtools-quick screen-flow ~/projects/my-android-app
 ```
 
 ## 出力

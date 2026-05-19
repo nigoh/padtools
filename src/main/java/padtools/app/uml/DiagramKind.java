@@ -24,7 +24,9 @@ public enum DiagramKind {
     /** Layout 図 — res/layout XML 1 つの View 階層を可視化。 */
     LAYOUT("Layout View Hierarchy"),
     /** 共通クラス図 — 他クラスから参照される回数 (fan-in) が多いクラスを上位 N 件表示。 */
-    COMMON("Common Classes");
+    COMMON("Common Classes"),
+    /** Navigation 図 — res/navigation/*.xml の画面遷移を State 図として可視化。 */
+    NAVIGATION("Navigation Graph");
 
     private final String displayName;
 

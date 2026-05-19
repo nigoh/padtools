@@ -1,11 +1,13 @@
 package padtools.app.uml;
 
 import padtools.core.formats.android.AndroidLayoutInfo;
+import padtools.core.formats.android.AndroidNavigationGraphInfo;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.PlantUmlComponentDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.PlantUmlLayoutDiagram;
 import padtools.core.formats.android.PlantUmlManifestDiagram;
+import padtools.core.formats.android.PlantUmlNavigationGraphDiagram;
 import padtools.core.formats.uml.ClassIndex;
 import padtools.core.formats.uml.DependencyJarIndex;
 import padtools.core.formats.uml.JavaClassInfo;
@@ -198,6 +200,27 @@ public final class DiagramService {
                 PlantUmlLayoutDiagram.Options o = new PlantUmlLayoutDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlLayoutDiagram.generate(layout, o);
+            }
+            case NAVIGATION: {
+                String navKey = request.getNavigationGraphKey();
+                if (navKey == null || navKey.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Navigation diagram requires navigationGraphKey"
+                                    + " (select a navigation file)");
+                }
+                if (analysis == null) {
+                    throw new IllegalStateException(
+                            "Navigation diagram requires Android project analysis");
+                }
+                AndroidNavigationGraphInfo nav = analysis.findNavigationByKey(navKey);
+                if (nav == null) {
+                    throw new IllegalArgumentException(
+                            "Navigation graph not found for key: " + navKey);
+                }
+                PlantUmlNavigationGraphDiagram.Options o =
+                        new PlantUmlNavigationGraphDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlNavigationGraphDiagram.generate(nav, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());

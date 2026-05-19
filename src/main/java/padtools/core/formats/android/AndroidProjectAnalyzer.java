@@ -35,6 +35,7 @@ public final class AndroidProjectAnalyzer {
         opts.includeGradle = true;
         opts.includeManifest = true;
         opts.includeLayout = true;
+        opts.includeNavigation = true;
         List<File> files = AndroidProjectScanner.scan(projectRoot, opts);
 
         // 0. gradle/libs.versions.toml があれば先に読み込み、後段のパースで参照する
@@ -76,6 +77,25 @@ public final class AndroidProjectAnalyzer {
                 }
                 info.setModuleName(moduleName);
                 analysis.getGradleByModule().put(moduleName, info);
+            } else if (name.endsWith(".xml") && isInNavigationDir(f)) {
+                String content = safeRead(f, l);
+                if (content == null) {
+                    continue;
+                }
+                AndroidNavigationGraphInfo info;
+                try {
+                    info = AndroidNavigationGraphParser.parse(content, l);
+                } catch (RuntimeException ex) {
+                    l.onError(f.getName(), -1, "navigation parse failed: " + ex.getMessage());
+                    continue;
+                }
+                info.setFilePath(f.getAbsolutePath());
+                info.setFileName(f.getName());
+                info.setModuleName(moduleName);
+                info.setSourceSet(inferLayoutSourceSet(f));
+                analysis.getNavigationsByModule()
+                        .computeIfAbsent(moduleName, k -> new ArrayList<>())
+                        .add(info);
             } else if (name.endsWith(".xml") && isInLayoutDir(f)) {
                 String content = safeRead(f, l);
                 if (content == null) {
@@ -123,12 +143,24 @@ public final class AndroidProjectAnalyzer {
         int gradleCount = analysis.getGradleByModule().size();
         int manifestCount = analysis.allManifests().size();
         int layoutCount = analysis.allLayouts().size();
+        int navCount = analysis.allNavigationGraphs().size();
         l.onError(null, -1,
                 "android analyzer: " + gradleCount + " gradle file(s), "
                         + manifestCount + " manifest(s), "
-                        + layoutCount + " layout(s)");
+                        + layoutCount + " layout(s), "
+                        + navCount + " navigation graph(s)");
 
         return analysis;
+    }
+
+    /** 親ディレクトリが {@code navigation} または {@code navigation-*} のときに true。 */
+    private static boolean isInNavigationDir(File f) {
+        File parent = f.getParentFile();
+        if (parent == null) {
+            return false;
+        }
+        String dir = parent.getName();
+        return "navigation".equals(dir) || dir.startsWith("navigation-");
     }
 
     /** 親ディレクトリが {@code layout} または {@code layout-*} のときに true。 */

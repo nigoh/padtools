@@ -31,6 +31,10 @@ dependencies {
     // を読み取り、シーケンス図/クラス図に外部クラスを表示するために使用する。
     // .class バイトコードは SKIP_CODE で読み飛ばし、ヘッダ情報のみを抽出する。
     implementation 'org.ow2.asm:asm:9.7'
+    // SQLite (Apache 2.0). 解析結果の永続インデックス (~/.padtools/cache/<hash>/index.db)
+    // の格納先。fat jar に同梱され、JDBC 経由で参照関係・外部境界・コンポーネント集約を
+    // 横断クエリ可能にする。native lib は jar 内の META-INF から自動展開される。
+    implementation 'org.xerial:sqlite-jdbc:3.46.1.3'
     testImplementation 'junit:junit:4.13.2'
     // Playwright (ブラウザ自動化) で生成 SVG をレンダリング・スナップショット検証する。
     // 初回テスト実行時に `playwright install chromium` がトリガーされ Chromium が

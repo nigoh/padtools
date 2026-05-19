@@ -47,8 +47,9 @@ public class PlantUmlSequenceDiagramTest {
         assertTrue(puml, puml.contains("@enduml"));
         assertTrue(puml, puml.contains("participant \"Caller\""));
         assertTrue(puml, puml.contains("participant \"A\""));
-        assertTrue(puml, puml.contains("Caller -> A: run()"));
-        assertTrue(puml, puml.contains("A -> foo: bar()"));
+        // 呼び出しラベルはクラス名修飾付き (デフォルト qualifyMethodNames=true)
+        assertTrue(puml, puml.contains("Caller -> A: A.run()"));
+        assertTrue(puml, puml.contains("A -> foo: foo.bar()"));
         assertTrue(puml, puml.contains("activate A"));
         assertTrue(puml, puml.contains("deactivate A"));
     }
@@ -58,7 +59,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void run() { helper(); } void helper() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> A: helper()"));
+        assertTrue(puml, puml.contains("A -> A: A.helper()"));
     }
 
     @Test
@@ -66,7 +67,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { IAudio mAudio; void run() { mAudio.setVolume(5); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> IAudio: setVolume()"));
+        assertTrue(puml, puml.contains("A -> IAudio: IAudio.setVolume()"));
         assertTrue(puml, puml.contains("participant \"IAudio\""));
     }
 
@@ -76,7 +77,7 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { java.util.List<String> items; void run() { items.add(\"x\"); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         // List 型へのフィールド参照は List で participant 化
-        assertTrue(puml, puml.contains("A -> List: add()"));
+        assertTrue(puml, puml.contains("A -> List: List.add()"));
     }
 
     @Test
@@ -84,7 +85,19 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "package p; class A { void run() { foo(); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "p.A", "run", null);
+        assertTrue(puml, puml.contains("Caller -> A: A.run()"));
+    }
+
+    @Test
+    public void testCallLabelWithoutQualifierWhenDisabled() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.qualifyMethodNames = false;
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { foo.bar(); } }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // クラス名修飾を無効化 → 旧フォーマット
         assertTrue(puml, puml.contains("Caller -> A: run()"));
+        assertTrue(puml, puml.contains("A -> foo: bar()"));
     }
 
     @Test
@@ -104,7 +117,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void run() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
-        assertTrue(puml, puml.contains("User -> A: run()"));
+        assertTrue(puml, puml.contains("User -> A: A.run()"));
     }
 
     @Test
@@ -114,7 +127,7 @@ public class PlantUmlSequenceDiagramTest {
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "m", null);
         // 呼び出しが無くてもエラーにならず、開始/終了のみ出力
         assertTrue(puml, puml.contains("@startuml"));
-        assertTrue(puml, puml.contains("Caller -> A: m()"));
+        assertTrue(puml, puml.contains("Caller -> A: A.m()"));
         assertTrue(puml, puml.contains("@enduml"));
     }
 
@@ -133,7 +146,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void run() { this.helper(); } void helper() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> A: helper()"));
+        assertTrue(puml, puml.contains("A -> A: A.helper()"));
     }
 
     @Test
@@ -163,7 +176,7 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { Service s; void run() { if (x > 0) { s.go(); } } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("opt x > 0"));
-        assertTrue(puml, puml.contains("A -> Service: go()"));
+        assertTrue(puml, puml.contains("A -> Service: Service.go()"));
         assertTrue(puml, puml.contains("end"));
     }
 
@@ -173,9 +186,9 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { void run() { if (x) a(); else b(); } void a() {} void b() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("alt x"));
-        assertTrue(puml, puml.contains("A -> A: a()"));
+        assertTrue(puml, puml.contains("A -> A: A.a()"));
         // else 節
-        assertTrue(puml, puml.matches("(?s).*alt x.*else.*A -> A: b\\(\\).*end.*"));
+        assertTrue(puml, puml.matches("(?s).*alt x.*else.*A -> A: A\\.b\\(\\).*end.*"));
     }
 
     @Test
@@ -200,7 +213,7 @@ public class PlantUmlSequenceDiagramTest {
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("loop while"));
         // 条件式内の呼び出し (hasNext()) は loop の前に出る
-        assertTrue(puml, puml.matches("(?s).*A -> A: hasNext\\(\\).*loop while.*"));
+        assertTrue(puml, puml.matches("(?s).*A -> A: A\\.hasNext\\(\\).*loop while.*"));
     }
 
     @Test
@@ -209,7 +222,7 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { void run() { for (int i = 0; i < 10; i++) { step(); } } void step() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("loop for"));
-        assertTrue(puml, puml.contains("A -> A: step()"));
+        assertTrue(puml, puml.contains("A -> A: A.step()"));
     }
 
     @Test
@@ -222,8 +235,8 @@ public class PlantUmlSequenceDiagramTest {
         assertTrue(puml, puml.contains("group try"));
         assertTrue(puml, puml.contains("else catch IOException e"));
         assertTrue(puml, puml.contains("else finally"));
-        assertTrue(puml, puml.contains("A -> A: open()"));
-        assertTrue(puml, puml.contains("A -> A: close()"));
+        assertTrue(puml, puml.contains("A -> A: A.open()"));
+        assertTrue(puml, puml.contains("A -> A: A.close()"));
     }
 
     @Test
@@ -232,7 +245,7 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { Object lock; void run() { synchronized (lock) { foo(); } } void foo() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("critical synchronized(lock)"));
-        assertTrue(puml, puml.contains("A -> A: foo()"));
+        assertTrue(puml, puml.contains("A -> A: A.foo()"));
     }
 
     // ------------ 多段トレース ------------
@@ -247,9 +260,9 @@ public class PlantUmlSequenceDiagramTest {
                         + "void inner() { leaf(); } "
                         + "void leaf() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> A: helper()"));
-        assertTrue(puml, puml.contains("A -> A: inner()"));
-        assertTrue(puml, puml.contains("A -> A: leaf()"));
+        assertTrue(puml, puml.contains("A -> A: A.helper()"));
+        assertTrue(puml, puml.contains("A -> A: A.inner()"));
+        assertTrue(puml, puml.contains("A -> A: A.leaf()"));
     }
 
     @Test
@@ -259,8 +272,8 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void run() { helper(); } void helper() { inner(); } void inner() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
-        assertTrue(puml, puml.contains("A -> A: helper()"));
-        assertFalse(puml, puml.contains("A -> A: inner()"));
+        assertTrue(puml, puml.contains("A -> A: A.helper()"));
+        assertFalse(puml, puml.contains("A -> A: A.inner()"));
     }
 
     @Test
@@ -269,8 +282,8 @@ public class PlantUmlSequenceDiagramTest {
                 "class A { B b; void run() { b.act(); } } "
                         + "class B { void act() { work(); } void work() {} }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> B: act()"));
-        assertTrue(puml, puml.contains("B -> B: work()"));
+        assertTrue(puml, puml.contains("A -> B: B.act()"));
+        assertTrue(puml, puml.contains("B -> B: B.work()"));
         // 両方の participant が宣言されている
         assertTrue(puml, puml.contains("participant \"A\""));
         assertTrue(puml, puml.contains("participant \"B\""));
@@ -282,7 +295,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void run() { run(); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        assertTrue(puml, puml.contains("A -> A: run()"));
+        assertTrue(puml, puml.contains("A -> A: A.run()"));
         assertTrue(puml, puml.contains("recursive call"));
     }
 
@@ -291,7 +304,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "class A { void a() { b(); } void b() { a(); } }");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "a", null);
-        assertTrue(puml, puml.contains("A -> A: b()"));
+        assertTrue(puml, puml.contains("A -> A: A.b()"));
         // a → b → a でサイクル検出
         assertTrue(puml, puml.contains("recursive call"));
     }
@@ -307,7 +320,7 @@ public class PlantUmlSequenceDiagramTest {
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
         assertTrue(puml, puml.contains("loop for"));
         assertTrue(puml, puml.contains("opt i > 0"));
-        assertTrue(puml, puml.contains("A -> A: tick()"));
+        assertTrue(puml, puml.contains("A -> A: A.tick()"));
     }
 
     // ------------ 候補リスト ------------
@@ -388,25 +401,9 @@ public class PlantUmlSequenceDiagramTest {
     }
 
     @Test
-    public void testCommentsNoteStyleDefault() {
+    public void testCommentsNoteStyleAtTop() {
+        // 旧動作: PARTICIPANT_TOP で集約 note を出すモード
         String src =
-                "/** A クラスのトップレベル説明。 */\n"
-              + "class A {\n"
-              + "  /** run のエントリ JavaDoc。 */\n"
-              + "  void run() { b.doIt(); }\n"
-              + "}\n"
-              + "/** B のメイン処理 */\n"
-              + "class B {\n"
-              + "  /** doIt の処理 */\n"
-              + "  void doIt() {}\n"
-              + "}\n";
-        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
-        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
-        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
-        // findClass の都合上、receiver "b" → "b" になるため
-        // doIt() の resolved target は "b" となる。B の note を出すには
-        // フィールド型で解決させる必要があるので、b を B 型のフィールドとして書く。
-        src =
                 "/** A クラスのトップレベル説明。 */\n"
               + "class A {\n"
               + "  B b;\n"
@@ -418,7 +415,10 @@ public class PlantUmlSequenceDiagramTest {
               + "  /** doIt の処理 */\n"
               + "  void doIt() {}\n"
               + "}\n";
-        infos = JavaStructureExtractor.extract(src);
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        o.commentPlacement = PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP;
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
         // skinparam が出ている
         assertTrue(puml, puml.contains("skinparam noteBorderColor #008800"));
@@ -433,30 +433,34 @@ public class PlantUmlSequenceDiagramTest {
         // participant 宣言の後、本体シーケンスの前に note が出ていること
         int idxParticipant = puml.indexOf("participant \"A\"");
         int idxNote = puml.indexOf("note over \"A\"");
-        int idxArrow = puml.indexOf("Caller -> A: run()");
+        int idxArrow = puml.indexOf("Caller -> A: A.run()");
         assertTrue("participant should appear before note", idxParticipant < idxNote);
         assertTrue("note should appear before arrow", idxNote < idxArrow);
     }
 
     @Test
-    public void testCommentsInlineStyle() {
+    public void testCommentsInlineStyleAtCallSite() {
+        // 既定 AT_CALL_SITE + INLINE: 各 call の直下に 1 行 note が出る
         String src =
-                "/** A の説明はかなり長くて省略されるべき内容です */\n"
-              + "class A {\n"
-              + "  /** run の説明 */\n"
+                "class A {\n"
+              + "  /** これは run メソッドのかなり長い説明文 */\n"
               + "  void run() {}\n"
               + "}\n";
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
         PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
-        // 既定で INLINE
+        // 既定で AT_CALL_SITE + INLINE
         o.commentMaxLength = 12;
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
         // skinparam は INLINE では出さない
         assertFalse(puml, puml.contains("skinparam noteBorderColor"));
-        // 1 行 note (note over "A" : <color:...>...</color>) が出る
-        assertTrue(puml, puml.contains("note over \"A\" : <color:#008800>"));
-        // commentMaxLength=12 で省略記号が現れる
+        // call 行の直後に note right of "A" : <color:...>... が出る
+        assertTrue(puml, puml.contains("note right of \"A\" : <color:#008800>"));
+        // commentMaxLength=12 で長文が省略記号で切られる
         assertTrue(puml, puml.contains("…"));
+        // call 行のすぐ後ろに note が来ていることを確認
+        int idxArrow = puml.indexOf("Caller -> A: A.run()");
+        int idxNote = puml.indexOf("note right of \"A\"");
+        assertTrue("call arrow should appear before note", idxArrow >= 0 && idxArrow < idxNote);
     }
 
     @Test
@@ -472,13 +476,40 @@ public class PlantUmlSequenceDiagramTest {
         o.showComments = false;
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
         assertFalse(puml, puml.contains("note over \"A\""));
+        assertFalse(puml, puml.contains("note right of \"A\""));
         assertFalse(puml, puml.contains("skinparam noteBorderColor"));
         // 本体シーケンスは通常通り
-        assertTrue(puml, puml.contains("Caller -> A: run()"));
+        assertTrue(puml, puml.contains("Caller -> A: A.run()"));
+    }
+
+    @Test
+    public void testCommentsAtCallSiteNoteStyle() {
+        // AT_CALL_SITE + NOTE: 呼び出し行の直下に複数行 note ブロック
+        String src =
+                "class A {\n"
+              + "  B b;\n"
+              + "  void run() { b.doIt(); }\n"
+              + "}\n"
+              + "class B {\n"
+              + "  /** doIt の処理\n"
+              + "   *  2 行目の説明 */\n"
+              + "  void doIt() {}\n"
+              + "}\n";
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // 呼び出しの直下に note right of "B" ブロック
+        assertTrue(puml, puml.contains("A -> B: B.doIt()"));
+        assertTrue(puml, puml.contains("note right of \"B\""));
+        assertTrue(puml, puml.contains("doIt の処理"));
+        assertTrue(puml, puml.contains("2 行目の説明"));
+        assertTrue(puml, puml.contains("end note"));
     }
 
     @Test
     public void testMethodBodyCommentsCollected() {
+        // 旧 PARTICIPANT_TOP モードで本体内コメントが note ブロックに集約される
         String src =
                 "class A {\n"
               + "  /** run JavaDoc */\n"
@@ -493,6 +524,7 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
         PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
         o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        o.commentPlacement = PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP;
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
         assertTrue(puml, puml.contains("// step1: 前処理"));
         assertTrue(puml, puml.contains("// step2: 本処理"));
@@ -512,8 +544,54 @@ public class PlantUmlSequenceDiagramTest {
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(src);
         PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
         o.commentStyle = PlantUmlClassDiagram.CommentStyle.NOTE;
+        o.commentPlacement = PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP;
         o.showMethodBodyComments = false;
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
         assertFalse(puml, puml.contains("// 内部メモ"));
+    }
+
+    // ------------ 隠しパラメータ (participants filter) ------------
+
+    @Test
+    public void testHiddenParticipantSkipsArrow() {
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.hiddenParticipants = new java.util.HashSet<>();
+        o.hiddenParticipants.add("Service");
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { Service s; void run() { s.go(); other(); } void other() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        // Service への呼び出しが消えている
+        assertFalse(puml, puml.contains("Service"));
+        // 同時に他の呼び出しは残る
+        assertTrue(puml, puml.contains("A -> A: A.other()"));
+    }
+
+    @Test
+    public void testHiddenParticipantSuppressesRecursion() {
+        // B が隠されたら B 内部の呼び出しも展開されない
+        PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+        o.hiddenParticipants = new java.util.HashSet<>();
+        o.hiddenParticipants.add("B");
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; void run() { b.act(); } } "
+                        + "class B { void act() { work(); } void work() {} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", o);
+        assertFalse(puml, puml.contains("A -> B"));
+        assertFalse(puml, puml.contains("B -> B"));
+        assertFalse(puml, puml.contains("participant \"B\""));
+    }
+
+    @Test
+    public void testCollectParticipantsReturnsAllReachable() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; Service s; void run() { b.act(); s.go(); } } "
+                        + "class B { void act() { work(); } void work() {} }");
+        java.util.Set<String> ps =
+                PlantUmlSequenceDiagram.collectParticipants(infos, "A", "run", null);
+        // 隠しがなくても全 participant が列挙される
+        assertTrue(ps.toString(), ps.contains("Caller"));
+        assertTrue(ps.toString(), ps.contains("A"));
+        assertTrue(ps.toString(), ps.contains("B"));
+        assertTrue(ps.toString(), ps.contains("Service"));
     }
 }

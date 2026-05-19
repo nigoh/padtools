@@ -54,7 +54,7 @@ public class MainCliTest {
         File javaFile = tmp.newFile("Foo.java");
         writeFile(javaFile, "package x; class Foo { Bar b; void m() {} } class Bar {}");
         File outPuml = new File(tmp.getRoot(), "foo.puml");
-        Main.main(new String[]{"padtools", "-c", "-o", outPuml.getAbsolutePath(),
+        Main.main(new String[]{"-c", "-o", outPuml.getAbsolutePath(),
                 javaFile.getAbsolutePath()});
         String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
         assertTrue(puml, puml.contains("@startuml"));
@@ -68,12 +68,12 @@ public class MainCliTest {
         File javaFile = tmp.newFile("Bar.java");
         writeFile(javaFile, "class Bar { Service s; void run() { s.go(); } }");
         File outPuml = new File(tmp.getRoot(), "bar.puml");
-        Main.main(new String[]{"padtools", "-q", "Bar.run", "-o", outPuml.getAbsolutePath(),
+        Main.main(new String[]{"-q", "Bar.run", "-o", outPuml.getAbsolutePath(),
                 javaFile.getAbsolutePath()});
         String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
         assertTrue(puml, puml.contains("@startuml"));
-        assertTrue(puml, puml.contains("Caller -> Bar: run()"));
-        assertTrue(puml, puml.contains("Bar -> Service: go()"));
+        assertTrue(puml, puml.contains("Caller -> Bar: Bar.run()"));
+        assertTrue(puml, puml.contains("Bar -> Service: Service.go()"));
     }
 
     @Test
@@ -82,7 +82,7 @@ public class MainCliTest {
         writeFile(gradle, "plugins { id 'com.android.application' }\n"
                 + "android {\n  namespace 'p'\n  defaultConfig { applicationId 'p' minSdk 24 }\n}\n");
         File out = new File(tmp.getRoot(), "g.md");
-        Main.main(new String[]{"padtools", "-g", "-o", out.getAbsolutePath(),
+        Main.main(new String[]{"-g", "-o", out.getAbsolutePath(),
                 gradle.getAbsolutePath()});
         String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue(md, md.contains("# Android Project Summary"));
@@ -96,7 +96,7 @@ public class MainCliTest {
                 + "package='com.x'><application>"
                 + "<activity android:name='.A' android:exported='true'/></application></manifest>");
         File out = new File(tmp.getRoot(), "m.md");
-        Main.main(new String[]{"padtools", "-m", "-o", out.getAbsolutePath(),
+        Main.main(new String[]{"-m", "-o", out.getAbsolutePath(),
                 mf.getAbsolutePath()});
         String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue(md, md.contains("com.x.A"));
@@ -123,21 +123,21 @@ public class MainCliTest {
                         + "</intent-filter></activity></application></manifest>");
 
         File compOut = new File(tmp.getRoot(), "comp.puml");
-        Main.main(new String[]{"padtools", "-d", "-o", compOut.getAbsolutePath(),
+        Main.main(new String[]{"-d", "-o", compOut.getAbsolutePath(),
                 root.getAbsolutePath()});
         String comp = new String(Files.readAllBytes(compOut.toPath()), StandardCharsets.UTF_8);
         assertTrue(comp, comp.contains("@startuml"));
         assertTrue(comp, comp.contains("MainActivity"));
 
         File depOut = new File(tmp.getRoot(), "dep.puml");
-        Main.main(new String[]{"padtools", "-G", "-o", depOut.getAbsolutePath(),
+        Main.main(new String[]{"-G", "-o", depOut.getAbsolutePath(),
                 root.getAbsolutePath()});
         String dep = new String(Files.readAllBytes(depOut.toPath()), StandardCharsets.UTF_8);
         assertTrue(dep, dep.contains("@startuml"));
         assertTrue(dep, dep.contains("androidx.appcompat:appcompat"));
 
         File sumOut = new File(tmp.getRoot(), "sum.md");
-        Main.main(new String[]{"padtools", "--summary", "-o", sumOut.getAbsolutePath(),
+        Main.main(new String[]{"--summary", "-o", sumOut.getAbsolutePath(),
                 root.getAbsolutePath()});
         String sum = new String(Files.readAllBytes(sumOut.toPath()), StandardCharsets.UTF_8);
         assertTrue(sum, sum.contains("Android Project Summary"));
@@ -157,7 +157,7 @@ public class MainCliTest {
                         + "package='com.x'><application>"
                         + "<activity android:name='.MainActivity'/></application></manifest>");
         File out = new File(tmp.getRoot(), "cls.puml");
-        Main.main(new String[]{"padtools", "-c", "-o", out.getAbsolutePath(),
+        Main.main(new String[]{"-c", "-o", out.getAbsolutePath(),
                 root.getAbsolutePath()});
         String puml = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue("expected <<Activity>> via manifest auto-merge: " + puml,
@@ -182,7 +182,7 @@ public class MainCliTest {
                         + "<activity android:name='.MainActivity'/></application></manifest>");
 
         File outDir = new File(tmp.getRoot(), "all-out");
-        Main.main(new String[]{"padtools", "--all", "-o", outDir.getAbsolutePath(),
+        Main.main(new String[]{"--all", "-o", outDir.getAbsolutePath(),
                 root.getAbsolutePath()});
         assertTrue("output dir created", outDir.isDirectory());
         for (String name : new String[]{
@@ -214,9 +214,105 @@ public class MainCliTest {
         // -o 無し → exit 1。ここでは「-A だけ → エラー出力」を確認
         // System.exit 捕捉は難しいので smoke レベルで OK とする
         File outDir = new File(tmp.getRoot(), "ok-out");
-        Main.main(new String[]{"padtools", "--all", "-o", outDir.getAbsolutePath(),
+        Main.main(new String[]{"--all", "-o", outDir.getAbsolutePath(),
                 root.getAbsolutePath()});
         assertTrue(outDir.isDirectory());
+    }
+
+    /**
+     * README 例どおりに {@code java -jar PadTools.jar -c -o out in.java} 形式で
+     * 呼び出して {@code -c} が認識されることを保証する。歴史的に
+     * {@code parse(args, 1)} で先頭が黙って消費されるバグがあったため、
+     * 回帰防止としてダミー先頭引数を持たないテストを残しておく。
+     */
+    @Test
+    public void testReadmeStyleDirectInvocation() throws Exception {
+        File javaFile = tmp.newFile("DirectInvoke.java");
+        writeFile(javaFile, "package x; class DirectInvoke {}");
+        File outPuml = new File(tmp.getRoot(), "direct.puml");
+        Main.main(new String[]{"-c", "-o", outPuml.getAbsolutePath(),
+                javaFile.getAbsolutePath()});
+        assertTrue("expected " + outPuml + " to exist",
+                java.nio.file.Files.exists(outPuml.toPath()));
+        String puml = new String(java.nio.file.Files.readAllBytes(outPuml.toPath()),
+                StandardCharsets.UTF_8);
+        assertTrue(puml, puml.contains("class \"x.DirectInvoke\""));
+    }
+
+    /**
+     * {@code --all} 実行中に依存グラフ レンダリングが失敗すると、対応する
+     * {@code .svg} は残らず、フォールバック {@code .puml} が書き出され、
+     * 失敗ログが stderr に出ること。他の図 (summary.md / class-diagram.svg) は
+     * 通常通り出力されることも確認する。
+     */
+    @Test
+    public void testAllWritesFallbackPumlWhenDependencyGraphFails() throws Exception {
+        // PlantUMLRenderer をテスト用スタブに差し替え、依存グラフ生成時だけエラー SVG を吐かせる
+        java.util.function.BiConsumer<String, java.io.OutputStream> stub =
+                (puml, out) -> {
+                    try {
+                        if (puml.contains("Gradle 依存グラフ")
+                                || puml.contains("&lt;&lt;module&gt;&gt;")
+                                || puml.contains("<<module>>")
+                                || puml.contains("<<external>>")) {
+                            out.write(("<svg><text>An error has occured</text></svg>")
+                                    .getBytes(StandardCharsets.UTF_8));
+                        } else {
+                            // それ以外は素朴な正常 SVG (Batik は通らないが Main 経路では未使用)
+                            out.write(("<?xml version=\"1.0\"?>"
+                                    + "<svg xmlns=\"http://www.w3.org/2000/svg\""
+                                    + " width=\"10\" height=\"10\">"
+                                    + "<rect width=\"10\" height=\"10\"/></svg>")
+                                    .getBytes(StandardCharsets.UTF_8));
+                        }
+                    } catch (java.io.IOException ioe) {
+                        throw new RuntimeException(ioe);
+                    }
+                };
+        padtools.core.formats.uml.PlantUmlRenderer.setRendererImplForTest(stub);
+        try {
+            File root = tmp.newFolder("ProjFallback");
+            File pkg = new File(root, "app/src/main/java/com/x");
+            assertTrue(pkg.mkdirs());
+            writeFile(new File(pkg, "MainActivity.java"),
+                    "package com.x; public class MainActivity {}");
+            writeFile(new File(root, "settings.gradle"), "include ':app'\n");
+            writeFile(new File(root, "app/build.gradle"),
+                    "plugins { id 'com.android.application' }\n"
+                            + "android { namespace 'com.x' compileSdk 34 }\n"
+                            + "dependencies { implementation 'androidx.core:core:1.13.0' }\n");
+            writeFile(new File(root, "app/src/main/AndroidManifest.xml"),
+                    "<manifest xmlns:android='http://schemas.android.com/apk/res/android' "
+                            + "package='com.x'><application>"
+                            + "<activity android:name='.MainActivity'/></application></manifest>");
+
+            File outDir = new File(tmp.getRoot(), "fallback-out");
+            Main.main(new String[]{"--all", "-o", outDir.getAbsolutePath(),
+                    root.getAbsolutePath()});
+
+            // 依存図は SVG が無く、.puml が残ること
+            File depSvg = new File(outDir, "dependency-graph.svg");
+            File depPuml = new File(outDir, "dependency-graph.puml");
+            assertFalse("dependency-graph.svg should not exist on failure: " + depSvg,
+                    depSvg.exists());
+            assertTrue("dependency-graph.puml should exist as fallback",
+                    depPuml.isFile());
+            String depPumlContent = new String(
+                    java.nio.file.Files.readAllBytes(depPuml.toPath()),
+                    StandardCharsets.UTF_8);
+            assertTrue(depPumlContent, depPumlContent.contains("@startuml"));
+
+            // summary.md は --all 内で SVG 経路を通らないので常に書ける
+            assertTrue("summary.md should exist",
+                    new File(outDir, "summary.md").isFile());
+
+            // FAILED ログが stderr に出ていること
+            String err = stderrBuf.toString(StandardCharsets.UTF_8);
+            assertTrue("expected FAILED log in stderr: " + err,
+                    err.contains("dependency-graph.svg FAILED"));
+        } finally {
+            padtools.core.formats.uml.PlantUmlRenderer.setRendererImplForTest(null);
+        }
     }
 
     @Test
@@ -224,7 +320,7 @@ public class MainCliTest {
         File aidlFile = tmp.newFile("ICar.aidl");
         writeFile(aidlFile, "package android.car; interface ICar { int getVersion(); }");
         File outPuml = new File(tmp.getRoot(), "car.puml");
-        Main.main(new String[]{"padtools", "-c", "-o", outPuml.getAbsolutePath(),
+        Main.main(new String[]{"-c", "-o", outPuml.getAbsolutePath(),
                 aidlFile.getAbsolutePath()});
         String puml = new String(Files.readAllBytes(outPuml.toPath()), StandardCharsets.UTF_8);
         assertTrue(puml, puml.contains("<<AIDL>>"));

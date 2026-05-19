@@ -39,6 +39,10 @@ public class Setting {
     private boolean sequenceShowComments = true;
     /** シーケンス図のコメント表示スタイル ("INLINE" | "NOTE")。 */
     private String sequenceCommentStyle = "INLINE";
+    /** コメント表示位置 ("AT_CALL_SITE" | "PARTICIPANT_TOP")。 */
+    private String sequenceCommentPlacement = "AT_CALL_SITE";
+    /** メソッド呼び出しラベルにクラス名を付けるか (例: "Foo.bar()" vs "bar()")。 */
+    private boolean sequenceQualifyMethodNames = true;
 
     public int getWindowX() { return windowX; }
     public void setWindowX(int windowX) { this.windowX = windowX; }
@@ -58,6 +62,15 @@ public class Setting {
     public String getSequenceCommentStyle() { return sequenceCommentStyle; }
     public void setSequenceCommentStyle(String v) {
         this.sequenceCommentStyle = (v == null || v.isEmpty()) ? "INLINE" : v;
+    }
+    public String getSequenceCommentPlacement() { return sequenceCommentPlacement; }
+    public void setSequenceCommentPlacement(String v) {
+        this.sequenceCommentPlacement = (v == null || v.isEmpty())
+                ? "AT_CALL_SITE" : v;
+    }
+    public boolean isSequenceQualifyMethodNames() { return sequenceQualifyMethodNames; }
+    public void setSequenceQualifyMethodNames(boolean v) {
+        this.sequenceQualifyMethodNames = v;
     }
 
     /** 永続化済みの値から {@link DiagramStyle} を組み立てて返す。 */
@@ -106,6 +119,9 @@ public class Setting {
         props.setProperty("style.customSkinparam", styleCustomSkinparam);
         props.setProperty("sequence.showComments", Boolean.toString(sequenceShowComments));
         props.setProperty("sequence.commentStyle", sequenceCommentStyle);
+        props.setProperty("sequence.commentPlacement", sequenceCommentPlacement);
+        props.setProperty("sequence.qualifyMethodNames",
+                Boolean.toString(sequenceQualifyMethodNames));
 
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
             props.storeToXML(bos, "PadTools Settings");
@@ -143,6 +159,10 @@ public class Setting {
                 props.getProperty("sequence.showComments"), true);
         s.sequenceCommentStyle = stringOrDefault(
                 props.getProperty("sequence.commentStyle"), "INLINE");
+        s.sequenceCommentPlacement = stringOrDefault(
+                props.getProperty("sequence.commentPlacement"), "AT_CALL_SITE");
+        s.sequenceQualifyMethodNames = parseBooleanSafe(
+                props.getProperty("sequence.qualifyMethodNames"), true);
 
         return s;
     }

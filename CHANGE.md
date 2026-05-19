@@ -24,6 +24,20 @@ Unreleased
     * `UmlMainFrame` のステータスバーに「N dependency(ies) not resolved」を追記し、JAR が見つからない原因を可視化
     * `PlantUmlSequenceDiagram` 本体のサイズ縮小のため、コメント note 出力を `PlantUmlSequenceComments` に切り出し
     * 目的: `extends AppCompatActivity` のような外部 SDK クラスがクラス図/シーケンス図上で「不在」にならないようにし、依存 JAR が無いプロジェクトでは明示的に警告マーカーで知らせる
+* **CLI / GUI: PlantUML レンダリング失敗を検出して救出 puml にフォールバック** (`PlantUmlRenderer` / `Main` / `UmlMainFrame`)
+    * `PlantUmlRenderer.renderSvg` がレンダリング結果に同梱 PlantUML のフォールバック マーカー (`"An error has occured"` / `"I love it when a plan comes together"`) を検出した場合、新例外 `PlantUmlRenderFailedException` を投げる。これまでは PlantUML 内部で Smetana の `IllegalStateException` が握り潰され、エラー画像 SVG がそのまま `dependency-graph.svg` 等として保存されていた
+    * **CLI `--all`**: 各図 (component / manifest / deeplink / dependency / class) のレンダ失敗を個別に補足し、`<name>.puml` を同じ出力ディレクトリに書き出し、`[padtools]     -> X.svg FAILED: ...` を stderr に出して次の図に進む。`--all` 全体は他の図の出力を続行
+    * **CLI 単体 (`-c` / `-d` / `-G` / `-M` / `-D`)**: SVG レンダ失敗時に隣接 `.puml` を書き出し、終了コード 2 で終了
+    * **GUI `UmlMainFrame`**: SwingWorker のレンダ失敗時、これまでの巨大な base64 を含む `JOptionPane` モーダル ダイアログを廃止。ステータス バーに `<Diagram>: rendering failed — PlantUML layout error (Smetana). See 'PlantUML Source' tab.` を出し、`PlantUML Source` タブに raw puml を残し、Preview ペインをクリアする
+    * **Smetana の stderr ノイズ抑制**: `UNSURE_ABOUT: safe_list_append(...)` 等の同梱 Smetana が直接 `System.err` に書くデバッグ ログを、`renderSvg` 呼び出し中だけ捨てるラッパを追加。`-v` (`--verbose`) で抑制を解除可能
+    * 目的: `car_app_library` 規模 (~26 ノード) の Gradle 依存グラフで Smetana が落ちた際に、ユーザに壊れた SVG を掴ませず、再レンダリング可能な PUML テキストを救出経路として残す。GUI でも意味のないモーダル ダイアログを廃止して UX を改善する
+
+* **CLI 引数パーサが先頭引数を消費していたバグを修正** (`Main` / `bundle/PadTools.sh`)
+    * 旧 `optParser.parse(args, 1)` が常に `args[0]` をスキップしていたため、`java -jar PadTools.jar -c -o out.svg in.java` のように README 記載どおりに直接呼ぶと `-c` が黙って消費されて GUI モードに落ちていた。同梱 `bundle/PadTools.sh` が `java -jar PadTools.jar -- $@` で `--` を args[0] に注入する設計に依存していた
+    * `Main.java` の `parse(args, 1)` を `parse(args)` に変更。`bundle/PadTools.sh` を `java -jar "$DIR/PadTools.jar" "$@"` に変更し、`--` 注入を撤去 (`OptionParser.parse` の raw モードに意図せず入って後続オプションが全て位置引数化する事故を防止)
+    * `MainCliTest.java` 全 11 箇所の先頭ダミー `"padtools"` を除去
+    * 目的: README の CLI 例がドキュメントどおりに動くようにする
+
 * **左ペインのプロジェクトツリーが左クリックに反応するように修正** (`ProjectTreePanel` / `UmlMainFrame`)
     * これまで `ProjectTreePanel.notifySelection()` はメソッド / クラス / Manifest / Component に対しては該当ハンドラを発火していたが、`UmlMainFrame` 側でクラス用ハンドラ (`setOnClassSelected`) を登録しておらず、また**パッケージ / モジュール** ノードは左クリックでは何も発火しない構造 (`onClassSelected(null)` に落ちるだけ) だった。結果として「左側のリストをクリックしても何も反応しない」状態だった
     * **クラスノードのクリック**: 当該クラスを `seed` + `neighborHops=1` のスコープでクラス図に切り替える (`UmlMainFrame.onTreeClassSelected`)

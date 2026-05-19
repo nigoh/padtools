@@ -114,8 +114,8 @@ public class UmlGeneratorTest {
     public void testSequenceDiagramShortcut() {
         String puml = UmlGenerator.sequenceDiagram(
                 "class A { void run() { x(); } }", "A", "run");
-        assertTrue(puml, puml.contains("Caller -> A: run()"));
-        assertTrue(puml, puml.contains("A -> A: x()"));
+        assertTrue(puml, puml.contains("Caller -> A: A.run()"));
+        assertTrue(puml, puml.contains("A -> A: A.x()"));
     }
 
     @Test

@@ -113,7 +113,7 @@ public class Main {
                 optSequenceDiagrams, optJetpack, optPerFolder});
 
         try {
-            optParser.parse(args, 1);
+            optParser.parse(args);
         } catch (UnknownOptionException ex) {
             System.err.println("Unknown option: " + ex.getOption());
             System.exit(1);
@@ -140,6 +140,9 @@ public class Main {
 
         ErrorListener listener = optVerbose.isSet()
                 ? ErrorListener.stderr() : ErrorListener.silent();
+        // PlantUML 同梱 Smetana が直接 stderr に書く UNSURE_ABOUT 等のデバッグ出力を
+        // 既定で抑制する。-v 時は素通しさせて Smetana 内部のログも見えるようにする。
+        PlantUmlRenderer.setVerbose(optVerbose.isSet());
         // UML 凡例は既定 ON。明示的な --legend / --no-legend で上書き可。
         Boolean legendOverride = null;
         if (optLegend.isSet()) {
@@ -239,9 +242,57 @@ public class Main {
      */
     private static void writeUmlOutput(File fileOut, String puml) throws IOException {
         if (fileOut != null && fileOut.getName().toLowerCase().endsWith(".svg")) {
-            PlantUmlRenderer.renderSvg(puml, fileOut);
+            try {
+                PlantUmlRenderer.renderSvg(puml, fileOut);
+            } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
+                File pumlFallback = siblingPumlFor(fileOut);
+                writeText(pumlFallback, puml);
+                System.err.println("[padtools] " + fileOut.getName()
+                        + " FAILED: " + ex.getMessage());
+                System.err.println("[padtools]    Saved " + pumlFallback.getPath()
+                        + " -- render externally with: plantuml -tsvg "
+                        + pumlFallback.getName());
+                System.exit(2);
+            }
         } else {
             writeText(fileOut, puml);
+        }
+    }
+
+    /** 与えられた SVG ファイルと同じ親ディレクトリ・同じベース名で {@code .puml} を指す
+     * ファイル オブジェクトを返す。フォールバック保存先として使う。 */
+    private static File siblingPumlFor(File svgFile) {
+        String name = svgFile.getName();
+        int dot = name.lastIndexOf('.');
+        String base = dot >= 0 ? name.substring(0, dot) : name;
+        File parent = svgFile.getParentFile();
+        if (parent == null) {
+            return new File(base + ".puml");
+        }
+        return new File(parent, base + ".puml");
+    }
+
+    /** {@code --all} 内で 1 つの SVG をレンダリングする。失敗時はサイドカー puml に
+     * フォールバックして「FAILED」ログを出し、次の図に進む。
+     * @return レンダリングが成功したかどうか
+     */
+    private static boolean renderSvgOrFallback(String puml, File svgFile,
+                                                 ProgressLogger progress,
+                                                 ErrorListener listener) throws IOException {
+        try {
+            PlantUmlRenderer.renderSvg(puml, svgFile);
+            progress.wrote(svgFile);
+            listener.onError(null, -1, "wrote " + svgFile.getPath());
+            return true;
+        } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
+            File pumlFallback = siblingPumlFor(svgFile);
+            writeText(pumlFallback, puml);
+            System.err.println("[padtools]     -> " + svgFile.getName()
+                    + " FAILED: " + ex.getMessage());
+            System.err.println("[padtools]        Saved " + pumlFallback.getName()
+                    + " -- render externally with: plantuml -tsvg "
+                    + pumlFallback.getName());
+            return false;
         }
     }
 
@@ -651,9 +702,8 @@ public class Main {
             compOpts.includeLegend = false;
         }
         File compFile = new File(fileOut, "component-diagram.svg");
-        PlantUmlRenderer.renderSvg(PlantUmlComponentDiagram.generate(analysis, compOpts), compFile);
-        progress.wrote(compFile);
-        listener.onError(null, -1, "wrote " + compFile.getPath());
+        renderSvgOrFallback(PlantUmlComponentDiagram.generate(analysis, compOpts),
+                compFile, progress, listener);
 
         // 3) Manifest 図 (SVG) — Application + 配下コンポーネントを 1 枚で可視化
         progress.step("[3/8] Generating manifest-diagram.svg");
@@ -662,10 +712,8 @@ public class Main {
             manOpts.includeLegend = false;
         }
         File manFile = new File(fileOut, "manifest-diagram.svg");
-        PlantUmlRenderer.renderSvg(
-                PlantUmlManifestDiagram.generate(analysis, manOpts), manFile);
-        progress.wrote(manFile);
-        listener.onError(null, -1, "wrote " + manFile.getPath());
+        renderSvgOrFallback(PlantUmlManifestDiagram.generate(analysis, manOpts),
+                manFile, progress, listener);
 
         // 4) Deep Link 図 (SVG) — VIEW + BROWSABLE intent-filter の URI 入口を可視化
         progress.step("[4/8] Generating deeplink-diagram.svg");
@@ -674,10 +722,8 @@ public class Main {
             dlOpts.includeLegend = false;
         }
         File dlFile = new File(fileOut, "deeplink-diagram.svg");
-        PlantUmlRenderer.renderSvg(
-                PlantUmlDeepLinkDiagram.generate(analysis, dlOpts), dlFile);
-        progress.wrote(dlFile);
-        listener.onError(null, -1, "wrote " + dlFile.getPath());
+        renderSvgOrFallback(PlantUmlDeepLinkDiagram.generate(analysis, dlOpts),
+                dlFile, progress, listener);
 
         // 5) 依存グラフ (SVG)
         progress.step("[5/8] Generating dependency-graph.svg");
@@ -686,10 +732,8 @@ public class Main {
             depOpts.includeLegend = false;
         }
         File depFile = new File(fileOut, "dependency-graph.svg");
-        PlantUmlRenderer.renderSvg(
-                PlantUmlGradleDependencyGraph.generate(analysis, depOpts), depFile);
-        progress.wrote(depFile);
-        listener.onError(null, -1, "wrote " + depFile.getPath());
+        renderSvgOrFallback(PlantUmlGradleDependencyGraph.generate(analysis, depOpts),
+                depFile, progress, listener);
 
         // 6) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
         progress.step("[6/8] Generating class-diagram.svg (scanning Java/AIDL)");
@@ -704,10 +748,20 @@ public class Main {
             overrides.applyTo(clsOpts);
         }
         File clsFile = new File(fileOut, "class-diagram.svg");
-        PlantUmlRenderer.renderSvg(
-                padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts), clsFile);
-        progress.wrote(clsFile, "(" + infos.size() + " class(es))");
-        listener.onError(null, -1, "wrote " + clsFile.getPath());
+        String clsPuml = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts);
+        try {
+            PlantUmlRenderer.renderSvg(clsPuml, clsFile);
+            progress.wrote(clsFile, "(" + infos.size() + " class(es))");
+            listener.onError(null, -1, "wrote " + clsFile.getPath());
+        } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
+            File clsPumlFallback = siblingPumlFor(clsFile);
+            writeText(clsPumlFallback, clsPuml);
+            System.err.println("[padtools]     -> " + clsFile.getName()
+                    + " FAILED: " + ex.getMessage());
+            System.err.println("[padtools]        Saved " + clsPumlFallback.getName()
+                    + " -- render externally with: plantuml -tsvg "
+                    + clsPumlFallback.getName());
+        }
 
         // 7) シーケンス図の起点候補一覧
         progress.step("[7/8] Generating methods.txt (sequence diagram entry candidates)");
@@ -766,7 +820,14 @@ public class Main {
                 LifecycleSequenceDiagrams.generateAll(infos, sqOpts);
         for (LifecycleSequenceDiagrams.Entry e : entries) {
             writeText(new File(outDir, e.baseName() + ".puml"), e.puml);
-            PlantUmlRenderer.renderSvg(e.puml, new File(outDir, e.baseName() + ".svg"));
+            File svgFile = new File(outDir, e.baseName() + ".svg");
+            try {
+                PlantUmlRenderer.renderSvg(e.puml, svgFile);
+            } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
+                System.err.println("[padtools]     -> " + svgFile.getName()
+                        + " FAILED: " + ex.getMessage()
+                        + " (.puml is preserved)");
+            }
         }
         return entries.size();
     }

@@ -100,6 +100,11 @@ public class UmlMainFrame extends JFrame {
     private DiagramScope currentScope;
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
+    /**
+     * シーケンス図で隠す participant 名 (空ならフィルタ無し)。
+     * {@link SequenceParticipantFilterDialog} で設定する。
+     */
+    private final java.util.Set<String> sequenceHiddenParticipants = new java.util.LinkedHashSet<>();
 
     public UmlMainFrame(File initialProject) {
         super(WINDOW_TITLE);
@@ -230,6 +235,19 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
         pickEntry.addActionListener(e -> pickSequenceEntry());
         m.add(pickEntry);
+        JMenuItem filterParticipants = new JMenuItem("Filter Sequence Participants...");
+        filterParticipants.addActionListener(e -> openParticipantFilterDialog());
+        m.add(filterParticipants);
+        JMenuItem clearParticipantFilter =
+                new JMenuItem("Clear Sequence Participant Filter");
+        clearParticipantFilter.addActionListener(e -> {
+            if (!sequenceHiddenParticipants.isEmpty()) {
+                sequenceHiddenParticipants.clear();
+                status.setText("Cleared sequence participant filter.");
+                refreshDiagram();
+            }
+        });
+        m.add(clearParticipantFilter);
         JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
         pickLayout.addActionListener(e -> pickLayoutFile());
         m.add(pickLayout);
@@ -302,20 +320,29 @@ public class UmlMainFrame extends JFrame {
                 setting != null && "NOTE".equalsIgnoreCase(setting.getSequenceCommentStyle())
                         ? padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.NOTE
                         : padtools.core.formats.uml.PlantUmlClassDiagram.CommentStyle.INLINE;
+        padtools.core.formats.uml.PlantUmlSequenceDiagram.CommentPlacement curPlacement =
+                setting != null && "PARTICIPANT_TOP".equalsIgnoreCase(
+                        setting.getSequenceCommentPlacement())
+                        ? padtools.core.formats.uml.PlantUmlSequenceDiagram.CommentPlacement.PARTICIPANT_TOP
+                        : padtools.core.formats.uml.PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
+        boolean curQualify = setting == null || setting.isSequenceQualifyMethodNames();
         StyleSettingsDialog.Result edited = StyleSettingsDialog.showDialog(
-                this, PlantUmlRenderer.getStyle(), curShow, curStyle);
+                this, PlantUmlRenderer.getStyle(), curShow, curStyle,
+                curPlacement, curQualify);
         if (edited != null) {
             applyStyleSettings(edited);
         }
     }
 
-    /** Style ダイアログ結果 (Style + シーケンス図コメント設定) を反映する。 */
+    /** Style ダイアログ結果 (Style + シーケンス図設定) を反映する。 */
     private void applyStyleSettings(StyleSettingsDialog.Result r) {
         try {
             padtools.Setting setting = Main.getSetting();
             if (setting != null) {
                 setting.setSequenceShowComments(r.sequenceShowComments);
                 setting.setSequenceCommentStyle(r.sequenceCommentStyle.name());
+                setting.setSequenceCommentPlacement(r.sequenceCommentPlacement.name());
+                setting.setSequenceQualifyMethodNames(r.sequenceQualifyMethodNames);
             }
         } catch (RuntimeException ignored) {
             // 設定保存はベストエフォート
@@ -437,6 +464,7 @@ public class UmlMainFrame extends JFrame {
                 treePanel.populate(cache.getAnalysis(), cache.getClasses(),
                         root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
+                sequenceHiddenParticipants.clear();
                 currentScope = null;
                 updateManifestSummary();
                 StringBuilder st = new StringBuilder();
@@ -678,6 +706,23 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
+     * ステータス バー表示用に長文を短縮する。Batik 等が data: URI を本文に含めて
+     * 投げてくる超長文メッセージをそのまま流すと UI が読めなくなるため、
+     * 改行とスペースで折り返した先頭 {@code max} 文字に省略記号を付けて返す。
+     */
+    static String truncateForStatus(String msg, int max) {
+        if (msg == null) {
+            return "";
+        }
+        // 改行・連続空白を 1 スペースに畳んでから長さで切る
+        String oneLine = msg.replaceAll("\\s+", " ").trim();
+        if (oneLine.length() <= max) {
+            return oneLine;
+        }
+        return oneLine.substring(0, Math.max(0, max - 1)) + "…";
+    }
+
+    /**
      * FQN から詳細展開済みの {@link JavaClassInfo} を取得する。
      * ClassIndex があれば Stage B (detail) を返し、メソッド本体まで揃った状態にする。
      */
@@ -820,12 +865,61 @@ public class UmlMainFrame extends JFrame {
         dlg.setVisible(true);
         String picked = dlg.getSelectedEntry();
         if (picked != null) {
+            // 起点が変わったら participant フィルタはリセットする
+            // (旧起点の participant 名は新図に存在しない可能性があるため)
+            sequenceHiddenParticipants.clear();
             sequenceEntry = picked;
             currentKind = DiagramKind.SEQUENCE;
             JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
             if (item != null) {
                 item.setSelected(true);
             }
+            refreshDiagram();
+        }
+    }
+
+    /**
+     * 現在のシーケンス図起点に登場する participant をフィルタダイアログで選択できるようにする。
+     * 選択結果は {@link #sequenceHiddenParticipants} に保存され、再描画時の
+     * {@link DiagramRequest#getSequenceHiddenParticipants()} に渡される。
+     */
+    private void openParticipantFilterDialog() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        if (sequenceEntry == null || sequenceEntry.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Choose a sequence entry first (Diagram → Choose Sequence Entry...).",
+                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int dot = sequenceEntry.lastIndexOf('.');
+        if (dot < 0) {
+            return;
+        }
+        String cls = sequenceEntry.substring(0, dot);
+        String method = sequenceEntry.substring(dot + 1);
+        java.util.Set<String> all =
+                padtools.core.formats.uml.PlantUmlSequenceDiagram.collectParticipants(
+                        cache.getClasses(), cls, method, null);
+        if (all.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No participants found for " + sequenceEntry,
+                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        java.util.Set<String> picked = SequenceParticipantFilterDialog.show(
+                this, sequenceEntry, all, sequenceHiddenParticipants);
+        if (picked != null) {
+            sequenceHiddenParticipants.clear();
+            sequenceHiddenParticipants.addAll(picked);
+            int total = all.size();
+            int hidden = sequenceHiddenParticipants.size();
+            status.setText("Sequence filter: showing " + (total - hidden) + "/" + total
+                    + " participants");
             refreshDiagram();
         }
     }
@@ -873,6 +967,9 @@ public class UmlMainFrame extends JFrame {
         final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
+            // レンダ前にキャプチャしておく puml。例外発生時も PlantUML Source タブに
+            // 残せるようにするための退避先。
+            private String pumlOnError;
 
             @Override
             protected RenderResult doInBackground() {
@@ -887,6 +984,7 @@ public class UmlMainFrame extends JFrame {
                         req = new DiagramRequest(kind, null, null, true, scope, wantLinks);
                     }
                     String puml = DiagramService.generatePuml(req, cache);
+                    pumlOnError = puml;
                     // ベクター SVG として描画して、PlantUML の PNG 4096x4096
                     // キャンバス上限による切り詰めを回避する。
                     RenderedSvg svg = PlantUmlSvgRenderer.render(puml);
@@ -900,10 +998,24 @@ public class UmlMainFrame extends JFrame {
             @Override
             protected void done() {
                 if (error != null) {
-                    JOptionPane.showMessageDialog(UmlMainFrame.this,
-                            "Failed to render: " + error.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    status.setText(" ");
+                    // モーダル ダイアログは出さず、ステータス バー + PlantUML Source タブで
+                    // 通知する。Smetana のフォールバック SVG (Batik が読めない巨大 base64) を
+                    // ダイアログに出すと使い物にならないため、UX 優先で握り潰す。
+                    previewPanel.setSvgGraphicsNode(null, 0, 0);
+                    if (pumlOnError != null) {
+                        sourcePanel.setText(pumlOnError);
+                    }
+                    String reason;
+                    if (error instanceof padtools.core.formats.uml.PlantUmlRenderFailedException) {
+                        reason = "PlantUML layout error (Smetana)";
+                    } else {
+                        String m = error.getMessage();
+                        reason = m == null ? error.getClass().getSimpleName()
+                                : truncateForStatus(m, 120);
+                    }
+                    status.setText(kind.getDisplayName()
+                            + ": rendering failed -- " + reason
+                            + ". See 'PlantUML Source' tab.");
                     return;
                 }
                 try {
@@ -937,8 +1049,12 @@ public class UmlMainFrame extends JFrame {
             throw new IllegalArgumentException(
                     "Sequence entry must be in 'Class.method' format: " + entry);
         }
+        // 隠す participant の集合をスナップショットして DiagramRequest に渡す
+        java.util.Set<String> hidden = sequenceHiddenParticipants.isEmpty()
+                ? null : new java.util.LinkedHashSet<>(sequenceHiddenParticipants);
         return new DiagramRequest(DiagramKind.SEQUENCE,
-                entry.substring(0, dot), entry.substring(dot + 1), true);
+                entry.substring(0, dot), entry.substring(dot + 1), true,
+                null, false, null, hidden);
     }
 
     private void chooseAndExport() {

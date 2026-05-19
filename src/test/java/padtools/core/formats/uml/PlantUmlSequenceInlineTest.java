@@ -29,7 +29,7 @@ public class PlantUmlSequenceInlineTest {
         assertTrue("should activate listener (field type): \n" + diagram,
                 diagram.contains("activate OnClickListener"));
         assertTrue("should call IService.start in inline body: \n" + diagram,
-                diagram.contains(" -> IService: start()"));
+                diagram.contains(" -> IService: IService.start()"));
     }
 
     @Test
@@ -43,7 +43,7 @@ public class PlantUmlSequenceInlineTest {
         List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
         String diagram = PlantUmlSequenceDiagram.generate(classes, "Bar", "kick", null);
         assertTrue("lambda body should expand: \n" + diagram,
-                diagram.contains(" -> Executor: execute()"));
+                diagram.contains(" -> Executor: Executor.execute()"));
         assertTrue("Runnable participant should be activated: \n" + diagram,
                 diagram.contains("activate Runnable"));
     }

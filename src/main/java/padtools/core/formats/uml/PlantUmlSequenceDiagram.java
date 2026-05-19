@@ -20,6 +20,14 @@ import java.util.Set;
  */
 public final class PlantUmlSequenceDiagram {
 
+    /** コメントを表示する位置。 */
+    public enum CommentPlacement {
+        /** 各メソッド呼び出しの直下に note を出す (デフォルト)。 */
+        AT_CALL_SITE,
+        /** participant 宣言の直後に participant ごとに集約 note を出す (旧動作)。 */
+        PARTICIPANT_TOP
+    }
+
     /** 出力オプション。 */
     public static class Options {
         /** ダイアグラムのタイトル。 */
@@ -50,9 +58,15 @@ public final class PlantUmlSequenceDiagram {
         public String projectClassColor = "#LightSkyBlue";
         /**
          * クラス/メソッドの JavaDoc・直前コメントを {@code note} として出力する。
-         * 図の冒頭 (participant 宣言の直後) に participant ごとに集約表示する。
+         * 位置は {@link #commentPlacement} で制御する。
          */
         public boolean showComments = true;
+        /**
+         * コメントの表示位置。
+         * {@link CommentPlacement#AT_CALL_SITE}: 各呼び出しの直下に出す (デフォルト)。
+         * {@link CommentPlacement#PARTICIPANT_TOP}: participant 宣言直後に集約。
+         */
+        public CommentPlacement commentPlacement = CommentPlacement.AT_CALL_SITE;
         /** コメント表示スタイル (クラス図と共通)。INLINE は 1 行 note、NOTE は複数行ブロック。 */
         public PlantUmlClassDiagram.CommentStyle commentStyle =
                 PlantUmlClassDiagram.CommentStyle.INLINE;
@@ -78,6 +92,19 @@ public final class PlantUmlSequenceDiagram {
         public boolean showMissingParticipants = true;
         /** 解決できなかった participant に使う背景色。 */
         public String missingParticipantColor = "#LightYellow";
+        /**
+         * メソッド呼び出しラベルにクラス名を付けるか。
+         * true (デフォルト) なら {@code "A -> B: B.method()"} の形で出力する。
+         * false なら旧動作の {@code "A -> B: method()"}。
+         */
+        public boolean qualifyMethodNames = true;
+        /**
+         * シーケンス図から除外する participant 名の集合。
+         * 含まれる participant への呼び出しは {@code A -> B: ...} 行も note も
+         * 出力されず、ボディも再帰展開されない。
+         * null/空なら全 participant を表示する (デフォルト)。
+         */
+        public Set<String> hiddenParticipants;
     }
 
     /** クラス・メソッドを指定して 1 本のシーケンス図を生成する。 */
@@ -119,24 +146,35 @@ public final class PlantUmlSequenceDiagram {
         }
         Set<String> participants = new LinkedHashSet<>();
         participants.add(o.callerName);
-        participants.add(cls.getSimpleName());
+        // 起点クラスが除外指定されていれば、空のシーケンスとして扱う
+        boolean entryHidden = isHidden(o, cls.getSimpleName());
+        if (!entryHidden) {
+            participants.add(cls.getSimpleName());
+        }
         // participant ごとに「シーケンス内で登場したメソッド名」を順序付きで記録する。
         // 冒頭の note 集約 (emitCommentNotes) で JavaDoc を表示するメソッドを決めるのに使う。
         Map<String, LinkedHashSet<String>> participantMethods = new LinkedHashMap<>();
-        participantMethods.computeIfAbsent(cls.getSimpleName(),
-                k -> new LinkedHashSet<>()).add(method.getName());
+        if (!entryHidden) {
+            participantMethods.computeIfAbsent(cls.getSimpleName(),
+                    k -> new LinkedHashSet<>()).add(method.getName());
+        }
+
         StringBuilder body = new StringBuilder();
-        body.append(o.callerName).append(" -> ").append(cls.getSimpleName())
-                .append(": ").append(method.getName()).append("()\n");
-        body.append("activate ").append(cls.getSimpleName()).append('\n');
+        if (!entryHidden) {
+            body.append(o.callerName).append(" -> ").append(cls.getSimpleName())
+                    .append(": ").append(formatCallLabel(cls.getSimpleName(),
+                            method.getName(), o)).append('\n');
+            emitCallSiteComment(body, "", cls.getSimpleName(), method, o);
+            body.append("activate ").append(cls.getSimpleName()).append('\n');
 
-        Set<String> stack = new HashSet<>();
-        stack.add(cls.getSimpleName() + "." + method.getName());
-        walkStatements(method.getStatements(), cls, classes, participants,
-                participantMethods, body, stack, 1, o, "");
-        stack.remove(cls.getSimpleName() + "." + method.getName());
+            Set<String> stack = new HashSet<>();
+            stack.add(cls.getSimpleName() + "." + method.getName());
+            walkStatements(method.getStatements(), cls, classes, participants,
+                    participantMethods, body, stack, 1, o, "");
+            stack.remove(cls.getSimpleName() + "." + method.getName());
 
-        body.append("deactivate ").append(cls.getSimpleName()).append('\n');
+            body.append("deactivate ").append(cls.getSimpleName()).append('\n');
+        }
 
         // walk 完了後に、解析対象外の participant を依存 JAR で解決 (EXTERNAL_JAR)
         // または missing 判定する。これにより emitCall 系の再帰呼び出しに
@@ -163,8 +201,9 @@ public final class PlantUmlSequenceDiagram {
             }
             out.append('\n');
         }
-        // participant 宣言の直後に JavaDoc / コメントを集約 note として発行
-        if (o.showComments) {
+        // PARTICIPANT_TOP モードのときだけ、participant 宣言の直後に集約 note を発行する。
+        // AT_CALL_SITE (デフォルト) では emitCall 側で各呼び出しの直下に note を出す。
+        if (o.showComments && o.commentPlacement == CommentPlacement.PARTICIPANT_TOP) {
             PlantUmlSequenceComments.emit(out, o, participants, participantMethods, classes);
         }
         out.append(body);
@@ -173,6 +212,54 @@ public final class PlantUmlSequenceDiagram {
         }
         out.append("@enduml\n");
         return out.toString();
+    }
+
+    /**
+     * 指定された entry を起点にした場合に登場し得る participant 名を列挙する。
+     * フィルタダイアログ等で利用するため、隠す側 ({@link Options#hiddenParticipants})
+     * の設定は無視して、本来出るはずだった全 participant を返す。
+     *
+     * @return 出現順 ({@code Caller}, 起点クラス, 以降は呼び出し順) を保持した集合。
+     *         entryClass / entryMethod が見つからない場合は空。
+     */
+    public static Set<String> collectParticipants(List<JavaClassInfo> classes,
+                                                   String entryClass,
+                                                   String entryMethod,
+                                                   Options opts) {
+        Set<String> result = new LinkedHashSet<>();
+        if (classes == null || entryClass == null || entryMethod == null) {
+            return result;
+        }
+        JavaClassInfo cls = findClass(classes, entryClass);
+        if (cls == null) {
+            return result;
+        }
+        JavaMethodInfo method = findMethod(cls, entryMethod);
+        if (method == null) {
+            return result;
+        }
+        // フィルタを無視した「全体像」用の Options を組み立てる
+        Options o = opts != null ? opts : new Options();
+        Options scanOpts = new Options();
+        scanOpts.callerName = o.callerName;
+        scanOpts.inlineSelfCalls = o.inlineSelfCalls;
+        scanOpts.maxDepth = o.maxDepth;
+        scanOpts.qualifyMethodNames = o.qualifyMethodNames;
+        scanOpts.showComments = false;
+        scanOpts.includeLegend = false;
+        scanOpts.hiddenParticipants = null;
+        result.add(scanOpts.callerName);
+        result.add(cls.getSimpleName());
+        Map<String, LinkedHashSet<String>> participantMethods = new LinkedHashMap<>();
+        participantMethods.computeIfAbsent(cls.getSimpleName(),
+                k -> new LinkedHashSet<>()).add(method.getName());
+        Set<String> stack = new HashSet<>();
+        stack.add(cls.getSimpleName() + "." + method.getName());
+        // body は捨てる。participants だけ取り出す。
+        StringBuilder discard = new StringBuilder();
+        walkStatements(method.getStatements(), cls, classes, result,
+                participantMethods, discard, stack, 1, scanOpts, "");
+        return result;
     }
 
     /** すべてのメソッドに対してシーケンス図を順に生成 (簡易プロジェクトサマリ用)。 */
@@ -298,19 +385,30 @@ public final class PlantUmlSequenceDiagram {
         if (target.equals(currentClass.getSimpleName()) && !opts.inlineSelfCalls) {
             return;
         }
+        // 除外指定された participant への呼び出しは矢印も note も出力しない
+        if (isHidden(opts, target)) {
+            return;
+        }
         participants.add(target);
         participantMethods.computeIfAbsent(target, k -> new LinkedHashSet<>())
                 .add(call.getMethodName());
         body.append(indent).append(currentClass.getSimpleName())
                 .append(" -> ").append(target)
-                .append(": ").append(call.getMethodName()).append("()\n");
+                .append(": ").append(formatCallLabel(target, call.getMethodName(), opts))
+                .append('\n');
+
+        // 解析済みクラスに該当する呼び出し先メソッドを引いておく (note と再帰展開で共有)
+        JavaClassInfo nextCls = findClass(classes, target);
+        JavaMethodInfo nextMethod = nextCls != null
+                ? findMethod(nextCls, call.getMethodName()) : null;
+        // AT_CALL_SITE モードのとき、呼び出しの直下に呼ばれるメソッドのコメント note を出す
+        emitCallSiteComment(body, indent, target, nextMethod, opts);
 
         // 再帰展開: 呼び出し先メソッドが解析済みクラスにあれば深掘りする
         boolean canRecurse = opts.maxDepth <= 0 || depth < opts.maxDepth;
         if (!canRecurse) {
             return;
         }
-        JavaClassInfo nextCls = findClass(classes, target);
         if (nextCls == null) {
             // 解析済みクラスではない受信者: フィールド初期化子 (匿名クラス / ラムダ) で
             // 定義された inline メソッドがあれば、その本体を展開する。
@@ -334,7 +432,6 @@ public final class PlantUmlSequenceDiagram {
             body.append(indent).append("deactivate ").append(target).append('\n');
             return;
         }
-        JavaMethodInfo nextMethod = findMethod(nextCls, call.getMethodName());
         if (nextMethod == null || nextMethod.getStatements().isEmpty()) {
             return;
         }
@@ -415,6 +512,111 @@ public final class PlantUmlSequenceDiagram {
             }
         }
         return null;
+    }
+
+    /** call ラベルの整形。{@link Options#qualifyMethodNames} 次第で {@code Class.method()} 形に。 */
+    private static String formatCallLabel(String target, String methodName, Options o) {
+        if (o.qualifyMethodNames && target != null && !target.isEmpty()) {
+            return target + "." + methodName + "()";
+        }
+        return methodName + "()";
+    }
+
+    /** {@code o.hiddenParticipants} に含まれているかを安全に判定する。 */
+    private static boolean isHidden(Options o, String participant) {
+        return o != null && o.hiddenParticipants != null
+                && participant != null
+                && o.hiddenParticipants.contains(participant);
+    }
+
+    /**
+     * AT_CALL_SITE モードのとき、呼び出し対象メソッドの JavaDoc コメントを
+     * 呼び出し行の直下に note として出力する。method が解析対象外 (null) や
+     * コメントが空のときは何も出さない。
+     */
+    private static void emitCallSiteComment(StringBuilder body, String indent,
+                                             String target, JavaMethodInfo method,
+                                             Options o) {
+        if (o == null || !o.showComments
+                || o.commentPlacement != CommentPlacement.AT_CALL_SITE) {
+            return;
+        }
+        if (method == null || method.getComment() == null
+                || method.getComment().isEmpty()) {
+            return;
+        }
+        if (o.commentStyle == PlantUmlClassDiagram.CommentStyle.NOTE) {
+            emitNoteBlockAtCall(body, indent, target, method, o);
+        } else {
+            emitInlineNoteAtCall(body, indent, target, method, o);
+        }
+    }
+
+    /** INLINE: 呼び出しの直下に 1 行 note を出す。 */
+    private static void emitInlineNoteAtCall(StringBuilder body, String indent,
+                                              String target, JavaMethodInfo method,
+                                              Options o) {
+        String first = JavaCommentScanner.firstLine(method.getComment());
+        if (first == null || first.isEmpty()) {
+            return;
+        }
+        String line = PlantUmlClassDiagram.sanitizeInlineComment(first, o.commentMaxLength);
+        if (line == null || line.isEmpty()) {
+            return;
+        }
+        body.append(indent).append("note right of ").append(quote(target)).append(" : ");
+        if (o.commentColor != null && !o.commentColor.isEmpty()) {
+            body.append("<color:").append(o.commentColor).append('>')
+                    .append(line).append("</color>");
+        } else {
+            body.append(line);
+        }
+        body.append('\n');
+    }
+
+    /** NOTE: 呼び出しの直下に複数行 note ブロックを出す。 */
+    private static void emitNoteBlockAtCall(StringBuilder body, String indent,
+                                             String target, JavaMethodInfo method,
+                                             Options o) {
+        boolean hasBody = o.showMethodBodyComments
+                && method.getBodyComments() != null
+                && !method.getBodyComments().isEmpty();
+        body.append(indent).append("note right of ").append(quote(target)).append('\n');
+        String[] lines = method.getComment().split("\n", -1);
+        boolean any = false;
+        for (String raw : lines) {
+            String t = raw.replace('\r', ' ').replace('\t', ' ').trim();
+            if (t.isEmpty()) {
+                continue;
+            }
+            body.append(indent).append("  ").append(truncate(t, o.commentMaxLength)).append('\n');
+            any = true;
+        }
+        if (!any) {
+            body.append(indent).append("  ").append(method.getName()).append("()\n");
+        }
+        if (hasBody) {
+            for (String bc : method.getBodyComments()) {
+                String[] bl = bc.split("\n", -1);
+                for (String raw : bl) {
+                    String t = raw.replace('\r', ' ').replace('\t', ' ').trim();
+                    if (t.isEmpty()) {
+                        continue;
+                    }
+                    body.append(indent).append("  // ")
+                            .append(truncate(t, o.commentMaxLength)).append('\n');
+                }
+            }
+        }
+        body.append(indent).append("end note\n");
+    }
+
+    /** PlantUmlSequenceComments と独立に保持する短縮ユーティリティ。 */
+    private static String truncate(String s, int maxLen) {
+        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
+            return s;
+        }
+        return s.substring(0, Math.max(1, maxLen - 1)) + "…";
     }
 
     private static void emitBlock(JavaMethodInfo.Block block,
@@ -623,20 +825,21 @@ public final class PlantUmlSequenceDiagram {
                                     boolean colorize, String projectClassColor) {
         out.append("legend right\n");
         out.append("== シーケンス図 ==\n");
-        out.append("participant     関与クラス/オブジェクト\n");
-        out.append("A -> B : msg    A から B への同期メッセージ呼び出し\n");
-        out.append("activate B      B のアクティベーション開始\n");
-        out.append("deactivate B    B のアクティベーション終了\n");
-        out.append("alt/opt/loop    if-else / 単一分岐 / ループ (while/for/do)\n");
-        out.append("group/critical  try-catch-finally / synchronized\n");
+        out.append("participant         関与クラス/オブジェクト\n");
+        out.append("X →→ Y : Z.m()      X から Y への同期メッセージ (呼び出し先 Class.method)\n");
+        out.append("note right of Y      呼び出し直下の呼び出し先メソッドコメント\n");
+        out.append("activate Y          Y のアクティベーション開始\n");
+        out.append("deactivate Y        Y のアクティベーション終了\n");
+        out.append("alt/opt/loop        if-else / 単一分岐 / ループ (while/for/do)\n");
+        out.append("group/critical      try-catch-finally / synchronized\n");
         if (colorize) {
             out.append("<back:").append(projectClassColor).append(">  </back>")
-                    .append("          プロジェクト内で解析済みのクラス (独自クラス)\n");
+                    .append("              プロジェクト内で解析済みのクラス (独自クラス)\n");
         }
         out.append("<<external>>    依存 JAR/AAR で解決できた外部ライブラリのクラス\n");
         out.append("<<missing>>     依存宣言はあるが JAR/AAR が見つからないクラス (要確認)\n");
         if (participantCount > 0) {
-            out.append("Caller          仮想の呼び出し元 (オプションで変更可)\n");
+            out.append("Caller              仮想の呼び出し元 (オプションで変更可)\n");
         }
         out.append("endlegend\n");
     }

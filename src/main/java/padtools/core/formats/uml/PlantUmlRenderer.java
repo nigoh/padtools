@@ -4,10 +4,14 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.util.function.BiConsumer;
 
 /**
  * PlantUML テキストを SVG 等の画像形式に変換するレンダラ。
@@ -15,6 +19,11 @@ import java.io.OutputStream;
  * <p>同梱の PlantUML jar を使って描画するため、外部 graphviz/dot は不要。
  * Graphviz が必要な diagram (クラス図 / コンポーネント図) では Smetana レイアウトを
  * 自動指定するため、追加インストールなしで動作する。</p>
+ *
+ * <p>{@link #renderSvg(String, OutputStream)} は内部でレンダリング結果を一旦バッファし、
+ * PlantUML がフォールバックで返す「An error has occured」SVG を検出した場合は
+ * {@link PlantUmlRenderFailedException} を投げる。これにより呼び元 (CLI / GUI) は
+ * 壊れた SVG を保存・表示することを避けられる。</p>
  */
 public final class PlantUmlRenderer {
 
@@ -23,6 +32,24 @@ public final class PlantUmlRenderer {
      * 起動時に設定ファイルから読み込んだ値で上書きされる想定。GUI から変更可能。
      */
     private static volatile DiagramStyle currentStyle = DiagramStyle.defaults();
+
+    /**
+     * verbose モード。true なら同梱 Smetana 由来の stderr (UNSURE_ABOUT 等) を素通し、
+     * false なら {@link #renderSvg(String, OutputStream)} 実行中だけ捨てる。
+     */
+    private static volatile boolean verbose = false;
+
+    /**
+     * テスト用のレンダラ差し替えフック。null でなければ {@link SourceStringReader#outputImage}
+     * の代わりに使われる。本番経路では常に null。
+     */
+    private static volatile BiConsumer<String, OutputStream> rendererImplForTest;
+
+    /** PlantUML フォールバック エラー SVG に必ず含まれるマーカー。 */
+    private static final String[] ERROR_MARKERS = {
+            "An error has occured",
+            "I love it when a plan comes together"
+    };
 
     private PlantUmlRenderer() {
     }
@@ -42,16 +69,97 @@ public final class PlantUmlRenderer {
         currentStyle = style != null ? style.copy() : DiagramStyle.defaults();
     }
 
-    /** PlantUML テキストを SVG として OutputStream に書き出す。 */
-    public static void renderSvg(String puml, OutputStream out) throws IOException {
-        SourceStringReader reader = new SourceStringReader(injectLayout(puml));
-        reader.outputImage(out, new FileFormatOption(FileFormat.SVG));
+    /**
+     * verbose モードを設定する。CLI で {@code -v} が指定されたら true、それ以外は false。
+     * false の間、{@link #renderSvg(String, OutputStream)} 実行中の {@link System#err}
+     * は一時的に捨てられ、同梱 Smetana が直接 stderr へ書き込むデバッグ ログを抑制する。
+     */
+    public static void setVerbose(boolean v) {
+        verbose = v;
     }
 
-    /** PlantUML テキストを SVG として指定ファイルに書き出す。 */
+    /**
+     * テスト専用 ({@code @VisibleForTesting} 相当): {@link SourceStringReader} の代わりに
+     * 使うレンダラ実装を差し込む。null を渡すと本番経路に戻る。本番コードから呼ばないこと。
+     * <p>JUnit テストが他パッケージ ({@code padtools}) からアクセスする必要があるため
+     * {@code public} になっているが、設計上は package-private 想定。</p>
+     */
+    public static void setRendererImplForTest(BiConsumer<String, OutputStream> impl) {
+        rendererImplForTest = impl;
+    }
+
+    /**
+     * 与えられたバイト列が PlantUML のフォールバック エラー SVG かどうか判定する。
+     * 先頭 8KB だけサンプリングするので巨大な正常 SVG でも安価。
+     */
+    static boolean isErrorSvg(byte[] svgBytes) {
+        if (svgBytes == null || svgBytes.length == 0) {
+            return true;
+        }
+        int len = Math.min(svgBytes.length, 8192);
+        String head = new String(svgBytes, 0, len, StandardCharsets.UTF_8);
+        for (String marker : ERROR_MARKERS) {
+            if (head.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** PlantUML テキストを SVG として OutputStream に書き出す。
+     *
+     * <p>レンダリング結果が PlantUML のエラー画像にすり替わっていた場合は
+     * {@link PlantUmlRenderFailedException} を投げる。</p>
+     */
+    public static void renderSvg(String puml, OutputStream out) throws IOException {
+        if (out == null) {
+            throw new IllegalArgumentException("out is null");
+        }
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        PrintStream origErr = System.err;
+        PrintStream sink = null;
+        if (!verbose) {
+            sink = new PrintStream(OutputStream.nullOutputStream(), false,
+                    StandardCharsets.UTF_8);
+            System.setErr(sink);
+        }
+        try {
+            BiConsumer<String, OutputStream> stub = rendererImplForTest;
+            if (stub != null) {
+                stub.accept(puml, buf);
+            } else {
+                SourceStringReader reader = new SourceStringReader(injectLayout(puml));
+                reader.outputImage(buf, new FileFormatOption(FileFormat.SVG));
+            }
+        } finally {
+            if (sink != null) {
+                System.setErr(origErr);
+                sink.close();
+            }
+        }
+        byte[] bytes = buf.toByteArray();
+        if (isErrorSvg(bytes)) {
+            throw new PlantUmlRenderFailedException(
+                    "PlantUML layout error (likely Smetana). "
+                    + "Use the .puml source and re-render externally.");
+        }
+        out.write(bytes);
+    }
+
+    /** PlantUML テキストを SVG として指定ファイルに書き出す。
+     *
+     * <p>失敗時は壊れた 0 byte ファイルを残さないよう、ファイルを削除した上で
+     * 例外を再 throw する。</p>
+     */
     public static void renderSvg(String puml, File outFile) throws IOException {
         try (OutputStream os = new FileOutputStream(outFile)) {
             renderSvg(puml, os);
+        } catch (IOException e) {
+            // 中身が無効な状態のファイルを残さない
+            if (outFile.exists() && !outFile.delete()) {
+                outFile.deleteOnExit();
+            }
+            throw e;
         }
     }
 

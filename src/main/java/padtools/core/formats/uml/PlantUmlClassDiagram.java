@@ -690,12 +690,13 @@ public final class PlantUmlClassDiagram {
             out.append(": ").append(m.getReturnType());
         }
         // interactiveLinks 有効かつ通常メソッド (非コンストラクタ) にメソッドリンクを埋め込む
+        // ラベルに "▶" を使うことで URL 文字列がそのまま SVG に露出しないようにする
         if (o.interactiveLinks
                 && !m.isConstructor()
                 && classFqn != null && !classFqn.isEmpty()
                 && m.getName() != null && !m.getName().isEmpty()) {
             out.append(" [[padtools://method/")
-               .append(classFqn).append('#').append(m.getName()).append("]]");
+               .append(classFqn).append('#').append(m.getName()).append(" ▶]]");
         }
         out.append('\n');
     }

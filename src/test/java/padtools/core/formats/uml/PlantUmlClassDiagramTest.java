@@ -836,9 +836,9 @@ public class PlantUmlClassDiagramTest {
         opts.showMethods = true;
         String puml = PlantUmlClassDiagram.generate(infos, opts);
         assertTrue("method link for doSomething: " + puml,
-                puml.contains("[[padtools://method/x.Foo#doSomething]]"));
+                puml.contains("[[padtools://method/x.Foo#doSomething ▶]]"));
         assertTrue("method link for helper: " + puml,
-                puml.contains("[[padtools://method/x.Foo#helper]]"));
+                puml.contains("[[padtools://method/x.Foo#helper ▶]]"));
     }
 
     @Test

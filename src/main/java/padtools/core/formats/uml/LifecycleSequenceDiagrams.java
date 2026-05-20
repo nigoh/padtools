@@ -21,6 +21,8 @@ public final class LifecycleSequenceDiagrams {
 
     static {
         Map<String, List<String>> m = new LinkedHashMap<>();
+        m.put("Application", Arrays.asList(
+                "onCreate", "onConfigurationChanged", "onLowMemory"));
         m.put("Activity", Arrays.asList(
                 "onCreate", "onStart", "onResume", "onPause", "onStop", "onDestroy"));
         m.put("Service", Arrays.asList(

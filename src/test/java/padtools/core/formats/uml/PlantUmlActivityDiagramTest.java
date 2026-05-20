@@ -314,4 +314,108 @@ public class PlantUmlActivityDiagramTest {
         assertTrue("yield expression should appear in diagram: " + puml,
                 puml.contains(":yield"));
     }
+
+    // ── ローカル変数宣言テスト ──
+
+    @Test
+    public void testLocalVarAppearsInDiagram() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { String result = getData(); } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", null);
+        assertTrue("LocalVar should appear as action node: " + puml,
+                puml.contains("String result"));
+    }
+
+    @Test
+    public void testLocalVarWithNoInit() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { int count; } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", null);
+        assertTrue("LocalVar without init should appear: " + puml,
+                puml.contains("int count"));
+    }
+
+    @Test
+    public void testLocalVarHiddenWhenOptionOff() {
+        PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
+        o.showLocalVars = false;
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { String result = getData(); } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", o);
+        assertFalse("LocalVar should be hidden when showLocalVars=false: " + puml,
+                puml.contains("String result"));
+    }
+
+    @Test
+    public void testGenericLocalVarAppearsInDiagram() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { List<String> items = getList(); } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", null);
+        assertTrue("Generic LocalVar should appear: " + puml,
+                puml.contains("List"));
+        assertTrue(puml.contains("items"));
+    }
+
+    // ── インラインコメントテスト ──
+
+    @Test
+    public void testInlineLineCommentAppearsAsNote() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() {\n"
+                + "  // 前処理フェーズ\n"
+                + "  init();\n"
+                + "} }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", null);
+        assertTrue("Inline comment should appear as note: " + puml,
+                puml.contains("前処理フェーズ"));
+        assertTrue(puml.contains("note right"));
+    }
+
+    @Test
+    public void testInlineCommentHiddenWhenOptionOff() {
+        PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
+        o.showInlineComments = false;
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() {\n"
+                + "  // 前処理フェーズ\n"
+                + "  init();\n"
+                + "} }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", o);
+        assertFalse("Inline comment should be hidden when showInlineComments=false",
+                puml.contains("前処理フェーズ"));
+    }
+
+    // ── メソッドシグネチャテスト ──
+
+    @Test
+    public void testMethodSignatureShownForParametrizedMethod() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { String process(int count, String name) { return name; } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "process", null);
+        assertTrue("Input params should appear: " + puml, puml.contains("入力:"));
+        assertTrue(puml.contains("int count"));
+        assertTrue(puml.contains("String name"));
+        assertTrue("Return type should appear: " + puml, puml.contains("戻り値: String"));
+    }
+
+    @Test
+    public void testMethodSignatureNotShownForVoidNoParam() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { foo(); } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "run", null);
+        assertFalse("No signature note for void no-param method: " + puml,
+                puml.contains("入力:"));
+        assertFalse(puml.contains("戻り値:"));
+    }
+
+    @Test
+    public void testMethodSignatureHiddenWhenShowCommentsOff() {
+        PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
+        o.showComments = false;
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { String process(int x) { return null; } }");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "process", o);
+        assertFalse("Signature should be hidden when showComments=false",
+                puml.contains("入力:"));
+    }
 }

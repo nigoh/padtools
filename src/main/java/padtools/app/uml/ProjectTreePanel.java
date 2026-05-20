@@ -104,6 +104,7 @@ public class ProjectTreePanel extends JPanel {
         });
         tree.setCellRenderer(new ProjectTreeCellRenderer());
         add(new JScrollPane(tree), BorderLayout.CENTER);
+        add(new TreeIconLegendPanel(), BorderLayout.SOUTH);
     }
 
     public void setOnClassSelected(java.util.function.Consumer<JavaClassInfo> listener) {

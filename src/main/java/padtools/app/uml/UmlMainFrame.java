@@ -137,6 +137,18 @@ public class UmlMainFrame extends JFrame {
      */
     private final java.util.Set<String> sequenceHiddenParticipants = new java.util.LinkedHashSet<>();
 
+    /** ツリーの選択文脈。図種の選択可能範囲を絞り込むために使う。 */
+    private SelectionContext selectionContext = SelectionContext.NONE;
+
+    private enum SelectionContext {
+        /** 無選択 / パッケージ / モジュール等 — 全図種を選択可能。 */
+        NONE,
+        /** クラス選択中 — CLASS のみ選択可能。 */
+        CLASS,
+        /** メソッド選択中 — SEQUENCE / ACTIVITY のみ選択可能。 */
+        METHOD
+    }
+
     public UmlMainFrame(File initialProject) {
         super(WINDOW_TITLE);
         setLayout(new BorderLayout());
@@ -808,6 +820,42 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
+    /**
+     * {@link #selectionContext} に応じて、ツールバーのトグルボタンと
+     * Diagram メニューの各項目を有効/無効に更新する。
+     *
+     * <ul>
+     *   <li>CLASS  — CLASS のみ有効</li>
+     *   <li>METHOD — SEQUENCE / ACTIVITY のみ有効</li>
+     *   <li>NONE   — 全図種有効</li>
+     * </ul>
+     */
+    private void updateDiagramKindAvailability() {
+        java.util.Set<DiagramKind> allowed;
+        switch (selectionContext) {
+            case CLASS:
+                allowed = java.util.EnumSet.of(DiagramKind.CLASS);
+                break;
+            case METHOD:
+                allowed = java.util.EnumSet.of(DiagramKind.SEQUENCE, DiagramKind.ACTIVITY);
+                break;
+            default:
+                allowed = java.util.EnumSet.allOf(DiagramKind.class);
+                break;
+        }
+        for (DiagramKind k : DiagramKind.values()) {
+            boolean enabled = allowed.contains(k);
+            JToggleButton tb = diagramToggles.get(k);
+            if (tb != null) {
+                tb.setEnabled(enabled);
+            }
+            JRadioButtonMenuItem mi = diagramItems.get(k);
+            if (mi != null) {
+                mi.setEnabled(enabled);
+            }
+        }
+    }
+
     private static JButton makeButton(String text, String tooltip,
                                        java.awt.event.ActionListener listener) {
         JButton b = new JButton(text);
@@ -886,6 +934,8 @@ public class UmlMainFrame extends JFrame {
                 activityEntry = null;
                 sequenceHiddenParticipants.clear();
                 currentScope = null;
+                selectionContext = SelectionContext.NONE;
+                updateDiagramKindAvailability();
                 updateManifestSummary();
                 StringBuilder st = new StringBuilder();
                 st.append("Analyzed ").append(cache.getClasses().size())
@@ -930,6 +980,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        selectionContext = SelectionContext.NONE;
+        updateDiagramKindAvailability();
         status.setText("Scope: package " + pkg);
         refreshDiagram();
     }
@@ -940,6 +992,8 @@ public class UmlMainFrame extends JFrame {
      */
     private void onTreeClassSelected(JavaClassInfo cls) {
         if (cls == null) {
+            selectionContext = SelectionContext.NONE;
+            updateDiagramKindAvailability();
             return;
         }
         String fqn = cls.getQualifiedName();
@@ -955,6 +1009,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        selectionContext = SelectionContext.CLASS;
+        updateDiagramKindAvailability();
         status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
         refreshDiagram();
     }
@@ -974,6 +1030,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        selectionContext = SelectionContext.NONE;
+        updateDiagramKindAvailability();
         status.setText("Scope: module " + module);
         refreshDiagram();
     }
@@ -1060,6 +1118,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        selectionContext = SelectionContext.NONE;
+        updateDiagramKindAvailability();
         refreshDiagram();
     }
 
@@ -1072,7 +1132,9 @@ public class UmlMainFrame extends JFrame {
         if (sel == null) {
             return;
         }
+        selectionContext = SelectionContext.METHOD;
         switchToSequenceDiagram(sel.getEntry());
+        updateDiagramKindAvailability();
     }
 
     /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
@@ -1139,7 +1201,9 @@ public class UmlMainFrame extends JFrame {
         if (sel == null) {
             return;
         }
+        selectionContext = SelectionContext.METHOD;
         switchToActivityDiagram(sel.getEntry());
+        updateDiagramKindAvailability();
     }
 
     /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
@@ -1188,6 +1252,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        selectionContext = SelectionContext.NONE;
+        updateDiagramKindAvailability();
         status.setText("Drill-down: " + fqn);
         refreshDiagram();
     }

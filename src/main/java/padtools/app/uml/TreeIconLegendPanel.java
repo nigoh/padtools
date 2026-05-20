@@ -59,7 +59,7 @@ final class TreeIconLegendPanel extends JPanel {
         addRow(TreeNodeIcon.MODULE,   "Module");
         addRow(TreeNodeIcon.PACKAGE,  "Package");
 
-        addCategory("Java 型", "四角");
+        addCategory("Java 型", "文字バッジ");
         addRow(TreeNodeIcon.CLASS,       "Class");
         addRow(TreeNodeIcon.INTERFACE,   "Interface");
         addRow(TreeNodeIcon.ENUM,        "Enum");

@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,6 +20,31 @@ import java.util.Set;
  * {@code alt/opt/loop/group/critical} に変換する。</p>
  */
 public final class PlantUmlSequenceDiagram {
+
+    /** Consumer/Predicate/Function 等の汎用 SAM 名。参加者名の決定で calling method 名を優先する。 */
+    private static final Set<String> GENERIC_SAM_NAMES = new HashSet<>(Arrays.asList(
+            "accept", "test", "apply", "get",
+            "getAsInt", "getAsLong", "getAsDouble", "<inline>"));
+
+    /**
+     * Stream 中間/終端操作のうち、コールバックを持たない場合にシーケンス図から除外するメソッド名。
+     * ラムダ引数がある場合は除外しない。
+     */
+    private static final Set<String> STREAM_OPS = new HashSet<>(Arrays.asList(
+            "stream", "parallelStream",
+            "filter", "map", "flatMap",
+            "mapToInt", "mapToLong", "mapToDouble", "mapToObj",
+            "flatMapToInt", "flatMapToLong", "flatMapToDouble",
+            "sorted", "distinct", "limit", "skip", "peek",
+            "boxed", "sequential", "parallel", "unordered",
+            "collect", "toList", "toArray",
+            "count", "findFirst", "findAny",
+            "anyMatch", "allMatch", "noneMatch",
+            "min", "max", "sum", "average", "reduce", "summaryStatistics"));
+
+    /** 繰り返し意味論を持つ操作名。コールバック展開を {@code loop} ブロックで囲む。 */
+    private static final Set<String> FOR_EACH_OPS = new HashSet<>(Arrays.asList(
+            "forEach", "forEachOrdered"));
 
     /** コメントを表示する位置。 */
     public enum CommentPlacement {
@@ -441,6 +467,10 @@ public final class PlantUmlSequenceDiagram {
         if (isHidden(opts, target)) {
             return;
         }
+        // Stream 中間/終端操作でコールバックがない場合はノイズを抑制
+        if (STREAM_OPS.contains(call.getMethodName()) && call.getInlineMethods().isEmpty()) {
+            return;
+        }
         participants.add(target);
         participantMethods.computeIfAbsent(target, k -> new LinkedHashSet<>())
                 .add(call.getMethodName());
@@ -462,38 +492,51 @@ public final class PlantUmlSequenceDiagram {
         if (!canRecurse) {
             return;
         }
-        if (nextCls == null) {
-            // Case 1: 呼び出し引数に直接渡されたコールバック (setOnClickListener(new Foo(){...}) 等)
-            if (!call.getInlineMethods().isEmpty()) {
-                for (JavaMethodInfo inline : call.getInlineMethods()) {
-                    // 参加者名: 定義元クラス$コールバックメソッド名 (例: MyActivity$onClick)
-                    String inlineName = currentClass.getSimpleName() + "$" + inline.getName();
-                    inlineParticipants.add(inlineName);
-                    participants.add(inlineName);
-                    participantMethods.computeIfAbsent(inlineName, k -> new LinkedHashSet<>())
-                            .add(inline.getName());
-                    String inlineKey = inlineName + "." + inline.getName();
-                    if (stack.contains(inlineKey)) {
-                        body.append(indent).append("note over ").append(quote(inlineName))
-                                .append(" : recursive call (").append(inline.getName()).append(")\n");
-                        continue;
-                    }
-                    body.append(indent).append(target).append(" -> ").append(quote(inlineName))
-                            .append(": ").append(inline.getName()).append("()\n");
-                    if (inline.getStatements().isEmpty()) {
-                        continue;
-                    }
-                    body.append(indent).append("activate ").append(quote(inlineName)).append('\n');
-                    stack.add(inlineKey);
-                    // inline body 内の `this.foo()` を定義元クラスに解決させるため currentClass を保つ
-                    walkStatements(inline.getStatements(), currentClass, classes,
-                            participants, inlineParticipants, participantMethods,
-                            body, stack, depth + 1, opts, indent + "  ");
-                    stack.remove(inlineKey);
-                    body.append(indent).append("deactivate ").append(quote(inlineName)).append('\n');
-                }
-                return;
+        // Case 1/1b: コールバックがある場合は nextCls の有無・メソッド定義の有無に関わらず展開する。
+        // nextCls != null && nextMethod == null のケースはチェーン呼び出しで receiver が
+        // 自クラスに誤解決された場合 (list.stream().forEach(lambda) 等) を想定している。
+        if (!call.getInlineMethods().isEmpty() && (nextCls == null || nextMethod == null)) {
+            // forEach/forEachOrdered は繰り返し意味論を持つので loop ブロックで囲む
+            boolean isLoop = FOR_EACH_OPS.contains(call.getMethodName());
+            if (isLoop) {
+                body.append(indent).append("loop ").append(call.getMethodName()).append('\n');
             }
+            for (JavaMethodInfo inline : call.getInlineMethods()) {
+                // 参加者名: 定義元クラス$コールバック識別子
+                // SAM 名が汎用的 (accept/test/apply/get 等) なら calling method 名を使う
+                String inlineLabel = GENERIC_SAM_NAMES.contains(inline.getName())
+                        ? call.getMethodName() : inline.getName();
+                String inlineName = currentClass.getSimpleName() + "$" + inlineLabel;
+                inlineParticipants.add(inlineName);
+                participants.add(inlineName);
+                participantMethods.computeIfAbsent(inlineName, k -> new LinkedHashSet<>())
+                        .add(inlineLabel);
+                String inlineKey = inlineName + "." + inlineLabel;
+                if (stack.contains(inlineKey)) {
+                    body.append(indent).append("note over ").append(quote(inlineName))
+                            .append(" : recursive call (").append(inlineLabel).append(")\n");
+                    continue;
+                }
+                body.append(indent).append(target).append(" -> ").append(quote(inlineName))
+                        .append(": ").append(inlineLabel).append("()\n");
+                if (inline.getStatements().isEmpty()) {
+                    continue;
+                }
+                body.append(indent).append("activate ").append(quote(inlineName)).append('\n');
+                stack.add(inlineKey);
+                // inline body 内の `this.foo()` を定義元クラスに解決させるため currentClass を保つ
+                walkStatements(inline.getStatements(), currentClass, classes,
+                        participants, inlineParticipants, participantMethods,
+                        body, stack, depth + 1, opts, isLoop ? indent + "    " : indent + "  ");
+                stack.remove(inlineKey);
+                body.append(indent).append("deactivate ").append(quote(inlineName)).append('\n');
+            }
+            if (isLoop) {
+                body.append(indent).append("end\n");
+            }
+            return;
+        }
+        if (nextCls == null) {
             // Case 2: フィールド初期化子 (匿名クラス / ラムダ) で定義された inline メソッド
             JavaMethodInfo inline = findInlineMethod(currentClass, call);
             if (inline == null || inline.getStatements().isEmpty()) {

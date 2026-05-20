@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -130,6 +131,83 @@ public class PlantUmlSequenceInlineTest {
                 diagram.contains("<<inline>>"));
         assertTrue("lambda body mService.start() should be expanded: \n" + diagram,
                 diagram.contains("start()"));
+    }
+
+    // ── forEach / stream チェーン ───────────────────────────────────────────────
+
+    @Test
+    public void testForEachLambdaWrappedInLoop() {
+        // list.forEach(item -> ...) が loop ブロックで囲まれること
+        String src = ""
+                + "class Processor {\n"
+                + "  private IService mService;\n"
+                + "  void process() {\n"
+                + "    items.forEach(item -> mService.handle(item));\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Processor", "process", null);
+        assertTrue("forEach should be wrapped in loop block: \n" + diagram,
+                diagram.contains("loop forEach"));
+        assertTrue("loop block should be closed: \n" + diagram,
+                diagram.contains("loop forEach\n") && diagram.contains("end\n"));
+    }
+
+    @Test
+    public void testForEachParticipantUsesCallingMethodName() {
+        // forEach の参加者名が OwnerClass$forEach になること (汎用 SAM 名 accept は使わない)
+        String src = ""
+                + "class Handler {\n"
+                + "  private IService mService;\n"
+                + "  void run() {\n"
+                + "    list.forEach(item -> mService.exec(item));\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Handler", "run", null);
+        assertTrue("participant should be Handler$forEach not Handler$accept: \n" + diagram,
+                diagram.contains("\"Handler$forEach\""));
+        assertFalse("generic SAM name 'accept' should not appear as participant: \n" + diagram,
+                diagram.contains("Handler$accept"));
+    }
+
+    @Test
+    public void testStreamIntermediateOpsSupressed() {
+        // stream() や filter() (コールバックなし) はシーケンス図から除外されること
+        String src = ""
+                + "class Worker {\n"
+                + "  private IService mService;\n"
+                + "  void work() {\n"
+                + "    list.stream().sorted().forEach(item -> mService.handle(item));\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Worker", "work", null);
+        // stream() と sorted() は矢印として出ないこと
+        assertFalse("stream() should be suppressed: \n" + diagram,
+                diagram.contains(": stream()") || diagram.contains(": list.stream()"));
+        assertFalse("sorted() should be suppressed: \n" + diagram,
+                diagram.contains(": sorted()"));
+        // forEach のコールバック本体は展開されること
+        assertTrue("forEach body should be expanded: \n" + diagram,
+                diagram.contains("loop forEach"));
+    }
+
+    @Test
+    public void testStreamFilterWithLambdaNotSuppressed() {
+        // filter(lambda) のようにコールバックがある場合は除外しないこと
+        String src = ""
+                + "class Checker {\n"
+                + "  private IService mService;\n"
+                + "  void check() {\n"
+                + "    list.stream().filter(item -> mService.isValid(item));\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "Checker", "check", null);
+        // filter のコールバック展開で <<inline>> 参加者が生成されること
+        assertTrue("filter lambda should be expanded: \n" + diagram,
+                diagram.contains("\"Checker$filter\""));
     }
 
     @Test

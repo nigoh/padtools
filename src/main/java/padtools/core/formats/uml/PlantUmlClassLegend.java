@@ -23,6 +23,8 @@ final class PlantUmlClassLegend {
         boolean hasInterface;
         boolean hasEnum;
         boolean hasAnnotationKind;
+        boolean hasRecord;
+        boolean hasSealed;
         boolean hasStatic;
         boolean hasAbstractMember;
         boolean hasInheritance;
@@ -131,12 +133,18 @@ final class PlantUmlClassLegend {
             case ANNOTATION:
                 s.hasAnnotationKind = true;
                 break;
+            case RECORD:
+                s.hasRecord = true;
+                break;
             case CLASS:
             default:
                 if (c.isAbstract()) {
                     s.hasAbstractClass = true;
                 }
                 break;
+        }
+        if (c.getModifiers().contains("sealed")) {
+            s.hasSealed = true;
         }
     }
 
@@ -209,7 +217,8 @@ final class PlantUmlClassLegend {
     }
 
     private static void emitKinds(StringBuilder out, Stats s) {
-        if (!s.hasAbstractClass && !s.hasInterface && !s.hasEnum && !s.hasAnnotationKind) {
+        if (!s.hasAbstractClass && !s.hasInterface && !s.hasEnum
+                && !s.hasAnnotationKind && !s.hasRecord && !s.hasSealed) {
             return;
         }
         out.append("== クラス種別 ==\n");
@@ -225,6 +234,12 @@ final class PlantUmlClassLegend {
         }
         if (s.hasAnnotationKind) {
             out.append("annotation   アノテーション型\n");
+        }
+        if (s.hasRecord) {
+            out.append("class<<record>>  record 宣言 (Java 16+)\n");
+        }
+        if (s.hasSealed) {
+            out.append("<<sealed>>   sealed クラス/インタフェース (permits で継承先を限定)\n");
         }
     }
 

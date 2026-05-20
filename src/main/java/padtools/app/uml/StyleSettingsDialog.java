@@ -79,6 +79,9 @@ public final class StyleSettingsDialog extends JDialog {
             new JSpinner(new SpinnerNumberModel(80, 0, 500, 10));
     private final JTextField classHiddenAnnotationsField = new JTextField(24);
 
+    private final JSpinner callGraphMaxDepthSpinner =
+            new JSpinner(new SpinnerNumberModel(4, 1, 10, 1));
+
     private Result result;
 
     /** クラス図向け Setting 永続化用 DTO (不変)。 */
@@ -145,12 +148,14 @@ public final class StyleSettingsDialog extends JDialog {
         public final PlantUmlSequenceDiagram.CommentPlacement sequenceCommentPlacement;
         public final boolean sequenceQualifyMethodNames;
         public final ClassDiagramPrefs classDiagram;
+        public final int callGraphMaxDepth;
 
         public Result(DiagramStyle style, boolean sequenceShowComments,
                       PlantUmlClassDiagram.CommentStyle sequenceCommentStyle,
                       PlantUmlSequenceDiagram.CommentPlacement sequenceCommentPlacement,
                       boolean sequenceQualifyMethodNames,
-                      ClassDiagramPrefs classDiagram) {
+                      ClassDiagramPrefs classDiagram,
+                      int callGraphMaxDepth) {
             this.style = style;
             this.sequenceShowComments = sequenceShowComments;
             this.sequenceCommentStyle = sequenceCommentStyle;
@@ -158,6 +163,7 @@ public final class StyleSettingsDialog extends JDialog {
             this.sequenceQualifyMethodNames = sequenceQualifyMethodNames;
             this.classDiagram = classDiagram != null
                     ? classDiagram : ClassDiagramPrefs.defaults();
+            this.callGraphMaxDepth = callGraphMaxDepth > 0 ? callGraphMaxDepth : 4;
         }
     }
 
@@ -166,12 +172,13 @@ public final class StyleSettingsDialog extends JDialog {
                                  PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle,
                                  PlantUmlSequenceDiagram.CommentPlacement initialSeqPlacement,
                                  boolean initialSeqQualify,
-                                 ClassDiagramPrefs initialClassPrefs) {
+                                 ClassDiagramPrefs initialClassPrefs,
+                                 int initialCallGraphMaxDepth) {
         super(owner, "UML Style Settings", Dialog.ModalityType.APPLICATION_MODAL);
         setLayout(new BorderLayout());
         JScrollPane scroll = new JScrollPane(buildForm(initial, initialSeqShowComments,
                 initialSeqCommentStyle, initialSeqPlacement, initialSeqQualify,
-                initialClassPrefs));
+                initialClassPrefs, initialCallGraphMaxDepth));
         scroll.setBorder(null);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         add(scroll, BorderLayout.CENTER);
@@ -192,7 +199,8 @@ public final class StyleSettingsDialog extends JDialog {
                               PlantUmlClassDiagram.CommentStyle initialSeqCommentStyle,
                               PlantUmlSequenceDiagram.CommentPlacement initialSeqPlacement,
                               boolean initialSeqQualify,
-                              ClassDiagramPrefs initialClassPrefs) {
+                              ClassDiagramPrefs initialClassPrefs,
+                              int initialCallGraphMaxDepth) {
         JPanel form = new JPanel(new GridBagLayout());
         form.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         GridBagConstraints c = new GridBagConstraints();
@@ -439,6 +447,29 @@ public final class StyleSettingsDialog extends JDialog {
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
         form.add(classHiddenAnnotationsField, c);
         c.gridwidth = 1;
+        row++;
+
+        // ─── Call Graph ────────────────────────────────────────────────────
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        c.insets = new Insets(12, 4, 2, 4);
+        form.add(new JSeparator(), c);
+        c.insets = new Insets(4, 4, 4, 4);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 0; c.gridwidth = 3;
+        form.add(new JLabel("Call Graph"), c);
+        c.gridwidth = 1;
+        row++;
+
+        callGraphMaxDepthSpinner.setValue(Math.max(1, Math.min(10, initialCallGraphMaxDepth)));
+        ((JSpinner.DefaultEditor) callGraphMaxDepthSpinner.getEditor()).getTextField()
+                .setToolTipText("Number of method-call levels to expand (1–10). Default: 4.");
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Max depth:"), c);
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(callGraphMaxDepthSpinner, c);
+        c.gridwidth = 1;
 
         return form;
     }
@@ -487,6 +518,7 @@ public final class StyleSettingsDialog extends JDialog {
         classExcludeExternalCheckbox.setSelected(cp.excludeExternal);
         classCommentMaxLengthSpinner.setValue(cp.commentMaxLength);
         classHiddenAnnotationsField.setText(cp.hiddenAnnotationsCsv());
+        callGraphMaxDepthSpinner.setValue(4);
     }
 
     private void pickBackgroundColor() {
@@ -546,8 +578,9 @@ public final class StyleSettingsDialog extends JDialog {
                 classExcludeExternalCheckbox.isSelected(),
                 ((Number) classCommentMaxLengthSpinner.getValue()).intValue(),
                 ClassDiagramPrefs.parseCsv(classHiddenAnnotationsField.getText()));
+        int cgDepth = ((Number) callGraphMaxDepthSpinner.getValue()).intValue();
         return new Result(s, sequenceShowCommentsCheckbox.isSelected(), cs, cp,
-                sequenceQualifyMethodsCheckbox.isSelected(), classPrefs);
+                sequenceQualifyMethodsCheckbox.isSelected(), classPrefs, cgDepth);
     }
 
     /**
@@ -559,7 +592,8 @@ public final class StyleSettingsDialog extends JDialog {
                                      PlantUmlClassDiagram.CommentStyle currentSeqCommentStyle,
                                      PlantUmlSequenceDiagram.CommentPlacement currentSeqPlacement,
                                      boolean currentSeqQualify,
-                                     ClassDiagramPrefs currentClassPrefs) {
+                                     ClassDiagramPrefs currentClassPrefs,
+                                     int currentCallGraphMaxDepth) {
         Window owner = (parent instanceof Window)
                 ? (Window) parent
                 : javax.swing.SwingUtilities.getWindowAncestor(parent);
@@ -572,7 +606,7 @@ public final class StyleSettingsDialog extends JDialog {
                         : PlantUmlSequenceDiagram.CommentPlacement.AT_CALL_SITE;
         StyleSettingsDialog dlg = new StyleSettingsDialog(owner, initial,
                 currentSeqShowComments, initialSeqStyle, initialSeqPlacement,
-                currentSeqQualify, currentClassPrefs);
+                currentSeqQualify, currentClassPrefs, currentCallGraphMaxDepth);
         dlg.setVisible(true);
         return dlg.result;
     }

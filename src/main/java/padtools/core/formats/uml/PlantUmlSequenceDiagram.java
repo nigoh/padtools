@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,6 +20,31 @@ import java.util.Set;
  * {@code alt/opt/loop/group/critical} に変換する。</p>
  */
 public final class PlantUmlSequenceDiagram {
+
+    /** Consumer/Predicate/Function 等の汎用 SAM 名。参加者名の決定で calling method 名を優先する。 */
+    private static final Set<String> GENERIC_SAM_NAMES = new HashSet<>(Arrays.asList(
+            "accept", "test", "apply", "get",
+            "getAsInt", "getAsLong", "getAsDouble", "<inline>"));
+
+    /**
+     * Stream 中間/終端操作のうち、コールバックを持たない場合にシーケンス図から除外するメソッド名。
+     * ラムダ引数がある場合は除外しない。
+     */
+    private static final Set<String> STREAM_OPS = new HashSet<>(Arrays.asList(
+            "stream", "parallelStream",
+            "filter", "map", "flatMap",
+            "mapToInt", "mapToLong", "mapToDouble", "mapToObj",
+            "flatMapToInt", "flatMapToLong", "flatMapToDouble",
+            "sorted", "distinct", "limit", "skip", "peek",
+            "boxed", "sequential", "parallel", "unordered",
+            "collect", "toList", "toArray",
+            "count", "findFirst", "findAny",
+            "anyMatch", "allMatch", "noneMatch",
+            "min", "max", "sum", "average", "reduce", "summaryStatistics"));
+
+    /** 繰り返し意味論を持つ操作名。コールバック展開を {@code loop} ブロックで囲む。 */
+    private static final Set<String> FOR_EACH_OPS = new HashSet<>(Arrays.asList(
+            "forEach", "forEachOrdered"));
 
     /** コメントを表示する位置。 */
     public enum CommentPlacement {
@@ -92,6 +118,8 @@ public final class PlantUmlSequenceDiagram {
         public boolean showMissingParticipants = true;
         /** 解決できなかった participant に使う背景色。 */
         public String missingParticipantColor = "#LightYellow";
+        /** メソッド引数に渡されたコールバック/リスナー ({@code <<inline>>}) の背景色。null/空文字で色なし。 */
+        public String inlineParticipantColor = "#FFE4E1";
         /**
          * メソッド呼び出しラベルにクラス名を付けるか。
          * true (デフォルト) なら {@code "A -> B: B.method()"} の形で出力する。
@@ -145,6 +173,7 @@ public final class PlantUmlSequenceDiagram {
             out.append("skinparam noteFontColor ").append(o.commentColor).append('\n');
         }
         Set<String> participants = new LinkedHashSet<>();
+        Set<String> inlineParticipants = new LinkedHashSet<>();
         participants.add(o.callerName);
         // 起点クラスが除外指定されていれば、空のシーケンスとして扱う
         boolean entryHidden = isHidden(o, cls.getSimpleName());
@@ -170,7 +199,7 @@ public final class PlantUmlSequenceDiagram {
             Set<String> stack = new HashSet<>();
             stack.add(cls.getSimpleName() + "." + method.getName());
             walkStatements(method.getStatements(), cls, classes, participants,
-                    participantMethods, body, stack, 1, o, "");
+                    inlineParticipants, participantMethods, body, stack, 1, o, "");
             stack.remove(cls.getSimpleName() + "." + method.getName());
 
             body.append("deactivate ").append(cls.getSimpleName()).append('\n');
@@ -196,6 +225,11 @@ public final class PlantUmlSequenceDiagram {
                 if (o.missingParticipantColor != null && !o.missingParticipantColor.isEmpty()) {
                     out.append(' ').append(o.missingParticipantColor);
                 }
+            } else if (inlineParticipants.contains(p)) {
+                out.append(" <<inline>>");
+                if (o.inlineParticipantColor != null && !o.inlineParticipantColor.isEmpty()) {
+                    out.append(' ').append(o.inlineParticipantColor);
+                }
             } else if (colorize && findClass(classes, p) != null) {
                 out.append(' ').append(o.projectClassColor);
             }
@@ -215,7 +249,8 @@ public final class PlantUmlSequenceDiagram {
         }
         out.append(body);
         if (o.includeLegend) {
-            emitLegend(out, participants.size(), colorize, o.projectClassColor);
+            emitLegend(out, participants.size(), colorize, o.projectClassColor,
+                    !inlineParticipants.isEmpty());
         }
         out.append("@enduml\n");
         return out.toString();
@@ -265,7 +300,7 @@ public final class PlantUmlSequenceDiagram {
         // body は捨てる。participants だけ取り出す。
         StringBuilder discard = new StringBuilder();
         walkStatements(method.getStatements(), cls, classes, result,
-                participantMethods, discard, stack, 1, scanOpts, "");
+                new HashSet<>(), participantMethods, discard, stack, 1, scanOpts, "");
         return result;
     }
 
@@ -361,6 +396,7 @@ public final class PlantUmlSequenceDiagram {
                                         JavaClassInfo currentClass,
                                         List<JavaClassInfo> classes,
                                         Set<String> participants,
+                                        Set<String> inlineParticipants,
                                         Map<String, LinkedHashSet<String>> participantMethods,
                                         StringBuilder body,
                                         Set<String> stack,
@@ -370,18 +406,53 @@ public final class PlantUmlSequenceDiagram {
         for (JavaMethodInfo.Statement s : stmts) {
             if (s instanceof JavaMethodInfo.Call) {
                 emitCall((JavaMethodInfo.Call) s, currentClass, classes,
-                        participants, participantMethods, body, stack, depth, opts, indent);
+                        participants, inlineParticipants, participantMethods,
+                        body, stack, depth, opts, indent);
+            } else if (s instanceof JavaMethodInfo.Return) {
+                emitReturnStatement((JavaMethodInfo.Return) s,
+                        currentClass.getSimpleName(), body, indent);
+            } else if (s instanceof JavaMethodInfo.Throw) {
+                emitThrowStatement((JavaMethodInfo.Throw) s,
+                        currentClass.getSimpleName(), body, indent);
             } else if (s instanceof JavaMethodInfo.Block) {
                 emitBlock((JavaMethodInfo.Block) s, currentClass, classes,
-                        participants, participantMethods, body, stack, depth, opts, indent);
+                        participants, inlineParticipants, participantMethods,
+                        body, stack, depth, opts, indent);
             }
         }
+    }
+
+    private static void emitReturnStatement(JavaMethodInfo.Return r,
+                                             String participant,
+                                             StringBuilder body,
+                                             String indent) {
+        String expr = r.getExpression();
+        String text = (expr == null || expr.isEmpty()) ? "return" : "return " + expr;
+        if (text.length() > 80) {
+            text = text.substring(0, 77) + "...";
+        }
+        body.append(indent).append("note over ").append(quote(participant))
+                .append(" : ").append(text).append('\n');
+    }
+
+    private static void emitThrowStatement(JavaMethodInfo.Throw t,
+                                            String participant,
+                                            StringBuilder body,
+                                            String indent) {
+        String expr = t.getExpression();
+        String text = (expr == null || expr.isEmpty()) ? "throw" : "throw " + expr;
+        if (text.length() > 80) {
+            text = text.substring(0, 77) + "...";
+        }
+        body.append(indent).append("note over ").append(quote(participant))
+                .append(" : ").append(text).append('\n');
     }
 
     private static void emitCall(JavaMethodInfo.Call call,
                                   JavaClassInfo currentClass,
                                   List<JavaClassInfo> classes,
                                   Set<String> participants,
+                                  Set<String> inlineParticipants,
                                   Map<String, LinkedHashSet<String>> participantMethods,
                                   StringBuilder body,
                                   Set<String> stack,
@@ -394,6 +465,10 @@ public final class PlantUmlSequenceDiagram {
         }
         // 除外指定された participant への呼び出しは矢印も note も出力しない
         if (isHidden(opts, target)) {
+            return;
+        }
+        // Stream 中間/終端操作でコールバックがない場合はノイズを抑制
+        if (STREAM_OPS.contains(call.getMethodName()) && call.getInlineMethods().isEmpty()) {
             return;
         }
         participants.add(target);
@@ -417,9 +492,52 @@ public final class PlantUmlSequenceDiagram {
         if (!canRecurse) {
             return;
         }
+        // Case 1/1b: コールバックがある場合は nextCls の有無・メソッド定義の有無に関わらず展開する。
+        // nextCls != null && nextMethod == null のケースはチェーン呼び出しで receiver が
+        // 自クラスに誤解決された場合 (list.stream().forEach(lambda) 等) を想定している。
+        if (!call.getInlineMethods().isEmpty() && (nextCls == null || nextMethod == null)) {
+            // forEach/forEachOrdered は繰り返し意味論を持つので loop ブロックで囲む
+            boolean isLoop = FOR_EACH_OPS.contains(call.getMethodName());
+            if (isLoop) {
+                body.append(indent).append("loop ").append(call.getMethodName()).append('\n');
+            }
+            for (JavaMethodInfo inline : call.getInlineMethods()) {
+                // 参加者名: 定義元クラス$コールバック識別子
+                // SAM 名が汎用的 (accept/test/apply/get 等) なら calling method 名を使う
+                String inlineLabel = GENERIC_SAM_NAMES.contains(inline.getName())
+                        ? call.getMethodName() : inline.getName();
+                String inlineName = currentClass.getSimpleName() + "$" + inlineLabel;
+                inlineParticipants.add(inlineName);
+                participants.add(inlineName);
+                participantMethods.computeIfAbsent(inlineName, k -> new LinkedHashSet<>())
+                        .add(inlineLabel);
+                String inlineKey = inlineName + "." + inlineLabel;
+                if (stack.contains(inlineKey)) {
+                    body.append(indent).append("note over ").append(quote(inlineName))
+                            .append(" : recursive call (").append(inlineLabel).append(")\n");
+                    continue;
+                }
+                body.append(indent).append(target).append(" -> ").append(quote(inlineName))
+                        .append(": ").append(inlineLabel).append("()\n");
+                if (inline.getStatements().isEmpty()) {
+                    continue;
+                }
+                body.append(indent).append("activate ").append(quote(inlineName)).append('\n');
+                stack.add(inlineKey);
+                // inline body 内の `this.foo()` を定義元クラスに解決させるため currentClass を保つ
+                walkStatements(inline.getStatements(), currentClass, classes,
+                        participants, inlineParticipants, participantMethods,
+                        body, stack, depth + 1, opts, isLoop ? indent + "    " : indent + "  ");
+                stack.remove(inlineKey);
+                body.append(indent).append("deactivate ").append(quote(inlineName)).append('\n');
+            }
+            if (isLoop) {
+                body.append(indent).append("end\n");
+            }
+            return;
+        }
         if (nextCls == null) {
-            // 解析済みクラスではない受信者: フィールド初期化子 (匿名クラス / ラムダ) で
-            // 定義された inline メソッドがあれば、その本体を展開する。
+            // Case 2: フィールド初期化子 (匿名クラス / ラムダ) で定義された inline メソッド
             JavaMethodInfo inline = findInlineMethod(currentClass, call);
             if (inline == null || inline.getStatements().isEmpty()) {
                 return;
@@ -435,7 +553,8 @@ public final class PlantUmlSequenceDiagram {
             stack.add(inlineKey);
             // inline body 内の `this.foo()` を呼び出し元クラスに解決させるため currentClass を保つ
             walkStatements(inline.getStatements(), currentClass, classes,
-                    participants, participantMethods, body, stack, depth + 1, opts, indent);
+                    participants, inlineParticipants, participantMethods,
+                    body, stack, depth + 1, opts, indent);
             stack.remove(inlineKey);
             body.append(indent).append("deactivate ").append(target).append('\n');
             return;
@@ -454,7 +573,8 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("activate ").append(target).append('\n');
         stack.add(key);
         walkStatements(nextMethod.getStatements(), nextCls, classes,
-                participants, participantMethods, body, stack, depth + 1, opts, indent);
+                participants, inlineParticipants, participantMethods,
+                body, stack, depth + 1, opts, indent);
         stack.remove(key);
         body.append(indent).append("deactivate ").append(target).append('\n');
     }
@@ -645,6 +765,7 @@ public final class PlantUmlSequenceDiagram {
                                    JavaClassInfo currentClass,
                                    List<JavaClassInfo> classes,
                                    Set<String> participants,
+                                   Set<String> inlineParticipants,
                                    Map<String, LinkedHashSet<String>> participantMethods,
                                    StringBuilder body,
                                    Set<String> stack,
@@ -658,26 +779,26 @@ public final class PlantUmlSequenceDiagram {
         String inner = indent + "    ";
         switch (block.getKind()) {
             case IF:
-                emitIf(bs, currentClass, classes, participants, participantMethods,
-                        body, stack, depth, opts, indent, inner);
+                emitIf(bs, currentClass, classes, participants, inlineParticipants,
+                        participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             case WHILE:
             case FOR:
             case DO_WHILE:
                 emitLoop(block, bs.get(0), currentClass, classes, participants,
-                        participantMethods, body, stack, depth, opts, indent, inner);
+                        inlineParticipants, participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             case SWITCH:
-                emitSwitch(bs, currentClass, classes, participants, participantMethods,
-                        body, stack, depth, opts, indent, inner);
+                emitSwitch(bs, currentClass, classes, participants, inlineParticipants,
+                        participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             case TRY:
-                emitTry(bs, currentClass, classes, participants, participantMethods,
-                        body, stack, depth, opts, indent, inner);
+                emitTry(bs, currentClass, classes, participants, inlineParticipants,
+                        participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             case SYNCHRONIZED:
                 emitSynchronized(bs.get(0), currentClass, classes, participants,
-                        participantMethods, body, stack, depth, opts, indent, inner);
+                        inlineParticipants, participantMethods, body, stack, depth, opts, indent, inner);
                 break;
             default:
                 break;
@@ -688,6 +809,7 @@ public final class PlantUmlSequenceDiagram {
                                 JavaClassInfo currentClass,
                                 List<JavaClassInfo> classes,
                                 Set<String> participants,
+                                Set<String> inlineParticipants,
                                 Map<String, LinkedHashSet<String>> participantMethods,
                                 StringBuilder body,
                                 Set<String> stack,
@@ -701,14 +823,14 @@ public final class PlantUmlSequenceDiagram {
             // 単一分岐 → opt
             body.append(indent).append("opt ").append(escapeLabel(first.getLabel())).append('\n');
             walkStatements(first.getBody(), currentClass, classes, participants,
-                    participantMethods, body, stack, depth, opts, inner);
+                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
             body.append(indent).append("end\n");
             return;
         }
         // 複数分岐 → alt + else
         body.append(indent).append("alt ").append(escapeLabel(first.getLabel())).append('\n');
         walkStatements(first.getBody(), currentClass, classes, participants,
-                participantMethods, body, stack, depth, opts, inner);
+                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
         for (int i = 1; i < bs.size(); i++) {
             JavaMethodInfo.Branch b = bs.get(i);
             if ("else if".equals(b.getType())) {
@@ -717,7 +839,7 @@ public final class PlantUmlSequenceDiagram {
                 body.append(indent).append("else\n");
             }
             walkStatements(b.getBody(), currentClass, classes, participants,
-                    participantMethods, body, stack, depth, opts, inner);
+                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
         }
         body.append(indent).append("end\n");
     }
@@ -727,6 +849,7 @@ public final class PlantUmlSequenceDiagram {
                                   JavaClassInfo currentClass,
                                   List<JavaClassInfo> classes,
                                   Set<String> participants,
+                                  Set<String> inlineParticipants,
                                   Map<String, LinkedHashSet<String>> participantMethods,
                                   StringBuilder body,
                                   Set<String> stack,
@@ -751,7 +874,7 @@ public final class PlantUmlSequenceDiagram {
         }
         body.append(indent).append("loop ").append(escapeLabel(label)).append('\n');
         walkStatements(br.getBody(), currentClass, classes, participants,
-                participantMethods, body, stack, depth, opts, inner);
+                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
         body.append(indent).append("end\n");
     }
 
@@ -759,6 +882,7 @@ public final class PlantUmlSequenceDiagram {
                                     JavaClassInfo currentClass,
                                     List<JavaClassInfo> classes,
                                     Set<String> participants,
+                                    Set<String> inlineParticipants,
                                     Map<String, LinkedHashSet<String>> participantMethods,
                                     StringBuilder body,
                                     Set<String> stack,
@@ -789,7 +913,7 @@ public final class PlantUmlSequenceDiagram {
                 body.append(indent).append("else ").append(escapeLabel(caseLabel)).append('\n');
             }
             walkStatements(b.getBody(), currentClass, classes, participants,
-                    participantMethods, body, stack, depth, opts, inner);
+                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
         }
         if (openedAlt) {
             body.append(indent).append("end\n");
@@ -800,6 +924,7 @@ public final class PlantUmlSequenceDiagram {
                                  JavaClassInfo currentClass,
                                  List<JavaClassInfo> classes,
                                  Set<String> participants,
+                                 Set<String> inlineParticipants,
                                  Map<String, LinkedHashSet<String>> participantMethods,
                                  StringBuilder body,
                                  Set<String> stack,
@@ -811,15 +936,15 @@ public final class PlantUmlSequenceDiagram {
         for (JavaMethodInfo.Branch b : bs) {
             if ("try".equals(b.getType())) {
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        participantMethods, body, stack, depth, opts, inner);
+                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
             } else if ("catch".equals(b.getType())) {
                 body.append(indent).append("else catch ").append(escapeLabel(b.getLabel())).append('\n');
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        participantMethods, body, stack, depth, opts, inner);
+                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
             } else if ("finally".equals(b.getType())) {
                 body.append(indent).append("else finally\n");
                 walkStatements(b.getBody(), currentClass, classes, participants,
-                        participantMethods, body, stack, depth, opts, inner);
+                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
             }
         }
         body.append(indent).append("end\n");
@@ -829,6 +954,7 @@ public final class PlantUmlSequenceDiagram {
                                           JavaClassInfo currentClass,
                                           List<JavaClassInfo> classes,
                                           Set<String> participants,
+                                          Set<String> inlineParticipants,
                                           Map<String, LinkedHashSet<String>> participantMethods,
                                           StringBuilder body,
                                           Set<String> stack,
@@ -839,12 +965,13 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("critical synchronized(")
                 .append(escapeLabel(br.getLabel())).append(")\n");
         walkStatements(br.getBody(), currentClass, classes, participants,
-                participantMethods, body, stack, depth, opts, inner);
+                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
         body.append(indent).append("end\n");
     }
 
     private static void emitLegend(StringBuilder out, int participantCount,
-                                    boolean colorize, String projectClassColor) {
+                                    boolean colorize, String projectClassColor,
+                                    boolean hasInlineParticipants) {
         out.append("legend right\n");
         out.append("== シーケンス図 ==\n");
         out.append("participant         関与クラス/オブジェクト\n");
@@ -860,6 +987,9 @@ public final class PlantUmlSequenceDiagram {
         }
         out.append("<<external>>    依存 JAR/AAR で解決できた外部ライブラリのクラス\n");
         out.append("<<missing>>     依存宣言はあるが JAR/AAR が見つからないクラス (要確認)\n");
+        if (hasInlineParticipants) {
+            out.append("<<inline>>      引数に渡されたコールバック/リスナー (定義元クラス$メソッド名)\n");
+        }
         if (participantCount > 0) {
             out.append("Caller              仮想の呼び出し元 (オプションで変更可)\n");
         }

@@ -278,4 +278,40 @@ public class PlantUmlActivityDiagramTest {
         String puml = PlantUmlActivityDiagram.generate(infos, "p.A", "run", null);
         assertTrue(puml, puml.contains(":foo();"));
     }
+
+    // ---- yield statement (Java 14+ switch expression) ----
+
+    @Test
+    public void testYieldInSwitchExpressionRendersAsAction() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A {\n"
+                + "  String m(int n) {\n"
+                + "    return switch (n) {\n"
+                + "      case 1 -> \"one\";\n"
+                + "      default -> {\n"
+                + "        String s = compute(n);\n"
+                + "        yield s;\n"
+                + "      }\n"
+                + "    };\n"
+                + "  }\n"
+                + "}");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "m", null);
+        assertTrue("yield should appear as action node: " + puml,
+                puml.contains(":yield"));
+    }
+
+    @Test
+    public void testYieldWithExpressionShowsExpression() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A {\n"
+                + "  int m(int x) {\n"
+                + "    return switch (x) {\n"
+                + "      default -> { yield x * 2; }\n"
+                + "    };\n"
+                + "  }\n"
+                + "}");
+        String puml = PlantUmlActivityDiagram.generate(infos, "A", "m", null);
+        assertTrue("yield expression should appear in diagram: " + puml,
+                puml.contains(":yield"));
+    }
 }

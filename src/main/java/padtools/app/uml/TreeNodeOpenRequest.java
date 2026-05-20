@@ -67,16 +67,24 @@ public final class TreeNodeOpenRequest {
     public String displayLabel() {
         switch (target) {
             case METHOD:
-                String prefix = kind == DiagramKind.ACTIVITY ? "[A] " : "[S] ";
-                return prefix + classInfo.getSimpleName() + "." + methodInfo.getName();
+                String suffix = kind == DiagramKind.ACTIVITY ? " (act)" : "";
+                return classInfo.getSimpleName() + "." + methodInfo.getName() + suffix;
             case CLASS:
-                return "[C] " + classInfo.getSimpleName();
+                return classInfo.getSimpleName();
             case PACKAGE:
-                return "[P] " + name;
+                return shortPackage(name);
             case MODULE:
-                return "[M] " + name;
+                return name;
             default:
                 return target.name();
         }
+    }
+
+    /** 長いパッケージ名の末尾 2 コンポーネントだけを返す。 */
+    private static String shortPackage(String pkg) {
+        if (pkg == null) return "";
+        String[] parts = pkg.split("\\.");
+        if (parts.length <= 2) return pkg;
+        return "…" + parts[parts.length - 2] + "." + parts[parts.length - 1];
     }
 }

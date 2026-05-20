@@ -63,6 +63,8 @@ public final class ComponentIngestor {
             return null;
         }
         switch (kind) {
+            case APPLICATION:
+                return "Application";
             case ACTIVITY:
                 return "Activity";
             case SERVICE:

@@ -40,6 +40,13 @@ public final class PlantUmlRenderer {
     private static volatile boolean verbose = false;
 
     /**
+     * Graphviz dot が利用可能かどうか。{@link GraphvizLocator#init(java.io.File)} が
+     * dot を発見した場合に true になる。true のとき {@link #injectLayout(String)} は
+     * {@code !pragma layout smetana} を挿入しない。
+     */
+    private static volatile boolean graphvizAvailable = false;
+
+    /**
      * テスト用のレンダラ差し替えフック。null でなければ {@link SourceStringReader#outputImage}
      * の代わりに使われる。本番経路では常に null。
      */
@@ -76,6 +83,19 @@ public final class PlantUmlRenderer {
      */
     public static void setVerbose(boolean v) {
         verbose = v;
+    }
+
+    /**
+     * Graphviz dot の利用可否を設定する。{@link GraphvizLocator} が呼び出す想定。
+     * テストから明示的に false を渡してデフォルト動作 (Smetana 挿入) を強制できる。
+     */
+    public static void setGraphvizAvailable(boolean available) {
+        graphvizAvailable = available;
+    }
+
+    /** Graphviz dot が利用可能かどうか返す。 */
+    public static boolean isGraphvizAvailable() {
+        return graphvizAvailable;
     }
 
     /**
@@ -190,7 +210,7 @@ public final class PlantUmlRenderer {
             return puml;
         }
         StringBuilder injected = new StringBuilder();
-        if (!hasLayoutPragma) {
+        if (!hasLayoutPragma && !graphvizAvailable) {
             injected.append("!pragma layout smetana\n");
         }
         injected.append(prelude);

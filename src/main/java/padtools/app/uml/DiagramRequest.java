@@ -113,6 +113,17 @@ public final class DiagramRequest {
                 includeLegend, null, false, null, null);
     }
 
+    /**
+     * CALLGRAPH 図用のショートカットコンストラクタ。
+     * {@code entryClass} と {@code entryMethod} は {@link #sequenceEntryClass} /
+     * {@link #sequenceEntryMethod} スロットを共用する。
+     */
+    public static DiagramRequest forCallGraph(String entryClass, String entryMethod,
+                                               boolean includeLegend) {
+        return new DiagramRequest(DiagramKind.CALLGRAPH, entryClass, entryMethod,
+                includeLegend, null, false, null, null);
+    }
+
     public DiagramKind getKind() {
         return kind;
     }

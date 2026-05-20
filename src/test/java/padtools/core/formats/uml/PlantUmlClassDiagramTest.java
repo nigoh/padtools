@@ -777,4 +777,79 @@ public class PlantUmlClassDiagramTest {
         assertFalse("separator should not appear when suppressed: " + puml,
                 puml.contains(".. r: Runnable .."));
     }
+
+    // ---- record / sealed support ----
+
+    @Test
+    public void testRecordGetsRecordStereotype() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package com.example; public record Point(int x, int y) {}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("record should have <<record>> stereotype: " + puml,
+                puml.contains("<<record>>"));
+        assertTrue("record should still use 'class' keyword: " + puml,
+                puml.contains("class \"com.example.Point\""));
+    }
+
+    @Test
+    public void testRecordLegendEntryAppearsWhenPresent() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package com.example; public record Point(int x, int y) {}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("legend should describe record: " + puml,
+                puml.contains("record 宣言"));
+    }
+
+    @Test
+    public void testSealedClassGetsSealedStereotype() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package com.example; public sealed class Shape permits Circle {}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("sealed class should have <<sealed>> stereotype: " + puml,
+                puml.contains("<<sealed>>"));
+    }
+
+    @Test
+    public void testSealedLegendEntryAppearsWhenPresent() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package com.example; public sealed class Shape permits Circle {}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertTrue("legend should describe sealed: " + puml,
+                puml.contains("permits で継承先を限定"));
+    }
+
+    @Test
+    public void testNonRecordClassHasNoRecordStereotype() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package com.example; public class Foo {}");
+        String puml = PlantUmlClassDiagram.generate(infos);
+        assertFalse("ordinary class should not have <<record>>: " + puml,
+                puml.contains("<<record>>"));
+    }
+
+    @Test
+    public void testInteractiveLinksEmitsMethodLinks() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void doSomething() {} void helper() {} }");
+        PlantUmlClassDiagram.Options opts = new PlantUmlClassDiagram.Options();
+        opts.interactiveLinks = true;
+        opts.showMethods = true;
+        String puml = PlantUmlClassDiagram.generate(infos, opts);
+        assertTrue("method link for doSomething: " + puml,
+                puml.contains("[[padtools://method/x.Foo#doSomething ▶]]"));
+        assertTrue("method link for helper: " + puml,
+                puml.contains("[[padtools://method/x.Foo#helper ▶]]"));
+    }
+
+    @Test
+    public void testInteractiveLinksNoMethodLinksWhenMethodsHidden() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void doSomething() {} }");
+        PlantUmlClassDiagram.Options opts = new PlantUmlClassDiagram.Options();
+        opts.interactiveLinks = true;
+        opts.showMethods = false;
+        String puml = PlantUmlClassDiagram.generate(infos, opts);
+        assertFalse("no method links when showMethods=false: " + puml,
+                puml.contains("padtools://method/"));
+    }
 }

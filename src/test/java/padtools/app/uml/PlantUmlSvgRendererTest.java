@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -85,5 +86,29 @@ public class PlantUmlSvgRendererTest {
         }
         assertTrue("Foo link area not found", foo);
         assertTrue("Bar link area not found", bar);
+    }
+
+    @Test
+    public void testTextItemsExtracted() throws IOException {
+        String puml = "@startuml\nclass Foo\nclass Bar\n@enduml\n";
+        PlantUmlSvgRenderer.RenderedSvg r = PlantUmlSvgRenderer.render(puml);
+        assertNotNull(r);
+        java.util.List<PlantUmlSvgRenderer.SvgTextItem> items = r.getTextItems();
+        assertNotNull("getTextItems should never be null", items);
+        assertFalse("should have at least one text item for class names", items.isEmpty());
+        boolean hasFoo = false;
+        boolean hasBar = false;
+        for (PlantUmlSvgRenderer.SvgTextItem item : items) {
+            if ("Foo".equals(item.getText())) {
+                hasFoo = true;
+                assertTrue("x > 0", item.getX() > 0);
+                assertTrue("y > 0", item.getY() > 0);
+            }
+            if ("Bar".equals(item.getText())) {
+                hasBar = true;
+            }
+        }
+        assertTrue("Foo text item not found", hasFoo);
+        assertTrue("Bar text item not found", hasBar);
     }
 }

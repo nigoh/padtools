@@ -80,7 +80,8 @@ public final class PlantUmlSvgRenderer {
         }
         String svg = new String(bytes, StandardCharsets.UTF_8);
         List<LinkArea> links = extractLinkAreas(doc);
-        return new RenderedSvg(root, w, h, svg, links);
+        List<SvgTextItem> texts = extractTextItems(doc);
+        return new RenderedSvg(root, w, h, svg, links, texts);
     }
 
     /**
@@ -127,29 +128,141 @@ public final class PlantUmlSvgRenderer {
         return out;
     }
 
-    private static Rectangle2D findFirstRectBounds(Element a) {
-        NodeList rects = a.getElementsByTagNameNS("*", "rect");
-        if (rects == null) {
-            return null;
+    /**
+     * SVG DOM から {@code <text>} 要素を走査し、テキスト内容と SVG 座標系アンカー位置を返す。
+     * PlantUML が生成する {@code <text x="..." y="...">} の直値を使う。
+     * {@code x} / {@code y} 属性を持たない要素はスキップする。
+     */
+    private static List<SvgTextItem> extractTextItems(SVGDocument doc) {
+        if (doc == null) {
+            return Collections.emptyList();
         }
-        for (int i = 0; i < rects.getLength(); i++) {
-            Node n = rects.item(i);
+        List<SvgTextItem> items = new ArrayList<>();
+        NodeList nodes = doc.getElementsByTagNameNS("*", "text");
+        if (nodes == null) {
+            return items;
+        }
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Node n = nodes.item(i);
             if (!(n instanceof Element)) {
                 continue;
             }
-            Element rect = (Element) n;
-            try {
-                double x = Double.parseDouble(rect.getAttribute("x"));
-                double y = Double.parseDouble(rect.getAttribute("y"));
-                double w = Double.parseDouble(rect.getAttribute("width"));
-                double h = Double.parseDouble(rect.getAttribute("height"));
-                if (w > 0 && h > 0) {
-                    return new Rectangle2D.Double(x, y, w, h);
+            Element el = (Element) n;
+            String content = el.getTextContent();
+            if (content == null) {
+                continue;
+            }
+            content = content.replace('\n', ' ').replace('\r', ' ').trim();
+            if (content.isEmpty()) {
+                continue;
+            }
+            double x = parseDoubleAttr(el, "x");
+            double y = parseDoubleAttr(el, "y");
+            if (Double.isNaN(x) || Double.isNaN(y)) {
+                continue;
+            }
+            items.add(new SvgTextItem(content, x, y));
+        }
+        return items;
+    }
+
+    private static double parseDoubleAttr(Element el, String name) {
+        String v = el.getAttribute(name);
+        if (v == null || v.isEmpty()) {
+            return Double.NaN;
+        }
+        try {
+            return Double.parseDouble(v);
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
+    }
+
+    private static Rectangle2D findFirstRectBounds(Element a) {
+        NodeList rects = a.getElementsByTagNameNS("*", "rect");
+        if (rects != null) {
+            for (int i = 0; i < rects.getLength(); i++) {
+                Node n = rects.item(i);
+                if (!(n instanceof Element)) {
+                    continue;
                 }
-            } catch (NumberFormatException ignored) {
+                Element rect = (Element) n;
+                try {
+                    double x = Double.parseDouble(rect.getAttribute("x"));
+                    double y = Double.parseDouble(rect.getAttribute("y"));
+                    double w = Double.parseDouble(rect.getAttribute("width"));
+                    double h = Double.parseDouble(rect.getAttribute("height"));
+                    if (w > 0 && h > 0) {
+                        return new Rectangle2D.Double(x, y, w, h);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        // rect なし: text 要素の textLength + font-size からバウンドを推定する
+        // (メソッドレベルリンクは <rect> を持たず <text> のみを持つ)
+        NodeList texts = a.getElementsByTagNameNS("*", "text");
+        if (texts != null) {
+            for (int i = 0; i < texts.getLength(); i++) {
+                Node n = texts.item(i);
+                if (!(n instanceof Element)) {
+                    continue;
+                }
+                Element text = (Element) n;
+                try {
+                    double x = Double.parseDouble(text.getAttribute("x"));
+                    double y = Double.parseDouble(text.getAttribute("y"));
+                    String tlStr = text.getAttribute("textLength");
+                    if (tlStr == null || tlStr.isEmpty()) {
+                        continue;
+                    }
+                    double w = Double.parseDouble(tlStr);
+                    if (w <= 0) {
+                        continue;
+                    }
+                    String fsStr = text.getAttribute("font-size");
+                    double fontSize = 14;
+                    if (fsStr != null && !fsStr.isEmpty()) {
+                        try {
+                            fontSize = Double.parseDouble(fsStr);
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                    double h = fontSize * 1.4;
+                    return new Rectangle2D.Double(x, y - fontSize, w, h);
+                } catch (NumberFormatException ignored) {
+                }
             }
         }
         return null;
+    }
+
+    /**
+     * SVG 内の {@code <text>} 要素 1 件を表す。テキスト内容と SVG 座標系でのアンカー位置を保持する。
+     * ラバーバンド選択でヒットテストに使う。
+     */
+    public static final class SvgTextItem {
+        private final String text;
+        private final double x;
+        private final double y;
+
+        SvgTextItem(String text, double x, double y) {
+            this.text = text;
+            this.x = x;
+            this.y = y;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public double getX() {
+            return x;
+        }
+
+        public double getY() {
+            return y;
+        }
     }
 
     /**
@@ -204,15 +317,19 @@ public final class PlantUmlSvgRenderer {
         private final double height;
         private final String svgXml;
         private final List<LinkArea> linkAreas;
+        private final List<SvgTextItem> textItems;
 
         RenderedSvg(GraphicsNode root, double width, double height, String svgXml,
-                    List<LinkArea> linkAreas) {
+                    List<LinkArea> linkAreas, List<SvgTextItem> textItems) {
             this.root = root;
             this.width = width;
             this.height = height;
             this.svgXml = svgXml;
             this.linkAreas = linkAreas != null
                     ? Collections.unmodifiableList(linkAreas)
+                    : Collections.emptyList();
+            this.textItems = textItems != null
+                    ? Collections.unmodifiableList(textItems)
                     : Collections.emptyList();
         }
 
@@ -238,6 +355,14 @@ public final class PlantUmlSvgRenderer {
          */
         public List<LinkArea> getLinkAreas() {
             return linkAreas;
+        }
+
+        /**
+         * SVG 内の {@code <text>} 要素の一覧 (テキスト内容 + SVG 座標)。
+         * ラバーバンド選択によるコピーに使う。never null。
+         */
+        public List<SvgTextItem> getTextItems() {
+            return textItems;
         }
     }
 }

@@ -2,11 +2,16 @@ package padtools.app.uml;
 
 import org.apache.batik.gvt.GraphicsNode;
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
+import padtools.app.uml.PlantUmlSvgRenderer.SvgTextItem;
 
+import javax.swing.AbstractAction;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -15,16 +20,23 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * PlantUML のレンダリング結果をズーム・パン対応で表示するパネル。
@@ -70,9 +82,37 @@ public class SvgPreviewPanel extends JPanel {
     /** 左クリックでリンク領域にヒットしたときに呼ばれるリスナ (ドリルダウン用)。 */
     private BiConsumer<LinkArea, MouseEvent> linkClickListener;
 
+    /** SVG 内の全テキスト要素 (内容 + SVG 座標)。ラバーバンド選択のヒットテスト用。 */
+    private List<SvgTextItem> svgTexts = Collections.emptyList();
+    /** ラバーバンド選択の開始点 (パネル座標)。Alt+ドラッグで設定される。 */
+    private Point selectionAnchor;
+    /** ラバーバンド選択の現在終端 (パネル座標)。mouseDragged で更新される。 */
+    private Point selectionCurrent;
+    /** テキストをクリップボードへコピーしたときの通知リスナ (ステータスバー更新用)。 */
+    private Consumer<String> copyFeedbackListener;
+
     public SvgPreviewPanel() {
         setBackground(new Color(0xF7, 0xF7, 0xF7));
         setupMouseHandlers();
+        setupKeyBindings();
+    }
+
+    /**
+     * SVG テキスト要素リストを設定する。ラバーバンド選択のヒットテストに使う。
+     * {@code null} または空リストでクリア。
+     */
+    public void setTextItems(List<SvgTextItem> items) {
+        this.svgTexts = (items == null || items.isEmpty())
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(items));
+    }
+
+    /**
+     * テキストをクリップボードへコピーしたときに呼ばれるリスナを設定する。
+     * 引数は「コピーしたアイテム数」等のステータスメッセージ。{@code null} で解除。
+     */
+    public void setCopyFeedbackListener(Consumer<String> listener) {
+        this.copyFeedbackListener = listener;
     }
 
     public void setZoomChangeListener(Runnable listener) {
@@ -102,6 +142,9 @@ public class SvgPreviewPanel extends JPanel {
         this.image = null;
         // 旧 SVG の領域情報は無効化する (差し替え後の正しい値は別途 setLinkAreas で再設定)
         this.linkAreas = Collections.emptyList();
+        this.svgTexts = Collections.emptyList();
+        this.selectionAnchor = null;
+        this.selectionCurrent = null;
         updatePreferredSize();
         revalidate();
         repaint();
@@ -376,6 +419,14 @@ public class SvgPreviewPanel extends JPanel {
                 if (maybeFireLinkPopup(e)) {
                     return;
                 }
+                // Alt+左クリック = ラバーバンド選択モード
+                if (SwingUtilities.isLeftMouseButton(e)
+                        && (e.getModifiersEx() & InputEvent.ALT_DOWN_MASK) != 0) {
+                    selectionAnchor = e.getPoint();
+                    selectionCurrent = e.getPoint();
+                    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                    return;
+                }
                 if (maybeFireLinkClick(e)) {
                     return;
                 }
@@ -396,6 +447,12 @@ public class SvgPreviewPanel extends JPanel {
 
             @Override
             public void mouseDragged(MouseEvent e) {
+                // ラバーバンド選択中
+                if (selectionAnchor != null) {
+                    selectionCurrent = e.getPoint();
+                    repaint();
+                    return;
+                }
                 if (dragStart == null) {
                     return;
                 }
@@ -418,6 +475,16 @@ public class SvgPreviewPanel extends JPanel {
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                // ラバーバンド選択確定
+                if (selectionAnchor != null) {
+                    selectionCurrent = e.getPoint();
+                    collectAndCopyText(selectionAnchor, selectionCurrent);
+                    selectionAnchor = null;
+                    selectionCurrent = null;
+                    repaint();
+                    setCursor(cursorForPosition(e.getPoint()));
+                    return;
+                }
                 dragStart = null;
                 setCursor(cursorForPosition(e.getPoint()));
                 maybeFireLinkPopup(e);
@@ -439,20 +506,18 @@ public class SvgPreviewPanel extends JPanel {
     }
 
     /**
-     * 右クリック (ポップアップトリガ) かつリンク領域内なら登録済みリスナを発火する。
+     * 右クリック (ポップアップトリガ) なら登録済みリスナを発火する。
+     * リンク領域上なら対応する {@link LinkArea} を、それ以外は {@code null} を渡す。
      * Linux は {@code mousePressed}、Windows/Mac は {@code mouseReleased} 側で
      * isPopupTrigger が true になるため両方から呼ぶ前提。
      *
      * @return リンクポップアップを発火した場合 true (呼び出し側はそれ以降の処理を抑制してよい)
      */
     private boolean maybeFireLinkPopup(MouseEvent e) {
-        if (!e.isPopupTrigger() || linkPopupListener == null || linkAreas.isEmpty()) {
+        if (!e.isPopupTrigger() || linkPopupListener == null) {
             return false;
         }
-        LinkArea hit = hitTestLink(e.getPoint());
-        if (hit == null) {
-            return false;
-        }
+        LinkArea hit = linkAreas.isEmpty() ? null : hitTestLink(e.getPoint());
         linkPopupListener.accept(hit, e);
         return true;
     }
@@ -494,9 +559,120 @@ public class SvgPreviewPanel extends JPanel {
                 AffineTransform tx = AffineTransform.getScaleInstance(zoomLevel, zoomLevel);
                 g2.drawImage(image, tx, null);
             }
+            // ラバーバンド選択矩形を最前面に描画
+            if (selectionAnchor != null && selectionCurrent != null) {
+                int rx = Math.min(selectionAnchor.x, selectionCurrent.x);
+                int ry = Math.min(selectionAnchor.y, selectionCurrent.y);
+                int rw = Math.abs(selectionCurrent.x - selectionAnchor.x);
+                int rh = Math.abs(selectionCurrent.y - selectionAnchor.y);
+                // スケール変換を元に戻してパネル座標で描く
+                g2.setTransform(new AffineTransform());
+                g2.setColor(new Color(30, 100, 255, 40));
+                g2.fillRect(rx, ry, rw, rh);
+                g2.setColor(new Color(30, 100, 255, 200));
+                float[] dash = {4f, 4f};
+                Stroke oldStroke = g2.getStroke();
+                g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT,
+                        BasicStroke.JOIN_MITER, 10, dash, 0));
+                g2.drawRect(rx, ry, rw, rh);
+                g2.setStroke(oldStroke);
+            }
         } finally {
             g2.dispose();
         }
+    }
+
+    /**
+     * ラバーバンド矩形 (パネル座標) に含まれる SVG テキスト要素を収集してクリップボードへコピーする。
+     * テキストは上から下・左から右の順にソートして改行区切りで結合する。
+     */
+    private void collectAndCopyText(Point anchor, Point current) {
+        if (svgTexts.isEmpty() || zoomLevel <= 0) {
+            return;
+        }
+        // パネル座標 → SVG 座標変換
+        double x1 = Math.min(anchor.x, current.x) / zoomLevel;
+        double y1 = Math.min(anchor.y, current.y) / zoomLevel;
+        double x2 = Math.max(anchor.x, current.x) / zoomLevel;
+        double y2 = Math.max(anchor.y, current.y) / zoomLevel;
+        Rectangle2D svgSel = new Rectangle2D.Double(x1, y1, x2 - x1, y2 - y1);
+
+        List<SvgTextItem> hits = new ArrayList<>();
+        for (SvgTextItem item : svgTexts) {
+            if (svgSel.contains(item.getX(), item.getY())) {
+                hits.add(item);
+            }
+        }
+        if (hits.isEmpty()) {
+            return;
+        }
+        // 上→下、同じ行なら左→右でソート
+        hits.sort((a, b) -> {
+            double dy = a.getY() - b.getY();
+            if (Math.abs(dy) > 4) {
+                return dy < 0 ? -1 : 1;
+            }
+            double dx = a.getX() - b.getX();
+            return dx < 0 ? -1 : (dx > 0 ? 1 : 0);
+        });
+        StringBuilder sb = new StringBuilder();
+        for (SvgTextItem item : hits) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(item.getText());
+        }
+        copyToClipboard(sb.toString(), hits.size() + " items copied");
+    }
+
+    /** 全 SVG テキストをクリップボードへコピーする (Ctrl+A 相当)。 */
+    private void copyAllText() {
+        if (svgTexts.isEmpty()) {
+            return;
+        }
+        List<SvgTextItem> sorted = new ArrayList<>(svgTexts);
+        sorted.sort((a, b) -> {
+            double dy = a.getY() - b.getY();
+            if (Math.abs(dy) > 4) {
+                return dy < 0 ? -1 : 1;
+            }
+            double dx = a.getX() - b.getX();
+            return dx < 0 ? -1 : (dx > 0 ? 1 : 0);
+        });
+        StringBuilder sb = new StringBuilder();
+        for (SvgTextItem item : sorted) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(item.getText());
+        }
+        copyToClipboard(sb.toString(), "All text copied (" + sorted.size() + " items)");
+    }
+
+    private void copyToClipboard(String text, String feedback) {
+        try {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(text), null);
+            if (copyFeedbackListener != null) {
+                copyFeedbackListener.accept(feedback);
+            }
+        } catch (IllegalStateException ignored) {
+            // クリップボードが使用中の場合は無視
+        }
+    }
+
+    /** Ctrl+A = 全テキストコピーのキーバインドを設定する。 */
+    private void setupKeyBindings() {
+        setFocusable(true);
+        getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK),
+                "copyAllText");
+        getActionMap().put("copyAllText", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                copyAllText();
+            }
+        });
     }
 
     /** 表示領域 (画面上の見えている範囲) のサイズ。 */

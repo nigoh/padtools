@@ -117,6 +117,11 @@ public final class PlantUmlClassDiagram {
          * 既定 false (全可視性を表示)。
          */
         public boolean publicOnly = false;
+        /**
+         * {@code top to bottom direction} を図冒頭に出力する。
+         * 継承階層図のように親クラスを上・子クラスを下に並べたい場合に使う。既定 false。
+         */
+        public boolean topToBottomDirection = false;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -170,6 +175,9 @@ public final class PlantUmlClassDiagram {
         }
         StringBuilder out = new StringBuilder();
         out.append("@startuml\n");
+        if (o.topToBottomDirection) {
+            out.append("top to bottom direction\n");
+        }
         if (o.title != null && !o.title.isEmpty()) {
             out.append("title ").append(o.title).append('\n');
         }
@@ -279,6 +287,8 @@ public final class PlantUmlClassDiagram {
             case "AIDL": return "AIDL ファイル由来のインタフェース";
             case "AaosApi": return "@AddedIn 等の AAOS API アノテーション付きクラス";
             case "aidl": return "AIDL 由来 (補助)";
+            case "record": return "Java 16+ record 宣言";
+            case "sealed": return "sealed クラス/インタフェース (permits で継承先を限定)";
             default: return stereo;
         }
     }
@@ -361,7 +371,7 @@ public final class PlantUmlClassDiagram {
                 if (o.showComments && o.commentStyle == CommentStyle.INLINE) {
                     emitInlineComment(out, m.getComment(), o, indent + "  ");
                 }
-                emitMethod(out, m, o, indent + "  ");
+                emitMethod(out, m, o, indent + "  ", c.getQualifiedName());
             }
         }
         // フィールド初期化子・コンストラクタ内代入で捕捉した「関数を変数として設定」する
@@ -469,6 +479,7 @@ public final class PlantUmlClassDiagram {
             case ENUM: return "enum";
             case ANNOTATION: return "annotation";
             case AIDL_INTERFACE: return "interface";
+            case RECORD: return "class";
             case CLASS:
             default:
                 return c.isAbstract() ? "abstract class" : "class";
@@ -523,6 +534,12 @@ public final class PlantUmlClassDiagram {
         }
         if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
             parts.add("aidl");
+        }
+        if (c.getKind() == JavaClassInfo.Kind.RECORD) {
+            parts.add("record");
+        }
+        if (c.getModifiers().contains("sealed")) {
+            parts.add("sealed");
         }
         if (o.jetpack != null && o.jetpack.enabled) {
             for (String j : c.getJetpackStereotypes()) {
@@ -633,13 +650,14 @@ public final class PlantUmlClassDiagram {
             }
             out.append(indent).append(".. ").append(label).append(" ..\n");
             for (JavaMethodInfo m : inlines) {
-                emitMethod(out, m, o, indent);
+                // インラインメソッド (匿名クラス/ラムダ) はメソッドリンク不要
+                emitMethod(out, m, o, indent, null);
             }
         }
     }
 
     private static void emitMethod(StringBuilder out, JavaMethodInfo m,
-                                    Options o, String indent) {
+                                    Options o, String indent, String classFqn) {
         if (o.publicOnly && m.getVisibility() != Visibility.PUBLIC) {
             return;
         }
@@ -670,6 +688,15 @@ public final class PlantUmlClassDiagram {
         out.append(')');
         if (!m.isConstructor() && m.getReturnType() != null && !m.getReturnType().isEmpty()) {
             out.append(": ").append(m.getReturnType());
+        }
+        // interactiveLinks 有効かつ通常メソッド (非コンストラクタ) にメソッドリンクを埋め込む
+        // ラベルに "▶" を使うことで URL 文字列がそのまま SVG に露出しないようにする
+        if (o.interactiveLinks
+                && !m.isConstructor()
+                && classFqn != null && !classFqn.isEmpty()
+                && m.getName() != null && !m.getName().isEmpty()) {
+            out.append(" [[padtools://method/")
+               .append(classFqn).append('#').append(m.getName()).append(" ▶]]");
         }
         out.append('\n');
     }

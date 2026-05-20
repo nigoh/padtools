@@ -15,7 +15,9 @@ import padtools.core.formats.uml.JavaFieldInfo;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
 import padtools.core.formats.uml.PlantUmlActivityDiagram;
 import padtools.core.formats.uml.PlantUmlCommonClassesDiagram;
+import padtools.core.formats.uml.PlantUmlModuleDiagram;
 import padtools.core.formats.uml.PlantUmlPackageDiagram;
+import padtools.core.formats.uml.PlantUmlCallGraphDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.util.ErrorListener;
 
@@ -222,8 +224,74 @@ public final class DiagramService {
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlNavigationGraphDiagram.generate(nav, o);
             }
+            case MODULE: {
+                PlantUmlModuleDiagram.Options o = new PlantUmlModuleDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlModuleDiagram.generate(classes, o);
+            }
+            case INHERITANCE: {
+                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                        index != null ? index.moduleMap() : null);
+                if (index != null) {
+                    scoped = promoteToDetailed(scoped, index);
+                }
+                PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+                // Setting から共通設定を先に適用し、その後 INHERITANCE 固定値で上書き
+                applyClassDiagramSettings(o);
+                applyScopeToClassOptions(request.getScope(), o);
+                // 継承図固有: 関係線のみ・クラス名のみ・上から下レイアウト
+                o.showFields = false;
+                o.showMethods = false;
+                o.showVisibility = false;
+                o.showInheritance = true;
+                o.showImplementations = true;
+                o.showUsageRelations = false;
+                o.showAnnotations = false;
+                o.showComments = false;
+                o.showEnumConstants = false;
+                o.showFinal = false;
+                o.showInlineFunctions = false;
+                o.groupByPackage = true;
+                o.excludeExternalLibraries = false;
+                o.markAaosCategories = true;
+                o.topToBottomDirection = true;
+                o.includeLegend = request.isIncludeLegend();
+                o.interactiveLinks = request.isInteractiveLinks();
+                return PlantUmlClassDiagram.generate(scoped, o);
+            }
+            case CALLGRAPH: {
+                String cls = request.getSequenceEntryClass();
+                String method = request.getSequenceEntryMethod();
+                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Call graph diagram requires entry Class.method");
+                }
+                List<JavaClassInfo> source = classes != null
+                        ? promoteToDetailed(classes, index) : classes;
+                PlantUmlCallGraphDiagram.Options o = new PlantUmlCallGraphDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                applyCallGraphSettings(o);
+                return PlantUmlCallGraphDiagram.generate(source, cls, method, o);
+            }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());
+        }
+    }
+
+    /**
+     * コールグラフの最大深さ設定を {@link padtools.SettingManager} から読み出して反映する。
+     */
+    private static void applyCallGraphSettings(PlantUmlCallGraphDiagram.Options o) {
+        try {
+            padtools.Setting s = padtools.SettingManager.getInstance().getSetting();
+            if (s == null) {
+                return;
+            }
+            int depth = s.getCallGraphMaxDepth();
+            if (depth > 0) {
+                o.maxDepth = depth;
+            }
+        } catch (RuntimeException ignored) {
         }
     }
 

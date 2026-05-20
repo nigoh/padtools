@@ -12,8 +12,16 @@ import padtools.core.formats.android.PlantUmlDeepLinkDiagram;
 import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
 import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.android.TextSummaryReport;
+import padtools.core.formats.android.settings.MarkdownSettingsReport;
+import padtools.core.formats.android.settings.PreferencesXmlParser;
+import padtools.core.formats.android.settings.SettingsAnalysisResult;
+import padtools.core.formats.android.settings.SharedPreferencesScanner;
+import padtools.core.formats.android.actions.MarkdownActionReport;
+import padtools.core.formats.android.actions.UiActionEntry;
+import padtools.core.formats.android.actions.UiActionScanner;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
+import padtools.core.formats.uml.GraphvizLocator;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.core.aaos.AidlBinding;
@@ -59,6 +67,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -78,6 +88,20 @@ public class Main {
      */
     public static void saveSetting() {
         SettingManager.getInstance().save();
+    }
+
+    /** 実行中の jar が置かれているディレクトリを返す。不明なら null。 */
+    private static File detectJarDir() {
+        try {
+            URL loc = Main.class.getProtectionDomain().getCodeSource().getLocation();
+            if (loc == null) {
+                return null;
+            }
+            File f = new File(loc.toURI());
+            return f.isFile() ? f.getParentFile() : f;
+        } catch (URISyntaxException | SecurityException e) {
+            return null;
+        }
     }
 
     /** 指定パスが存在する/読める File を返す。問題があれば stderr に出して System.exit(1)。 */
@@ -113,9 +137,11 @@ public class Main {
             return;
         }
 
-        // SettingManager を初期化し、永続化されたスタイルをレンダラへ反映
+        // SettingManager / ProjectRepository を初期化し、永続化されたスタイルをレンダラへ反映
         SettingManager.initialize();
+        ProjectRepository.initialize();
         PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());
+        GraphvizLocator.init(detectJarDir());
 
         //オプション定義
         final Option optHelp = new Option("h", "help", false);
@@ -166,6 +192,9 @@ public class Main {
         final Option optAndroidBp = new Option(null, "android-bp", false);
         final Option optSelinux = new Option(null, "selinux", false);
         final Option optRro = new Option(null, "rro-overlays", false);
+        final Option optSettings = new Option(null, "settings", false);
+        final Option optInitFlow = new Option(null, "init-flow", false);
+        final Option optActionMap = new Option(null, "action-map", false);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -183,7 +212,8 @@ public class Main {
                 optInteractiveSvg, optHiddenAnnotations, optCommentMaxLength,
                 optImpact, optImpactDepth, optRefFind,
                 optVhalFlow, optAidlBinding, optErDiagram, optDataFlow,
-                optScreenFlow, optAndroidBp, optSelinux, optRro});
+                optScreenFlow, optAndroidBp, optSelinux, optRro,
+                optSettings, optInitFlow, optActionMap});
 
         try {
             optParser.parse(args);
@@ -324,6 +354,18 @@ public class Main {
         }
         if (optRro.isSet()) {
             handleRroOverlays(file_in, file_out, listener);
+            return;
+        }
+        if (optSettings.isSet()) {
+            handleSettings(file_in, file_out, listener);
+            return;
+        }
+        if (optInitFlow.isSet()) {
+            handleInitFlow(file_in, file_out, listener, legendOverride, umlOverrides);
+            return;
+        }
+        if (optActionMap.isSet()) {
+            handleActionMap(file_in, file_out, listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -780,6 +822,85 @@ public class Main {
                 new RroOverlayDetector().analyzeProject(fileIn);
         String md = MarkdownRroReport.render(overlays);
         writeText(fileOut, md);
+    }
+
+    /**
+     * {@code --settings}: プロジェクト全体の SharedPreferences / DataStore 読み書きと
+     * res/xml/ の Preference XML 定義を Markdown レポートとして出力する。
+     */
+    private static void handleSettings(File fileIn, File fileOut,
+                                         ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--settings requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        SharedPreferencesScanner scanner = new SharedPreferencesScanner();
+        SettingsAnalysisResult result = scanner.analyzeProject(fileIn);
+        PreferencesXmlParser xmlParser = new PreferencesXmlParser();
+        for (padtools.core.formats.android.settings.PreferenceXmlEntry e
+                : xmlParser.analyzeProject(fileIn)) {
+            result.addXmlEntry(e);
+        }
+        writeText(fileOut, MarkdownSettingsReport.render(result));
+    }
+
+    /**
+     * {@code --init-flow}: Application サブクラスの {@code onCreate()} を起点とした
+     * 初期化シーケンス図を出力する。既存のライフサイクルシーケンス図生成を Application にも適用する。
+     */
+    private static void handleInitFlow(File fileIn, File fileOut,
+                                         ErrorListener listener,
+                                         Boolean legendOverride,
+                                         UmlOverrides overrides) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--init-flow requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        if (fileOut == null) {
+            System.err.println("--init-flow requires an output directory via -o.");
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.exists() && !fileOut.mkdirs()) {
+            System.err.println("Failed to create output directory: " + fileOut);
+            System.exit(1);
+            return;
+        }
+        if (!fileOut.isDirectory()) {
+            System.err.println("-o must point to a directory for --init-flow: " + fileOut);
+            System.exit(1);
+            return;
+        }
+        ProgressLogger progress = new ProgressLogger();
+        long startMs = System.currentTimeMillis();
+        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
+                UmlGenerator.extractFromProject(fileIn, null, listener, false);
+        progress.step("Generating Application init-flow sequence diagrams");
+        int count = generateInitFlowSequenceDiagrams(infos, fileOut, legendOverride,
+                overrides, progress, listener);
+        if (count == 0) {
+            System.err.println("[padtools] No Application subclass found with onCreate().");
+        }
+        progress.done(fileOut, System.currentTimeMillis() - startMs);
+    }
+
+    /**
+     * {@code --action-map}: プロジェクト内の onClick ハンドラ・Compose クリックイベント・
+     * XML android:onClick を検出して Markdown レポートを出力する。
+     */
+    private static void handleActionMap(File fileIn, File fileOut,
+                                          ErrorListener listener) throws IOException {
+        if (fileIn == null || !fileIn.isDirectory()) {
+            System.err.println("--action-map requires a project directory as input.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<UiActionEntry> entries =
+                new UiActionScanner().analyzeProject(fileIn);
+        writeText(fileOut, MarkdownActionReport.render(entries));
     }
 
     /**
@@ -1292,6 +1413,62 @@ public class Main {
         return entries.size();
     }
 
+    /** Application の基底クラス名セット (FQN + 単純名)。 */
+    private static final java.util.Set<String> APPLICATION_BASES;
+    static {
+        java.util.Set<String> s = new java.util.HashSet<>(java.util.Arrays.asList(
+                "Application", "android.app.Application",
+                "MultiDexApplication", "androidx.multidex.MultiDexApplication"));
+        APPLICATION_BASES = java.util.Collections.unmodifiableSet(s);
+    }
+
+    /**
+     * {@code --init-flow} 専用: Application サブクラスのみを対象に
+     * onCreate / onConfigurationChanged / onLowMemory のシーケンス図を生成する。
+     *
+     * <p>{@code androidComponentType} の設定有無によらず、スーパークラス名で直接判定する。</p>
+     */
+    private static int generateInitFlowSequenceDiagrams(
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos,
+            File outDir,
+            Boolean legendOverride,
+            UmlOverrides overrides,
+            ProgressLogger progress,
+            ErrorListener listener) throws IOException {
+        // Application サブクラスにマークを付ける (元のリストを変更しない)
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> marked =
+                new java.util.ArrayList<>();
+        for (padtools.core.formats.uml.JavaClassInfo c : infos) {
+            String superClass = c.getSuperClass();
+            if (superClass != null && APPLICATION_BASES.contains(superClass)) {
+                // androidComponentType を一時的に設定したコピーを作成
+                padtools.core.formats.uml.JavaClassInfo copy =
+                        copyWithComponentType(c, "Application");
+                marked.add(copy);
+            } else {
+                marked.add(c);
+            }
+        }
+        return generateLifecycleSequenceDiagrams(marked, outDir, legendOverride,
+                overrides, progress, listener);
+    }
+
+    /** 指定の androidComponentType を持つシャローコピーを返す。 */
+    private static padtools.core.formats.uml.JavaClassInfo copyWithComponentType(
+            padtools.core.formats.uml.JavaClassInfo src, String type) {
+        padtools.core.formats.uml.JavaClassInfo copy =
+                new padtools.core.formats.uml.JavaClassInfo();
+        copy.setPackageName(src.getPackageName());
+        copy.setSimpleName(src.getSimpleName());
+        copy.setSuperClass(src.getSuperClass());
+        copy.setAndroidComponentType(type);
+        copy.getMethods().addAll(src.getMethods());
+        copy.getFields().addAll(src.getFields());
+        copy.getAnnotations().addAll(src.getAnnotations());
+        copy.getInterfaces().addAll(src.getInterfaces());
+        return copy;
+    }
+
     /**
      * {@code --all} 専用の進捗ロガー。{@code -v} の有無に関わらず常に stderr に出力する。
      */
@@ -1410,6 +1587,15 @@ public class Main {
                 + " Markdown report).");
         System.err.println("  --rro-overlays: Detect Android Runtime Resource Overlays"
                 + " by scanning AndroidManifest.xml for <overlay> elements.");
+        System.err.println("  --settings: Scan SharedPreferences get*/put* calls and"
+                + " res/xml/ Preference XML to report keys, types, and access locations"
+                + " (Markdown).");
+        System.err.println("  --init-flow: Generate PlantUML sequence diagrams for"
+                + " Application subclass onCreate / onConfigurationChanged / onLowMemory"
+                + " (output dir required via -o).");
+        System.err.println("  --action-map: Detect onClick handlers (setOnClickListener,"
+                + " android:onClick, Compose onClick) and menu handlers, output as"
+                + " Markdown table.");
         System.err.println("  input: Java/AIDL file or Gradle/Android project directory.");
     }
 }

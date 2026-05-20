@@ -110,6 +110,13 @@ public final class JavaStructureExtractor {
          */
         private int switchDepth;
 
+        /**
+         * メソッド本体内コメントを {@link JavaMethodInfo.InlineComment} Statement として
+         * 挿入する際の走査カーソル。{@link #extractCallsInBody} で初期化され、
+         * {@link #emitPrecedingComments} が進める。
+         */
+        private int nextBodyCommentIdx;
+
         private static final class PendingAssignment {
             final JavaClassInfo cls;
             final String fieldName;
@@ -1171,7 +1178,43 @@ public final class JavaStructureExtractor {
          * 終了時には対応する {@code }} まで消費している。
          */
         private void extractCallsInBody(JavaMethodInfo m) {
+            // bodyStart: 開き '{' の end オフセット（消費済みなので idx-1 が '{' トークン）
+            // これより前のコメント（メソッド宣言コメント等）はスキップする
+            int bodyStart = (idx > 0) ? tokens.get(idx - 1).end : 0;
+            nextBodyCommentIdx = 0;
+            while (nextBodyCommentIdx < comments.size()
+                    && comments.get(nextBodyCommentIdx).start < bodyStart) {
+                nextBodyCommentIdx++;
+            }
             parseStatementBlock(m.getStatements());
+        }
+
+        /**
+         * 現在のトークン位置 ({@code peek().start}) より前にある未出力コメントを
+         * {@link JavaMethodInfo.InlineComment} として {@code out} に追加し、
+         * {@link #nextBodyCommentIdx} を進める。
+         *
+         * <p>JavaDoc コメントは宣言に紐づくものとして除外する。</p>
+         */
+        private void emitPrecedingComments(List<JavaMethodInfo.Statement> out) {
+            if (comments == null || atEnd()) {
+                return;
+            }
+            int currentPos = peek().start;
+            while (nextBodyCommentIdx < comments.size()) {
+                JavaCommentScanner.Comment c = comments.get(nextBodyCommentIdx);
+                if (c.start >= currentPos) {
+                    break;
+                }
+                nextBodyCommentIdx++;
+                if (c.kind == JavaCommentScanner.Kind.JAVADOC) {
+                    continue;
+                }
+                String text = JavaCommentScanner.cleanText(c);
+                if (!text.isEmpty()) {
+                    out.add(new JavaMethodInfo.InlineComment(text));
+                }
+            }
         }
 
         /** 開き {@code {} は消費済み、対応する {@code }} を消費して戻る。 */
@@ -1187,6 +1230,8 @@ public final class JavaStructureExtractor {
 
         /** 1 つの文を読む。 */
         private void parseStatement(List<JavaMethodInfo.Statement> out) {
+            // 現在のトークン位置より前にあるコメントを InlineComment として出力
+            emitPrecedingComments(out);
             if (peek().is(";")) {
                 next();
                 return;
@@ -1252,6 +1297,11 @@ public final class JavaStructureExtractor {
                 parseYield(out);
                 return;
             }
+            // ローカル変数宣言: [final] Type varName [= expr];
+            if (looksLikeLocalVarDecl()) {
+                parseLocalVarDecl(out);
+                return;
+            }
             parseExpressionStatement(out);
         }
 
@@ -1268,6 +1318,194 @@ public final class JavaStructureExtractor {
                 return false;
             }
             return true;
+        }
+
+        /**
+         * 現在位置がローカル変数宣言の開始に見えるかを lookahead で判定する。
+         * idx は変更しない (probe のみ使用)。
+         *
+         * <p>検出対象: {@code [final] Type [<...>] [[][]] VarName [[][]] (= | ; | ,)}<br>
+         * 非検出対象: {@code IDENT(} (メソッド呼び出し)、{@code IDENT.IDENT=}
+         * (フィールド代入)、{@code IDENT++} (インクリメント) 等。</p>
+         */
+        private boolean looksLikeLocalVarDecl() {
+            int probe = idx;
+            // optional "final"
+            while (probe < tokens.size() && tokens.get(probe).isKw("final")) {
+                probe++;
+            }
+            // 型トークン列を probe で読み飛ばす
+            probe = probeTypeTokens(probe);
+            if (probe < 0) {
+                return false;
+            }
+            // probe が IDENT (変数名) を指しているか
+            if (probe >= tokens.size()
+                    || tokens.get(probe).type != JavaToken.Type.IDENT) {
+                return false;
+            }
+            int afterVar = probe + 1;
+            if (afterVar >= tokens.size()) {
+                return false;
+            }
+            JavaToken after = tokens.get(afterVar);
+            return after.is("=") || after.is(";") || after.is(",");
+        }
+
+        /**
+         * probe 位置から型トークン列 (IDENT・ドット連鎖・ジェネリクス・配列) を
+         * 読み飛ばし、型の終端インデックス (次に変数名 IDENT が来る位置) を返す。
+         * 型として解釈できなければ -1。idx は変更しない。
+         */
+        private int probeTypeTokens(int probe) {
+            if (probe >= tokens.size()) {
+                return -1;
+            }
+            JavaToken first = tokens.get(probe);
+            // 型の先頭は IDENT でなければならない
+            if (first.type != JavaToken.Type.IDENT) {
+                return -1;
+            }
+            // 直後が '(' ならメソッド呼び出し → 除外
+            if (probe + 1 < tokens.size() && tokens.get(probe + 1).is("(")) {
+                return -1;
+            }
+            probe++;
+            // ドット連鎖 (例: Map.Entry, java.util.List)
+            while (probe + 1 < tokens.size()
+                    && tokens.get(probe).is(".")
+                    && tokens.get(probe + 1).type == JavaToken.Type.IDENT) {
+                // IDENT.IDENT(...) はメソッドアクセスなので除外
+                if (probe + 2 < tokens.size() && tokens.get(probe + 2).is("(")) {
+                    return -1;
+                }
+                probe += 2;
+            }
+            // ジェネリクス <...>
+            if (probe < tokens.size() && tokens.get(probe).is("<")) {
+                probe = skipBalancedAt(probe, "<", ">");
+                if (probe >= tokens.size()) {
+                    return -1;
+                }
+            }
+            // 配列ブラケット [] (空のみ: 要素アクセス [expr] は除外)
+            while (probe + 1 < tokens.size()
+                    && tokens.get(probe).is("[")
+                    && tokens.get(probe + 1).is("]")) {
+                probe += 2;
+            }
+            return probe;
+        }
+
+        /**
+         * ローカル変数宣言 {@code [final] Type varName [= initExpr];} を読んで
+         * {@link JavaMethodInfo.LocalVar} を {@code out} に追加する。
+         *
+         * <p>initExpr にラムダ/匿名クラスが含まれる場合は
+         * {@link JavaMethodInfo.LocalVar#getInlineMethods()} にコールバック本体を追加する。
+         * initExpr 中のメソッド呼び出しは {@link JavaMethodInfo.Call} として別途生成せず、
+         * initExpr 文字列に包含して 1 アクションノードとして表示する。</p>
+         */
+        private void parseLocalVarDecl(List<JavaMethodInfo.Statement> out) {
+            // optional "final"
+            while (!atEnd() && peek().isKw("final")) {
+                next();
+            }
+            // 型名: ドット連鎖 + ジェネリクス + 配列を含む
+            int typeStart = peek().start;
+            // ドット連鎖
+            if (!atEnd() && peek().type == JavaToken.Type.IDENT) {
+                next();
+                while (!atEnd() && peek().is(".")
+                        && idx + 1 < tokens.size()
+                        && tokens.get(idx + 1).type == JavaToken.Type.IDENT
+                        && (idx + 2 >= tokens.size() || !tokens.get(idx + 2).is("("))) {
+                    next(); // '.'
+                    next(); // IDENT
+                }
+            }
+            // ジェネリクス <...>
+            if (!atEnd() && peek().is("<")) {
+                skipBalanced("<", ">");
+            }
+            // 配列 [] (空のみ)
+            while (!atEnd() && peek().is("[")
+                    && idx + 1 < tokens.size() && tokens.get(idx + 1).is("]")) {
+                next();
+                next();
+            }
+            int typeEnd = idx > 0 ? tokens.get(idx - 1).end : typeStart;
+            String type = normalizeType(src.substring(typeStart, typeEnd));
+
+            // 変数名
+            String varName = "";
+            if (!atEnd() && peek().type == JavaToken.Type.IDENT) {
+                varName = peek().text;
+                next();
+            }
+            // 変数名の後の [] (C スタイル: int arr[])
+            while (!atEnd() && peek().is("[")
+                    && idx + 1 < tokens.size() && tokens.get(idx + 1).is("]")) {
+                next();
+                next();
+            }
+
+            // 初期化式
+            String initExpr = "";
+            List<JavaMethodInfo> captured = null;
+            if (!atEnd() && peek().is("=")) {
+                next(); // '='
+                // Java 14+ switch 式: int r = switch(x) {...}; を構造化して取り込む
+                if (!atEnd() && peek().isKw("switch") && idx + 1 < tokens.size()
+                        && tokens.get(idx + 1).is("(")) {
+                    int swStart = peek().start;
+                    parseSwitch(out);
+                    initExpr = idx > 0
+                            ? src.substring(swStart, tokens.get(idx - 1).end).trim() : "switch(...)";
+                } else {
+                    // ラムダ/匿名クラスがあれば tryParseInlineExpression でコールバックを取り込む
+                    int saveBefore = idx;
+                    captured = tryParseInlineExpression(type, varName);
+                    if (captured == null || captured.isEmpty()) {
+                        idx = saveBefore;
+                        // initExpr をソース文字列として収集
+                        int initStart = atEnd() ? 0 : peek().start;
+                        int initEndOff = initStart;
+                        int depth = 0;
+                        while (!atEnd()) {
+                            JavaToken t = peek();
+                            if (depth == 0 && (t.is(";") || t.is("}"))) {
+                                break;
+                            }
+                            if (t.is("(") || t.is("[") || t.is("{")) {
+                                depth++;
+                            } else if (t.is(")") || t.is("]") || t.is("}")) {
+                                if (depth > 0) {
+                                    depth--;
+                                } else {
+                                    break;
+                                }
+                            }
+                            initEndOff = t.end;
+                            next();
+                        }
+                        initExpr = initEndOff > initStart
+                                ? src.substring(initStart, initEndOff).trim() : "";
+                    } else {
+                        initExpr = "<lambda>";
+                    }
+                }
+            }
+
+            if (!atEnd() && peek().is(";")) {
+                next();
+            }
+
+            JavaMethodInfo.LocalVar localVar = new JavaMethodInfo.LocalVar(type, varName, initExpr);
+            if (captured != null) {
+                localVar.getInlineMethods().addAll(captured);
+            }
+            out.add(localVar);
         }
 
         /**

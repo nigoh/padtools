@@ -31,6 +31,10 @@ public final class PlantUmlActivityDiagram {
         public String commentColor = "#008800";
         /** ラムダ/匿名クラスのコールバック本体を partition ブロックに展開する。 */
         public boolean expandInlineCallbacks = true;
+        /** ローカル変数宣言をアクションノードとして表示する。 */
+        public boolean showLocalVars = true;
+        /** メソッド本体内のインラインコメントを note として表示する。 */
+        public boolean showInlineComments = true;
     }
 
     /** {@link #listCandidates(List)} の戻り値要素。 */
@@ -92,6 +96,10 @@ public final class PlantUmlActivityDiagram {
             emitMethodComment(out, method, o);
         }
         out.append("start\n");
+        // メソッドシグネチャ（パラメータ・戻り値型）を note として表示
+        if (o.showComments && !method.isConstructor()) {
+            emitMethodSignature(out, method, o);
+        }
         boolean ended = walkStatements(method.getStatements(), out, "", o);
         if (!ended) {
             out.append("stop\n");
@@ -159,6 +167,14 @@ public final class PlantUmlActivityDiagram {
                 emitYield((JavaMethodInfo.Yield) s, out, indent, opts);
             } else if (s instanceof JavaMethodInfo.Block) {
                 ended = emitBlock((JavaMethodInfo.Block) s, out, indent, opts);
+            } else if (s instanceof JavaMethodInfo.LocalVar) {
+                if (opts.showLocalVars) {
+                    emitLocalVar((JavaMethodInfo.LocalVar) s, out, indent, opts);
+                }
+            } else if (s instanceof JavaMethodInfo.InlineComment) {
+                if (opts.showInlineComments) {
+                    emitInlineComment((JavaMethodInfo.InlineComment) s, out, indent, opts);
+                }
             }
         }
         return ended;
@@ -204,6 +220,58 @@ public final class PlantUmlActivityDiagram {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    private static void emitLocalVar(JavaMethodInfo.LocalVar v, StringBuilder out,
+                                      String indent, Options opts) {
+        String type = v.getType();
+        String name = v.getVarName();
+        String init = v.getInitExpr();
+        String text;
+        if (init == null || init.isEmpty()) {
+            text = type + " " + name;
+        } else {
+            text = type + " " + name + " = " + init;
+        }
+        out.append(indent).append(':').append(escapeAction(text, opts.commentMaxLength))
+                .append(";\n");
+        // ラムダ/匿名クラス付きの変数宣言はコールバックブロックを展開
+        if (opts.expandInlineCallbacks && !v.getInlineMethods().isEmpty()) {
+            for (JavaMethodInfo inline : v.getInlineMethods()) {
+                String samLabel = isGenericSamName(inline.getName()) ? name : inline.getName();
+                String partLabel = name + " → " + samLabel + "()";
+                String inner = indent + "  ";
+                out.append(indent).append("partition \"")
+                        .append(escapeQuoted(partLabel)).append("\" {\n");
+                if (inline.getStatements().isEmpty()) {
+                    out.append(inner).append(':')
+                            .append(escapeAction(samLabel + "()", opts.commentMaxLength))
+                            .append(";\n");
+                } else {
+                    walkStatements(inline.getStatements(), out, inner, opts);
+                }
+                out.append(indent).append("}\n");
+            }
+        }
+    }
+
+    private static void emitInlineComment(JavaMethodInfo.InlineComment comment, StringBuilder out,
+                                           String indent, Options opts) {
+        String text = comment.getText();
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        String oneLine = truncate(text.replaceAll("\\s+", " ").trim(), opts.commentMaxLength);
+        if (oneLine == null || oneLine.isEmpty()) {
+            return;
+        }
+        if (opts.commentColor != null && !opts.commentColor.isEmpty()) {
+            out.append(indent).append("note right: <color:")
+                    .append(opts.commentColor).append('>')
+                    .append(oneLine).append("</color>\n");
+        } else {
+            out.append(indent).append("note right: ").append(oneLine).append('\n');
         }
     }
 
@@ -413,10 +481,56 @@ public final class PlantUmlActivityDiagram {
         out.append('\n').append("end note\n");
     }
 
+    private static void emitMethodSignature(StringBuilder out, JavaMethodInfo m, Options o) {
+        List<String> types = m.getParameterTypes();
+        List<String> names = m.getParameterNames();
+        String returnType = m.getReturnType();
+        boolean hasParams = !types.isEmpty();
+        boolean hasReturnType = returnType != null && !returnType.isEmpty()
+                && !"void".equals(returnType);
+        if (!hasParams && !hasReturnType) {
+            return;
+        }
+        out.append("note\n");
+        if (hasParams) {
+            StringBuilder params = new StringBuilder("入力: ");
+            for (int i = 0; i < types.size(); i++) {
+                if (i > 0) {
+                    params.append(", ");
+                }
+                params.append(types.get(i));
+                if (i < names.size() && !names.get(i).isEmpty()) {
+                    params.append(' ').append(names.get(i));
+                }
+            }
+            String paramLine = truncate(params.toString(), o.commentMaxLength);
+            if (o.commentColor != null && !o.commentColor.isEmpty()) {
+                out.append("<color:").append(o.commentColor).append('>')
+                        .append(paramLine).append("</color>");
+            } else {
+                out.append(paramLine);
+            }
+            out.append('\n');
+        }
+        if (hasReturnType) {
+            String retLine = truncate("戻り値: " + returnType, o.commentMaxLength);
+            if (o.commentColor != null && !o.commentColor.isEmpty()) {
+                out.append("<color:").append(o.commentColor).append('>')
+                        .append(retLine).append("</color>");
+            } else {
+                out.append(retLine);
+            }
+            out.append('\n');
+        }
+        out.append("end note\n");
+    }
+
     private static void emitLegend(StringBuilder out) {
         out.append("legend right\n");
         out.append("== アクティビティ図 ==\n");
-        out.append(":action;      アクション (メソッド呼び出し / return / throw)\n");
+        out.append(":action;           アクション (メソッド呼び出し / return / throw)\n");
+        out.append(":Type var = expr;  ローカル変数宣言\n");
+        out.append("note               インラインコメント / メソッドシグネチャ / JavaDoc\n");
         out.append("if/elseif/else  分岐 (Java の if-else)\n");
         out.append("while/endwhile  ループ (while / for)\n");
         out.append("repeat/repeat while  do-while ループ\n");

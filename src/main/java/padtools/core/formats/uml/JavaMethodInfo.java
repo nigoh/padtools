@@ -145,6 +145,61 @@ public class JavaMethodInfo {
     }
 
     /**
+     * ローカル変数宣言文。例: {@code String name = getData();}
+     *
+     * <p>アクティビティ図で変数定義ノードとして描画する。
+     * initExpr が空なら初期化なし ({@code Type varName;})。
+     * initExpr にラムダ/匿名クラスが含まれていた場合は {@link #inlineMethods} に
+     * コールバック本体が格納される。</p>
+     */
+    public static class LocalVar implements Statement {
+        private final String type;
+        private final String varName;
+        private final String initExpr;
+        private final List<JavaMethodInfo> inlineMethods = new ArrayList<>();
+
+        public LocalVar(String type, String varName, String initExpr) {
+            this.type = type == null ? "" : type;
+            this.varName = varName == null ? "" : varName;
+            this.initExpr = initExpr == null ? "" : initExpr;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public String getVarName() {
+            return varName;
+        }
+
+        public String getInitExpr() {
+            return initExpr;
+        }
+
+        public List<JavaMethodInfo> getInlineMethods() {
+            return inlineMethods;
+        }
+    }
+
+    /**
+     * メソッド本体内のインラインコメント (行コメント / ブロックコメント)。
+     *
+     * <p>アクティビティ図で note として描画する。
+     * {@link JavaCommentScanner#cleanText(JavaCommentScanner.Comment)} 済みのテキストを保持する。</p>
+     */
+    public static class InlineComment implements Statement {
+        private final String text;
+
+        public InlineComment(String text) {
+            this.text = text == null ? "" : text;
+        }
+
+        public String getText() {
+            return text;
+        }
+    }
+
+    /**
      * 制御ブロック ({@code if}/{@code while}/{@code for}/{@code do-while}/
      * {@code switch}/{@code try}/{@code synchronized})。
      *
@@ -306,6 +361,10 @@ public class JavaMethodInfo {
             } else if (s instanceof Block) {
                 for (Branch b : ((Block) s).getBranches()) {
                     collectCalls(b.getBody(), out);
+                }
+            } else if (s instanceof LocalVar) {
+                for (JavaMethodInfo inline : ((LocalVar) s).getInlineMethods()) {
+                    collectCalls(inline.getStatements(), out);
                 }
             }
         }

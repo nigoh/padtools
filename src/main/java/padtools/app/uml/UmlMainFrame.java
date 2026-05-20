@@ -119,6 +119,8 @@ public class UmlMainFrame extends JFrame {
     private String activityEntry;
     /** 現在選択されている Layout 図のキー ({@link AndroidLayoutInfo#getKey()})。null なら未設定。 */
     private String currentLayoutKey;
+    /** 現在選択されている Navigation 図のキー ({@link padtools.core.formats.android.AndroidNavigationGraphInfo#getKey()})。null なら未設定。 */
+    private String currentNavigationKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
     /** ドリルダウン履歴 (戻る用)。null スコープは {@link #SCOPE_NULL_MARKER} で保持。 */
@@ -303,6 +305,9 @@ public class UmlMainFrame extends JFrame {
         JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
         pickLayout.addActionListener(e -> pickLayoutFile());
         m.add(pickLayout);
+        JMenuItem pickNavigation = new JMenuItem("Choose Navigation Graph...");
+        pickNavigation.addActionListener(e -> pickNavigationGraph());
+        m.add(pickNavigation);
         m.addSeparator();
         m.add(buildPresetSubMenu());
         JMenuItem scope = new JMenuItem("Scope...");
@@ -732,10 +737,11 @@ public class UmlMainFrame extends JFrame {
     /** ツールチップの末尾に付ける補助説明 (必要な図種だけ案内)。 */
     private static String tooltipExtra(DiagramKind k) {
         switch (k) {
-            case SEQUENCE: return " (choose entry from Diagram menu)";
-            case ACTIVITY: return " (choose method from Diagram menu)";
-            case LAYOUT:   return " (choose layout file from Diagram menu)";
-            case COMMON:   return " — top-N most referenced classes (fan-in)";
+            case SEQUENCE:   return " (choose entry from Diagram menu)";
+            case ACTIVITY:   return " (choose method from Diagram menu)";
+            case LAYOUT:     return " (choose layout file from Diagram menu)";
+            case NAVIGATION: return " (choose navigation file from Diagram menu)";
+            case COMMON:     return " — top-N most referenced classes (fan-in)";
             default: return "";
         }
     }
@@ -773,6 +779,15 @@ public class UmlMainFrame extends JFrame {
                 && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
             if (cache.isLoaded()) {
                 pickLayoutFile();
+            } else {
+                refreshDiagram();
+            }
+            return;
+        }
+        if (kind == DiagramKind.NAVIGATION
+                && (currentNavigationKey == null || currentNavigationKey.isEmpty())) {
+            if (cache.isLoaded()) {
+                pickNavigationGraph();
             } else {
                 refreshDiagram();
             }
@@ -1496,6 +1511,20 @@ public class UmlMainFrame extends JFrame {
         refreshDiagram();
     }
 
+    private void pickNavigationGraph() {
+        String picked = NavigationFileChooserDialog.chooseNavigationKey(this, cache);
+        if (picked == null) {
+            return;
+        }
+        currentNavigationKey = picked;
+        currentKind = DiagramKind.NAVIGATION;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.NAVIGATION);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        refreshDiagram();
+    }
+
     private void refreshDiagram() {
         refreshTimer.restart();
     }
@@ -1526,6 +1555,13 @@ public class UmlMainFrame extends JFrame {
             status.setText("Choose a layout file from Diagram menu.");
             return;
         }
+        if (kind == DiagramKind.NAVIGATION
+                && (currentNavigationKey == null || currentNavigationKey.isEmpty())) {
+            previewPanel.setSvgGraphicsNode(null, 0, 0);
+            sourcePanel.setText("");
+            status.setText("Choose a navigation file from Diagram menu.");
+            return;
+        }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
         loadProgress.setString("Rendering...");
         loadProgress.setIndeterminate(true);
@@ -1533,6 +1569,7 @@ public class UmlMainFrame extends JFrame {
         final String entry = sequenceEntry;
         final String activity = activityEntry;
         final String layoutKey = currentLayoutKey;
+        final String navigationKey = currentNavigationKey;
         final DiagramScope scope = currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
@@ -1551,6 +1588,8 @@ public class UmlMainFrame extends JFrame {
                         req = buildActivityRequest(activity);
                     } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
                         req = DiagramRequest.forLayout(layoutKey, true);
+                    } else if (kind == DiagramKind.NAVIGATION && navigationKey != null) {
+                        req = DiagramRequest.forNavigationGraph(navigationKey, true);
                     } else {
                         req = new DiagramRequest(kind, null, null, true, scope, wantLinks);
                     }

@@ -726,7 +726,7 @@ public class UmlMainFrame extends JFrame {
      */
     private void updateAvailableDiagrams(EnumSet<DiagramKind> allowed) {
         for (java.util.Map.Entry<DiagramKind, JToggleButton> e : diagramToggles.entrySet()) {
-            e.getValue().setEnabled(allowed.contains(e.getKey()));
+            e.getValue().setVisible(allowed.contains(e.getKey()));
         }
         if (!allowed.contains(currentKind)) {
             DiagramKind fallback = allowed.iterator().next();

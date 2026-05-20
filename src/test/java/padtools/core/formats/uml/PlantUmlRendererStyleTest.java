@@ -20,11 +20,13 @@ public class PlantUmlRendererStyleTest {
     @Before
     public void resetStyle() {
         PlantUmlRenderer.setStyle(DiagramStyle.defaults());
+        PlantUmlRenderer.setGraphvizAvailable(false);
     }
 
     @After
     public void tearDownStyle() {
         PlantUmlRenderer.setStyle(DiagramStyle.defaults());
+        PlantUmlRenderer.setGraphvizAvailable(false);
     }
 
     @Test
@@ -82,6 +84,24 @@ public class PlantUmlRendererStyleTest {
     @Test
     public void nullInputReturnsNull() {
         assertNull(PlantUmlRenderer.injectLayout(null));
+    }
+
+    @Test
+    public void graphvizAvailableSkipsSmetanaPragma() {
+        PlantUmlRenderer.setGraphvizAvailable(true);
+        String puml = "@startuml\nclass A\n@enduml\n";
+        String out = PlantUmlRenderer.injectLayout(puml);
+        assertFalse("smetana should not be injected when graphviz is available",
+                out.contains("!pragma layout smetana"));
+    }
+
+    @Test
+    public void graphvizAvailablePreservesExplicitDotPragma() {
+        PlantUmlRenderer.setGraphvizAvailable(true);
+        String puml = "@startuml\n!pragma layout dot\nclass A\n@enduml\n";
+        String out = PlantUmlRenderer.injectLayout(puml);
+        assertTrue(out, out.contains("!pragma layout dot"));
+        assertFalse(out, out.contains("!pragma layout smetana"));
     }
 
     @Test

@@ -95,10 +95,55 @@ tasks.named('checkstyleTest') { source = 'src/test/java' }
 
 // `PadTools.jar` は単体で動く fat jar なので、配布 zip には起動補助ファイル
 // (Windows/Unix 起動スクリプト、デフォルト設定) と jar 本体だけを含める。
+// bundle/graphviz/ に dot バイナリが置かれていれば自動的に同梱される。
 tasks.register('makeZip', Zip) {
     dependsOn 'jar'
     outputs.upToDateWhen { false }
 
     from 'bundle'
     from 'build/libs/PadTools.jar'
+}
+
+// --- Graphviz バイナリ同梱ヘルパー ---
+// 以下のタスクを手動実行して bundle/graphviz/ に dot バイナリを配置する。
+// 配置後は makeZip / jar を実行すれば ZIP に自動同梱される。
+//
+// Linux/Mac ユーザーは OS のパッケージマネージャ (apt/brew) でインストール済みの
+// dot バイナリを手動コピーするか、後述の copySystemDot タスクを使う。
+// Windows 用は graphviz.org の portable zip から dot.exe と依存 DLL をコピーする:
+//   https://graphviz.org/download/
+//   -> Windows の "Stable 64-bit EXE installer" または zip を展開して
+//      bin/dot.exe, *.dll を bundle/graphviz/windows-amd64/ に配置する。
+
+// システムインストール済みの dot を Linux/Mac 向けに bundle/graphviz/ へコピーする。
+// (静的リンクバイナリでなければ他マシンでは動作しない点に注意)
+tasks.register('copySystemDot') {
+    description = 'システム PATH 上の dot バイナリを bundle/graphviz/ へコピーする (動作確認用)'
+    group = 'graphviz'
+    doLast {
+        def dotPath = ['dot'].collect { cmd ->
+            def found = System.getenv('PATH')?.split(File.pathSeparator)?.collect { dir ->
+                new File(dir, cmd)
+            }?.find { it.canExecute() }
+            found?.absolutePath
+        }.find { it != null }
+
+        if (dotPath == null) {
+            throw new GradleException('dot コマンドが PATH 上に見つかりません。graphviz をインストールしてください。')
+        }
+
+        def os = System.getProperty('os.name', '').toLowerCase()
+        def arch = System.getProperty('os.arch', '').toLowerCase()
+        def archNorm = (arch.contains('aarch') || arch.contains('arm64')) ? 'aarch64' : 'amd64'
+        def platform = os.contains('mac') ? "mac-$archNorm" : "linux-$archNorm"
+        def destDir = file("bundle/graphviz/$platform")
+        destDir.mkdirs()
+
+        copy {
+            from dotPath
+            into destDir
+        }
+        println "Copied dot to $destDir (PATH: $dotPath)"
+        println "Note: このバイナリは動的リンクのため、同一 OS/ライブラリ環境でのみ動作します。"
+    }
 }

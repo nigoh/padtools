@@ -463,11 +463,6 @@ public class ProjectTreePanel extends JPanel {
                 continue;
             }
             DefaultMutableTreeNode methodNode = new DefaultMutableTreeNode(new MethodEntry(c, m));
-            // シーケンス図 (赤丸) / アクティビティ図 (青丸) のリーフを生やす
-            methodNode.add(new DefaultMutableTreeNode(
-                    new MethodDiagramEntry(c, m, DiagramKind.SEQUENCE)));
-            methodNode.add(new DefaultMutableTreeNode(
-                    new MethodDiagramEntry(c, m, DiagramKind.ACTIVITY)));
             classNode.add(methodNode);
         }
     }

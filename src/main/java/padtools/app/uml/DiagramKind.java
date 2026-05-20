@@ -30,7 +30,9 @@ public enum DiagramKind {
     /** モジュール依存グラフ — module-info.java の requires/exports/opens を可視化。 */
     MODULE("Module Diagram"),
     /** 継承図 — extends/implements 階層のみをツリー状に表示。クラス名・型種別のみ出力。 */
-    INHERITANCE("Inheritance Diagram");
+    INHERITANCE("Inheritance Diagram"),
+    /** コールグラフ — 任意の {@code Class.method} を起点にどの関数を呼び出しているかをグラフで表示。 */
+    CALLGRAPH("Call Graph");
 
     private final String displayName;
 

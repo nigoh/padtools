@@ -115,7 +115,7 @@ public final class PlantUmlCommonClassesDiagram {
             out.append("title Common Classes (top ").append(hot.size()).append(")\n");
         }
         out.append("skinparam classAttributeIconSize 0\n");
-        out.append("left to right direction\n");
+        out.append("top to bottom direction\n");
 
         if (hot.isEmpty()) {
             out.append("note as N1\n");

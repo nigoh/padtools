@@ -251,7 +251,8 @@ public final class DiagramService {
                 o.showEnumConstants = false;
                 o.showFinal = false;
                 o.showInlineFunctions = false;
-                o.groupByPackage = true;
+                // パッケージボックスを廃止: package ネストが横幅を膨らませるため
+                o.groupByPackage = false;
                 o.excludeExternalLibraries = false;
                 o.markAaosCategories = true;
                 o.topToBottomDirection = true;

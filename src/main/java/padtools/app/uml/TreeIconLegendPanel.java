@@ -55,23 +55,23 @@ final class TreeIconLegendPanel extends JPanel {
         content.setBorder(new EmptyBorder(4, 6, 6, 6));
         content.setBackground(UIManager.getColor("Panel.background"));
 
-        addCategory("構造");
+        addCategory("構造", "六角形");
         addRow(TreeNodeIcon.MODULE,   "Module");
         addRow(TreeNodeIcon.PACKAGE,  "Package");
 
-        addCategory("Java 型");
+        addCategory("Java 型", "文字バッジ");
         addRow(TreeNodeIcon.CLASS,       "Class");
         addRow(TreeNodeIcon.INTERFACE,   "Interface");
         addRow(TreeNodeIcon.ENUM,        "Enum");
         addRow(TreeNodeIcon.ANNOTATION,  "Annotation");
         addRow(TreeNodeIcon.AIDL,        "AIDL");
 
-        addCategory("メソッド / 図種");
+        addCategory("メソッド / 図種", "円");
         addRow(TreeNodeIcon.METHOD,   "Method");
         addRow(TreeNodeIcon.SEQUENCE, "Sequence");
         addRow(TreeNodeIcon.ACTIVITY, "Activity");
 
-        addCategory("Android");
+        addCategory("Android", "角丸四角");
         addRow(TreeNodeIcon.MANIFEST,            "Manifest");
         addRow(TreeNodeIcon.COMPONENT_ACTIVITY,  "Activity");
         addRow(TreeNodeIcon.COMPONENT_SERVICE,   "Service");
@@ -94,13 +94,24 @@ final class TreeIconLegendPanel extends JPanel {
         repaint();
     }
 
-    private void addCategory(String label) {
+    private void addCategory(String label, String shape) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(LEFT_ALIGNMENT);
+
         JLabel cat = new JLabel(label);
         cat.setFont(CATEGORY_FONT);
         cat.setForeground(CATEGORY_FG);
         cat.setBorder(new EmptyBorder(4, 0, 1, 0));
-        cat.setAlignmentX(LEFT_ALIGNMENT);
-        content.add(cat);
+        row.add(cat);
+
+        JLabel shapeHint = new JLabel("(" + shape + ")");
+        shapeHint.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
+        shapeHint.setForeground(new Color(0x9E9E9E));
+        shapeHint.setBorder(new EmptyBorder(4, 0, 1, 0));
+        row.add(shapeHint);
+
+        content.add(row);
     }
 
     private void addRow(TreeNodeIcon icon, String label) {

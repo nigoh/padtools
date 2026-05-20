@@ -2,77 +2,56 @@ package padtools.app.uml;
 
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
-import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
-import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Insets;
-import java.awt.event.ActionListener;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 動的タブ機能 (機能 2) のラッパ。
+ * ダブルクリック / 中クリックで開かれたダイアグラムタブを管理するクラス。
  *
- * <p>マウス中クリックで開かれたツリーノードを「上位タブ」として並べる。
- * 各タブは内部に Preview / PlantUML Source の下位タブを持ち、独立した
- * {@link SvgPreviewPanel} と {@link PumlSourcePanel} を保有する。</p>
+ * <p>外部から渡された {@link JTabbedPane} に動的タブを挿入する。
+ * 末尾 {@code fixedSuffix} 本はユーティリティタブ (Manifest / Impact / References) として
+ * 予約されており、動的タブはその手前に挿入される。</p>
+ *
+ * <p>各タブには {@link SvgPreviewPanel} と {@link PumlSourcePanel} を
+ * {@link JSplitPane} で上下に配置する (入れ子タブなし)。</p>
  *
  * <p>同じ {@link TreeNodeOpenRequest#tabKey()} のタブが既にある場合は
- * 新規作成せずフォーカスのみ移す (ブラウザの「同じ URL は同じタブ」と類似)。</p>
- *
- * <p>レンダリングは {@link PlantUmlSvgRenderer} を直接呼び出す
- * {@link SwingWorker} でバックグラウンド実行する。エラーは Source タブに退避する。</p>
+ * 新規作成せずフォーカスのみ移す。</p>
  */
-public final class DiagramTabPane extends JPanel {
+public final class DiagramTabPane {
 
-    private final JTabbedPane tabs = new JTabbedPane();
-    private final Map<String, DiagramTab> openTabs = new HashMap<>();
+    private final JTabbedPane tabs;
+    private final int fixedSuffix;
+    private final Map<String, DiagramTab> openTabs = new LinkedHashMap<>();
     private final ProjectAnalysisCache cache;
     private final Consumer<String> statusReporter;
 
-    public DiagramTabPane(ProjectAnalysisCache cache, Consumer<String> statusReporter,
-                          SvgPreviewPanel mainPreview, PumlSourcePanel mainSource,
-                          ActionListener saveAction) {
-        super(new BorderLayout());
+    /**
+     * @param tabs         ダイアグラムタブを追加する外部 JTabbedPane
+     * @param fixedSuffix  末尾に固定されたユーティリティタブ数
+     * @param cache        解析キャッシュ
+     * @param statusReporter ステータスバー更新コールバック
+     */
+    public DiagramTabPane(JTabbedPane tabs, int fixedSuffix,
+                          ProjectAnalysisCache cache, Consumer<String> statusReporter) {
+        this.tabs = tabs;
+        this.fixedSuffix = fixedSuffix;
         this.cache = cache;
         this.statusReporter = statusReporter;
-        add(tabs, BorderLayout.CENTER);
-
-        // 永続的な "Main" タブ (閉じボタンなし) を先頭に追加する
-        JPanel mainContent = new JPanel(new BorderLayout());
-        JPanel saveBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 2));
-        JButton saveButton = new JButton("Save...");
-        saveButton.setToolTipText("Save current diagram as SVG / PNG / PUML (Ctrl+S)");
-        saveButton.setMargin(new Insets(2, 8, 2, 8));
-        saveButton.setFocusable(false);
-        if (saveAction != null) {
-            saveButton.addActionListener(saveAction);
-        }
-        saveBar.add(saveButton);
-        mainContent.add(saveBar, BorderLayout.NORTH);
-
-        JTabbedPane mainInner = new JTabbedPane();
-        mainInner.addTab("Preview", new JScrollPane(mainPreview));
-        mainInner.addTab("PlantUML Source", mainSource);
-        mainContent.add(mainInner, BorderLayout.CENTER);
-
-        tabs.addTab("Main", mainContent);
     }
 
-    /**
-     * リクエストに対応するタブを開く。既存タブがあればフォーカスを移すだけ。
-     */
+    /** リクエストに対応するタブを開く。既存タブがあればフォーカスのみ移す。 */
     public void addOrFocusTab(TreeNodeOpenRequest req) {
         if (req == null || !cache.isLoaded()) {
             return;
@@ -85,29 +64,42 @@ public final class DiagramTabPane extends JPanel {
         }
         DiagramTab tab = new DiagramTab(req);
         openTabs.put(key, tab);
-        tabs.addTab(req.displayLabel(), tab);
-        int index = tabs.indexOfComponent(tab);
-        tabs.setTabComponentAt(index, buildHeader(req.displayLabel(), tab, key));
-        tabs.setSelectedIndex(index);
+        int insertAt = tabs.getTabCount() - fixedSuffix;
+        tabs.insertTab(req.displayLabel(), null, tab, null, insertAt);
+        tabs.setTabComponentAt(insertAt, buildHeader(req, tab, key));
+        tabs.setSelectedIndex(insertAt);
         tab.startRender();
     }
 
-    private JPanel buildHeader(String label, DiagramTab tab, String key) {
-        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    private JPanel buildHeader(TreeNodeOpenRequest req, DiagramTab tab, String key) {
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         header.setOpaque(false);
-        JLabel title = new JLabel(label);
-        title.setFont(title.getFont().deriveFont(Font.PLAIN));
-        JButton close = new JButton("×");  // multiplication sign
-        close.setMargin(new java.awt.Insets(0, 4, 0, 4));
+
+        header.add(new JLabel(iconFor(req)));
+
+        JLabel title = new JLabel(req.displayLabel());
+        title.setFont(title.getFont().deriveFont(Font.PLAIN, 11f));
+        header.add(title);
+
+        JButton close = new JButton("×");
+        close.setMargin(new java.awt.Insets(0, 3, 0, 3));
         close.setFocusable(false);
         close.setBorderPainted(false);
         close.setContentAreaFilled(false);
-        close.setForeground(new Color(0x666666));
+        close.setForeground(new Color(0x888888));
         close.setToolTipText("Close tab");
         close.addActionListener(e -> closeTab(tab, key));
-        header.add(title);
         header.add(close);
         return header;
+    }
+
+    private static TreeNodeIcon iconFor(TreeNodeOpenRequest req) {
+        if (req.target == TreeNodeOpenRequest.Target.METHOD) {
+            return req.kind == DiagramKind.ACTIVITY ? TreeNodeIcon.ACTIVITY : TreeNodeIcon.SEQUENCE;
+        }
+        if (req.target == TreeNodeOpenRequest.Target.CLASS)   return TreeNodeIcon.CLASS;
+        if (req.target == TreeNodeOpenRequest.Target.PACKAGE) return TreeNodeIcon.PACKAGE;
+        return TreeNodeIcon.MODULE;
     }
 
     private void closeTab(DiagramTab tab, String key) {
@@ -124,25 +116,23 @@ public final class DiagramTabPane extends JPanel {
         }
     }
 
-    /** 1 タブ分の中身。Preview / Source の下位タブを持つ。 */
+    /**
+     * 1 タブ分の内容。SVG プレビューと PlantUML ソースを JSplitPane で上下に配置。
+     * 入れ子タブなし。
+     */
     private final class DiagramTab extends JPanel {
         private final TreeNodeOpenRequest req;
         private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
-        private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
+        private final PumlSourcePanel sourcePanel  = new PumlSourcePanel();
 
         DiagramTab(TreeNodeOpenRequest req) {
-            super(new BorderLayout());
+            super(new java.awt.BorderLayout());
             this.req = req;
-            JTabbedPane inner = new JTabbedPane();
-            inner.addTab("Preview", new JScrollPane(previewPanel));
-            inner.addTab("PlantUML Source", sourcePanel);
-            add(inner, BorderLayout.CENTER);
-            // 上部に簡易タイトル
-            JLabel title = new JLabel(req.displayLabel(), SwingConstants.LEFT);
-            title.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-            title.setFont(title.getFont().deriveFont(Font.BOLD));
-            add(title, BorderLayout.NORTH);
-            setPreferredSize(new Dimension(800, 600));
+            JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                    new JScrollPane(previewPanel), sourcePanel);
+            split.setResizeWeight(0.85);
+            split.setDividerLocation(0.85);
+            add(split, java.awt.BorderLayout.CENTER);
         }
 
         void startRender() {
@@ -172,8 +162,7 @@ public final class DiagramTabPane extends JPanel {
                             sourcePanel.setText(pumlOnError);
                         }
                         previewPanel.setSvgGraphicsNode(null, 0, 0);
-                        reportStatus(req.displayLabel()
-                                + ": rendering failed. See 'PlantUML Source'.");
+                        reportStatus(req.displayLabel() + ": rendering failed.");
                         return;
                     }
                     try {
@@ -195,7 +184,6 @@ public final class DiagramTabPane extends JPanel {
         }
     }
 
-    /** {@link TreeNodeOpenRequest} を内部の {@link DiagramRequest} に変換する。 */
     private static DiagramRequest toDiagramRequest(TreeNodeOpenRequest req) {
         switch (req.target) {
             case METHOD:
@@ -205,16 +193,19 @@ public final class DiagramTabPane extends JPanel {
                 }
                 return new DiagramRequest(DiagramKind.SEQUENCE,
                         req.classInfo.getSimpleName(), req.methodInfo.getName(), true);
-            case CLASS:
+            case CLASS: {
                 String fqn = req.classInfo.getQualifiedName();
                 DiagramScope cs = DiagramScope.builder().seed(fqn).neighborHops(1).build();
                 return new DiagramRequest(DiagramKind.CLASS, null, null, true, cs, false);
-            case PACKAGE:
+            }
+            case PACKAGE: {
                 DiagramScope ps = DiagramScope.builder().includePackage(req.name).build();
                 return new DiagramRequest(DiagramKind.CLASS, null, null, true, ps, false);
-            case MODULE:
+            }
+            case MODULE: {
                 DiagramScope ms = DiagramScope.builder().includeModule(req.name).build();
                 return new DiagramRequest(DiagramKind.CLASS, null, null, true, ms, false);
+            }
             default:
                 return new DiagramRequest(DiagramKind.CLASS);
         }
@@ -223,10 +214,6 @@ public final class DiagramTabPane extends JPanel {
     private static final class RenderResult {
         final String puml;
         final RenderedSvg svg;
-
-        RenderResult(String puml, RenderedSvg svg) {
-            this.puml = puml;
-            this.svg = svg;
-        }
+        RenderResult(String puml, RenderedSvg svg) { this.puml = puml; this.svg = svg; }
     }
 }

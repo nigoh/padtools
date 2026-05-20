@@ -46,6 +46,7 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.EnumSet;
 import java.util.List;
 
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
@@ -104,12 +105,10 @@ public class UmlMainFrame extends JFrame {
 
     private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
 
-    /** 動的タブ管理 (機能 2)。null の場合はタブ機能未配線。 */
+    /** タブマネージャ。 */
     private DiagramTabPane tabPane;
-    /** 右側の最上位タブ (Preview / Source / Manifest / Tabs)。 */
-    private JTabbedPane rightTabs;
-    /** rightTabs 内での "Tabs" タブのインデックス。-1 なら未配線。 */
-    private int dynamicTabsIndex = -1;
+    /** 右側のフラットタブバー (Home / 動的タブ / Manifest / Impact / References)。 */
+    private JTabbedPane mainTabs;
 
     private DiagramKind currentKind = DiagramKind.CLASS;
     private String currentPuml;
@@ -168,21 +167,34 @@ public class UmlMainFrame extends JFrame {
 
         setJMenuBar(buildMenuBar());
 
-        // 右側: プレビュー (ベクター SVG) と PlantUML ソース / Manifest Summary のタブ
-        // 動的タブ機能 (機能 2) は "Tabs" タブ内に DiagramTabPane を配置する。
-        // この設計だと既存ビュー (Preview/Source/Manifest) には触らずに済むため、
-        // メソッド差し替えやズーム連動などのリグレッションを最小化できる。
-        tabPane = new DiagramTabPane(cache, status::setText,
-                previewPanel, sourcePanel, e -> chooseAndExport());
-        rightTabs = new JTabbedPane();
-        rightTabs.addTab("Preview", tabPane);
-        rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
-        rightTabs.addTab("Impact", impactPanel);
-        rightTabs.addTab("References", referencesPanel);
-        dynamicTabsIndex = rightTabs.indexOfComponent(tabPane);
+        // 右側: 1 層のフラットタブバー
+        // [Home] [動的タブ…] [Manifest] [Impact] [References]
+        mainTabs = new JTabbedPane(JTabbedPane.TOP);
+
+        // Home タブ: 共有の previewPanel / sourcePanel を JSplitPane で上下に配置
+        JSplitPane homeSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                new JScrollPane(previewPanel), sourcePanel);
+        homeSplit.setResizeWeight(0.85);
+        mainTabs.addTab("Home", homeSplit);
+
+        // ユーティリティタブ (固定・末尾 3 本)
+        mainTabs.addTab("Manifest", manifestSummaryPanel);
+        mainTabs.addTab("Impact", impactPanel);
+        mainTabs.addTab("References", referencesPanel);
+
+        // 動的タブマネージャ (fixedSuffix=3 で Manifest/Impact/References の手前に挿入)
+        tabPane = new DiagramTabPane(mainTabs, 3, cache, status::setText);
+
+        // Home タブが表示された後に divider 位置を相対値でセット
+        mainTabs.addChangeListener(ev -> {
+            if (mainTabs.getSelectedIndex() == 0) {
+                javax.swing.SwingUtilities.invokeLater(
+                        () -> homeSplit.setDividerLocation(0.85));
+            }
+        });
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                treePanel, rightTabs);
+                treePanel, mainTabs);
         split.setResizeWeight(0.22);
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
@@ -697,6 +709,58 @@ public class UmlMainFrame extends JFrame {
         return bar;
     }
 
+    // ── ノード種別ごとに押下可能な図種セット ──────────────────────
+    private static final EnumSet<DiagramKind> DIAGRAMS_ALL =
+            EnumSet.allOf(DiagramKind.class);
+    /** 構造ノード (Module): モジュール図・クラス図・パッケージ図・依存図・コンポーネント図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_MODULE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.MODULE,
+            DiagramKind.DEPENDENCY, DiagramKind.COMPONENT, DiagramKind.COMMON);
+    /** 構造ノード (Package): クラス図・パッケージ図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_PACKAGE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.COMMON);
+    /** Java 型ノード (Class / Interface / Enum / Annotation / AIDL): クラス図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_JAVA_TYPE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.COMMON);
+    /** メソッドノード: シーケンス図・アクティビティ図 */
+    private static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
+            DiagramKind.SEQUENCE, DiagramKind.ACTIVITY);
+    /** Android ノード (Manifest / コンポーネント / Permission / Feature): Manifest 図・コンポーネント図 */
+    private static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
+            DiagramKind.MANIFEST, DiagramKind.COMPONENT);
+
+    /**
+     * ノード選択に応じてツールバーの図種ボタンを有効/無効化する。
+     *
+     * <p>{@code allowed} に含まれない図種のボタンは押下不可になる。
+     * 現在の選択図種が無効になった場合、{@code allowed} の先頭図種に自動切替する。</p>
+     */
+    private void updateAvailableDiagrams(EnumSet<DiagramKind> allowed) {
+        for (java.util.Map.Entry<DiagramKind, JToggleButton> e : diagramToggles.entrySet()) {
+            e.getValue().setVisible(allowed.contains(e.getKey()));
+        }
+        if (!allowed.contains(currentKind)) {
+            DiagramKind fallback = allowed.iterator().next();
+            currentKind = fallback;
+            JToggleButton btn = diagramToggles.get(fallback);
+            if (btn != null) {
+                btn.setSelected(true);
+            }
+            JRadioButtonMenuItem item = diagramItems.get(fallback);
+            if (item != null) {
+                item.setSelected(true);
+            }
+            refreshDiagram();
+        }
+    }
+
+    /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
+    private void showHomeTab() {
+        if (mainTabs != null && mainTabs.getSelectedIndex() != 0) {
+            mainTabs.setSelectedIndex(0);
+        }
+    }
+
     private JToolBar buildDiagramKindToolBar() {
         JToolBar bar = new JToolBar();
         bar.setFloatable(false);
@@ -931,6 +995,8 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: package " + pkg);
+        updateAvailableDiagrams(DIAGRAMS_PACKAGE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -940,6 +1006,7 @@ public class UmlMainFrame extends JFrame {
      */
     private void onTreeClassSelected(JavaClassInfo cls) {
         if (cls == null) {
+            updateAvailableDiagrams(DIAGRAMS_ALL);
             return;
         }
         String fqn = cls.getQualifiedName();
@@ -956,6 +1023,8 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
+        updateAvailableDiagrams(DIAGRAMS_JAVA_TYPE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -975,6 +1044,8 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: module " + module);
+        updateAvailableDiagrams(DIAGRAMS_MODULE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1060,6 +1131,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_ANDROID);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1083,6 +1156,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1097,12 +1172,8 @@ public class UmlMainFrame extends JFrame {
         }
         if (tabPane != null) {
             tabPane.addOrFocusTab(req);
-            if (rightTabs != null && dynamicTabsIndex >= 0) {
-                rightTabs.setSelectedIndex(dynamicTabsIndex);
-            }
             return;
         }
-        // フォールバック: タブパネル未配線時は現在ビューを差し替えるのみ
         applyOpenRequest(req);
     }
 
@@ -1150,6 +1221,8 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        showHomeTab();
         refreshDiagram();
     }
 

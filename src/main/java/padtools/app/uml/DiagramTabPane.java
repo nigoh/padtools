@@ -1,17 +1,30 @@
 package padtools.app.uml;
 
+import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
+import padtools.core.formats.uml.JavaClassInfo;
+import padtools.core.formats.uml.JavaMethodInfo;
 
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Window;
+import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -124,6 +137,7 @@ public final class DiagramTabPane {
         private final TreeNodeOpenRequest req;
         private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
         private final PumlSourcePanel sourcePanel  = new PumlSourcePanel();
+        private String renderedPuml;
 
         DiagramTab(TreeNodeOpenRequest req) {
             super(new java.awt.BorderLayout());
@@ -133,6 +147,8 @@ public final class DiagramTabPane {
             split.setResizeWeight(0.85);
             split.setDividerLocation(0.85);
             add(split, java.awt.BorderLayout.CENTER);
+            previewPanel.setOnLinkClick(this::handleLinkClick);
+            previewPanel.setOnLinkPopup(this::handleLinkPopup);
         }
 
         void startRender() {
@@ -175,12 +191,106 @@ public final class DiagramTabPane {
                                 r.svg.getWidth(), r.svg.getHeight());
                         previewPanel.setLinkAreas(r.svg.getLinkAreas());
                         sourcePanel.setText(r.puml);
+                        renderedPuml = r.puml;
                         reportStatus(req.displayLabel() + " rendered.");
                     } catch (Exception ex) {
                         reportStatus(req.displayLabel() + ": " + ex.getMessage());
                     }
                 }
             }.execute();
+        }
+
+        private void handleLinkClick(LinkArea link, MouseEvent event) {
+            if (link == null) return;
+            String href = link.getHref();
+            if (href == null) return;
+            if (href.startsWith("padtools://method/")) {
+                showMethodMenuInTab(href, event);
+                return;
+            }
+            String fqn = parseClassFqnFromHref(href);
+            if (fqn == null) return;
+            cache.getIndex().header(fqn).ifPresent(
+                    ci -> addOrFocusTab(TreeNodeOpenRequest.classNode(ci)));
+        }
+
+        private void showMethodMenuInTab(String href, MouseEvent event) {
+            String path = href.substring("padtools://method/".length());
+            int hash = path.lastIndexOf('#');
+            if (hash < 0) return;
+            String classFqn = path.substring(0, hash);
+            String methodName = path.substring(hash + 1);
+            if (classFqn.isEmpty() || methodName.isEmpty()) return;
+            JavaClassInfo classInfo = cache.getIndex().header(classFqn).orElse(null);
+            if (classInfo == null) {
+                // ヘッダが無い場合はシンプル名だけ持つダミーで代用
+                classInfo = new JavaClassInfo();
+                classInfo.setSimpleName(extractSimpleClass(classFqn));
+            }
+            JavaMethodInfo methodInfo = new JavaMethodInfo();
+            methodInfo.setName(methodName);
+            final JavaClassInfo ci = classInfo;
+            final JavaMethodInfo mi = methodInfo;
+            JPopupMenu menu = new JPopupMenu();
+            JMenuItem seqItem = new JMenuItem("Sequence Diagram");
+            seqItem.addActionListener(e -> addOrFocusTab(
+                    TreeNodeOpenRequest.method(ci, mi, DiagramKind.SEQUENCE)));
+            menu.add(seqItem);
+            JMenuItem actItem = new JMenuItem("Activity Diagram");
+            actItem.addActionListener(e -> addOrFocusTab(
+                    TreeNodeOpenRequest.method(ci, mi, DiagramKind.ACTIVITY)));
+            menu.add(actItem);
+            menu.show(event.getComponent(), event.getX(), event.getY());
+        }
+
+        private void handleLinkPopup(LinkArea link, MouseEvent event) {
+            if (event == null) return;
+            JPopupMenu popup = new JPopupMenu("Export");
+            JMenuItem saveSvg = new JMenuItem("Save as SVG...");
+            saveSvg.addActionListener(e -> exportTabAs(UmlExporter.Format.SVG));
+            popup.add(saveSvg);
+            JMenuItem savePng = new JMenuItem("Save as PNG...");
+            savePng.addActionListener(e -> exportTabAs(UmlExporter.Format.PNG));
+            popup.add(savePng);
+            JMenuItem savePuml = new JMenuItem("Save as PlantUML...");
+            savePuml.addActionListener(e -> exportTabAs(UmlExporter.Format.PUML));
+            popup.add(savePuml);
+            popup.show(event.getComponent(), event.getX(), event.getY());
+        }
+
+        private void exportTabAs(UmlExporter.Format fmt) {
+            String puml = renderedPuml;
+            if (puml == null || puml.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        "No diagram to export yet.", "Export",
+                        JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            String ext = fmt.getExtension();
+            JFileChooser fc = new JFileChooser();
+            fc.setDialogTitle("Save diagram as " + ext.toUpperCase());
+            fc.setAcceptAllFileFilterUsed(false);
+            fc.setFileFilter(new FileNameExtensionFilter(
+                    ext.toUpperCase() + " (*." + ext + ")", ext));
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            int r = fc.showSaveDialog(owner);
+            if (r != JFileChooser.APPROVE_OPTION) return;
+            File chosen = fc.getSelectedFile();
+            if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith("." + ext)) {
+                chosen = new File(chosen.getAbsolutePath() + "." + ext);
+            }
+            try {
+                java.awt.image.BufferedImage img = null;
+                if (fmt == UmlExporter.Format.PNG) {
+                    img = PlantUmlImageRenderer.toBufferedImage(puml);
+                }
+                UmlExporter.export(fmt, chosen, puml, img);
+                reportStatus("Saved: " + chosen.getAbsolutePath());
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Export failed: " + ex.getMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -215,5 +325,19 @@ public final class DiagramTabPane {
         final String puml;
         final RenderedSvg svg;
         RenderResult(String puml, RenderedSvg svg) { this.puml = puml; this.svg = svg; }
+    }
+
+    private static String parseClassFqnFromHref(String href) {
+        if (href == null) return null;
+        final String prefix = "padtools://class/";
+        if (!href.startsWith(prefix)) return null;
+        String s = href.substring(prefix.length()).trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private static String extractSimpleClass(String qn) {
+        if (qn == null || qn.isEmpty()) return "";
+        int dot = qn.lastIndexOf('.');
+        return dot < 0 ? qn : qn.substring(dot + 1);
     }
 }

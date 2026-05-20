@@ -1,7 +1,7 @@
 Change log
 =============
 
-Unreleased
+2.1
 --------
 
 * **AOSP Phase 3.4: Android.mk (legacy) パーサー** (`AndroidMkParser` 新規)

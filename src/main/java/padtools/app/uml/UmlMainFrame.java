@@ -112,6 +112,8 @@ public class UmlMainFrame extends JFrame {
 
     private DiagramKind currentKind = DiagramKind.CLASS;
     private String currentPuml;
+    /** 現在ロード中のプロジェクトルート。null なら未ロード。 */
+    private File currentProjectRoot;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
     private String sequenceEntry;
     /** 現在選択されているアクティビティ図起点 ({@code Class.method})。null なら未設定。 */
@@ -233,6 +235,14 @@ public class UmlMainFrame extends JFrame {
         JMenuItem open = new JMenuItem("Open Project...");
         open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, MENU_MASK));
         open.addActionListener(e -> chooseProject());
+        JMenu recent = new JMenu("Open Recent");
+        m.addMenuListener(new javax.swing.event.MenuListener() {
+            @Override public void menuSelected(javax.swing.event.MenuEvent e) {
+                rebuildRecentMenu(recent);
+            }
+            @Override public void menuDeselected(javax.swing.event.MenuEvent e) {}
+            @Override public void menuCanceled(javax.swing.event.MenuEvent e) {}
+        });
         JMenuItem save = new JMenuItem("Save Diagram As...");
         save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK));
         save.addActionListener(e -> chooseAndExport());
@@ -254,6 +264,7 @@ public class UmlMainFrame extends JFrame {
             dispose();
         });
         m.add(open);
+        m.add(recent);
         m.add(save);
         m.add(perFolder);
         m.addSeparator();
@@ -262,6 +273,29 @@ public class UmlMainFrame extends JFrame {
         m.addSeparator();
         m.add(exit);
         return m;
+    }
+
+    private void rebuildRecentMenu(JMenu recent) {
+        recent.removeAll();
+        java.util.List<padtools.ProjectRecord> records;
+        try {
+            records = padtools.ProjectRepository.getInstance().listRecent(10);
+        } catch (RuntimeException ex) {
+            records = java.util.Collections.emptyList();
+        }
+        if (records.isEmpty()) {
+            JMenuItem none = new JMenuItem("(No recent projects)");
+            none.setEnabled(false);
+            recent.add(none);
+            return;
+        }
+        for (padtools.ProjectRecord rec : records) {
+            File root = rec.root();
+            JMenuItem item = new JMenuItem(rec.getName() + "  — " + rec.getPath());
+            item.setEnabled(root.isDirectory());
+            item.addActionListener(e -> loadProject(root));
+            recent.add(item);
+        }
     }
 
     private JMenu buildDiagramMenu() {
@@ -530,6 +564,7 @@ public class UmlMainFrame extends JFrame {
         } catch (RuntimeException ignored) {
             // 設定保存はベストエフォート
         }
+        saveCurrentProjectSettings();
         applyStyle(r.style);
     }
 
@@ -542,6 +577,7 @@ public class UmlMainFrame extends JFrame {
         } catch (RuntimeException ignored) {
             // 設定保存はベストエフォート
         }
+        saveCurrentProjectSettings();
         syncThemeMenuSelection(style);
         refreshDiagram();
     }
@@ -946,6 +982,8 @@ public class UmlMainFrame extends JFrame {
                     status.setText("Cancelled.");
                     return;
                 }
+                currentProjectRoot = root;
+                persistAndRestoreProjectSettings(root);
                 treePanel.populate(cache.getAnalysis(), cache.getClasses(),
                         root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
@@ -1834,6 +1872,116 @@ public class UmlMainFrame extends JFrame {
         } catch (RuntimeException ignored) {
             // 設定保存はベストエフォート
         }
+    }
+
+    /**
+     * プロジェクトロード成功時: リポジトリに登録し、保存済み設定があれば復元する。
+     * 初回ロードは設定がないため何も変わらない。
+     */
+    private void persistAndRestoreProjectSettings(File root) {
+        try {
+            padtools.ProjectRepository repo = padtools.ProjectRepository.getInstance();
+            repo.touch(root);
+            java.util.Map<String, String> saved = repo.loadSettings(root);
+            if (saved.isEmpty()) return;
+            Setting s = Main.getSetting();
+            if (s == null) return;
+            padtools.core.formats.uml.DiagramStyle style = s.getStyle();
+            if (saved.containsKey("style.theme")) style.setTheme(saved.get("style.theme"));
+            if (saved.containsKey("style.backgroundColor"))
+                style.setBackgroundColor(saved.get("style.backgroundColor"));
+            if (saved.containsKey("style.fontName")) style.setFontName(saved.get("style.fontName"));
+            if (saved.containsKey("style.fontSize"))
+                style.setFontSize(parseIntOrZero(saved.get("style.fontSize")));
+            if (saved.containsKey("style.direction")) {
+                try {
+                    style.setDirection(padtools.core.formats.uml.DiagramStyle.Direction.valueOf(
+                            saved.get("style.direction")));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            if (saved.containsKey("style.customSkinparam"))
+                style.setCustomSkinparam(saved.get("style.customSkinparam"));
+            s.setStyle(style);
+            padtools.core.formats.uml.PlantUmlRenderer.setStyle(style);
+
+            if (saved.containsKey("sequence.showComments"))
+                s.setSequenceShowComments(Boolean.parseBoolean(saved.get("sequence.showComments")));
+            if (saved.containsKey("sequence.commentStyle"))
+                s.setSequenceCommentStyle(saved.get("sequence.commentStyle"));
+            if (saved.containsKey("sequence.commentPlacement"))
+                s.setSequenceCommentPlacement(saved.get("sequence.commentPlacement"));
+            if (saved.containsKey("sequence.qualifyMethodNames"))
+                s.setSequenceQualifyMethodNames(
+                        Boolean.parseBoolean(saved.get("sequence.qualifyMethodNames")));
+
+            if (saved.containsKey("classDiagram.lastPreset"))
+                s.setClassDiagramLastPreset(saved.get("classDiagram.lastPreset"));
+            if (saved.containsKey("classDiagram.showFields"))
+                s.setClassDiagramShowFields(Boolean.parseBoolean(saved.get("classDiagram.showFields")));
+            if (saved.containsKey("classDiagram.showMethods"))
+                s.setClassDiagramShowMethods(
+                        Boolean.parseBoolean(saved.get("classDiagram.showMethods")));
+            if (saved.containsKey("classDiagram.showAnnotations"))
+                s.setClassDiagramShowAnnotations(
+                        Boolean.parseBoolean(saved.get("classDiagram.showAnnotations")));
+            if (saved.containsKey("classDiagram.publicOnly"))
+                s.setClassDiagramPublicOnly(
+                        Boolean.parseBoolean(saved.get("classDiagram.publicOnly")));
+            if (saved.containsKey("classDiagram.excludeExternal"))
+                s.setClassDiagramExcludeExternal(
+                        Boolean.parseBoolean(saved.get("classDiagram.excludeExternal")));
+            if (saved.containsKey("classDiagram.commentMaxLength"))
+                s.setClassDiagramCommentMaxLength(
+                        parseIntOrZero(saved.get("classDiagram.commentMaxLength")));
+            if (saved.containsKey("classDiagram.hiddenAnnotations"))
+                s.setClassDiagramHiddenAnnotations(saved.get("classDiagram.hiddenAnnotations"));
+
+            syncThemeMenuSelection(style);
+        } catch (RuntimeException ignored) {
+            // 設定復元はベストエフォート
+        }
+    }
+
+    /** 現在のプロジェクトに診断設定をプロジェクト固有設定として保存する。 */
+    private void saveCurrentProjectSettings() {
+        if (currentProjectRoot == null) return;
+        try {
+            Setting s = Main.getSetting();
+            if (s == null) return;
+            padtools.core.formats.uml.DiagramStyle style =
+                    padtools.core.formats.uml.PlantUmlRenderer.getStyle();
+            java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+            m.put("style.theme", style.getTheme());
+            m.put("style.backgroundColor", style.getBackgroundColor());
+            m.put("style.fontName", style.getFontName());
+            m.put("style.fontSize", Integer.toString(style.getFontSize()));
+            m.put("style.direction", style.getDirection().name());
+            m.put("style.customSkinparam", style.getCustomSkinparam());
+            m.put("sequence.showComments", Boolean.toString(s.isSequenceShowComments()));
+            m.put("sequence.commentStyle", s.getSequenceCommentStyle());
+            m.put("sequence.commentPlacement", s.getSequenceCommentPlacement());
+            m.put("sequence.qualifyMethodNames",
+                    Boolean.toString(s.isSequenceQualifyMethodNames()));
+            m.put("classDiagram.lastPreset", s.getClassDiagramLastPreset());
+            m.put("classDiagram.showFields", Boolean.toString(s.isClassDiagramShowFields()));
+            m.put("classDiagram.showMethods", Boolean.toString(s.isClassDiagramShowMethods()));
+            m.put("classDiagram.showAnnotations",
+                    Boolean.toString(s.isClassDiagramShowAnnotations()));
+            m.put("classDiagram.publicOnly", Boolean.toString(s.isClassDiagramPublicOnly()));
+            m.put("classDiagram.excludeExternal",
+                    Boolean.toString(s.isClassDiagramExcludeExternal()));
+            m.put("classDiagram.commentMaxLength",
+                    Integer.toString(s.getClassDiagramCommentMaxLength()));
+            m.put("classDiagram.hiddenAnnotations", s.getClassDiagramHiddenAnnotations());
+            padtools.ProjectRepository.getInstance().saveSettings(currentProjectRoot, m);
+        } catch (RuntimeException ignored) {
+            // 設定保存はベストエフォート
+        }
+    }
+
+    private static int parseIntOrZero(String v) {
+        if (v == null) return 0;
+        try { return Integer.parseInt(v); } catch (NumberFormatException e) { return 0; }
     }
 
     private static final class RenderResult {

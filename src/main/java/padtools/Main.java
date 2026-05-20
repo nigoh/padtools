@@ -113,8 +113,9 @@ public class Main {
             return;
         }
 
-        // SettingManager を初期化し、永続化されたスタイルをレンダラへ反映
+        // SettingManager / ProjectRepository を初期化し、永続化されたスタイルをレンダラへ反映
         SettingManager.initialize();
+        ProjectRepository.initialize();
         PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());
 
         //オプション定義

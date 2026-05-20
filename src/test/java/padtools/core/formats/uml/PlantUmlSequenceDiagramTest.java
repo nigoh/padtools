@@ -677,4 +677,36 @@ public class PlantUmlSequenceDiagramTest {
         assertTrue(puml, puml.contains("act()"));
         assertFalse(puml, puml.contains("act(x)"));
     }
+
+    // ---- return / throw in sequence diagram ----
+
+    @Test
+    public void testReturnStatementEmitsNoteOver() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { B b; String run() { b.fetch(); return \"ok\"; } } "
+                        + "class B { String fetch() { return \"\"; } }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue("return should appear as note over: " + puml,
+                puml.contains("note over") && puml.contains("return"));
+    }
+
+    @Test
+    public void testVoidReturnEmitsReturnNote() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run() { return; } }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue("void return should emit 'return' note: " + puml,
+                puml.contains("note over") && puml.contains(": return"));
+    }
+
+    @Test
+    public void testThrowStatementEmitsNoteOver() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { void run(String s) {\n"
+                + "  if (s == null) throw new IllegalArgumentException(\"null\");\n"
+                + "} }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue("throw should appear as note over: " + puml,
+                puml.contains("note over") && puml.contains("throw"));
+    }
 }

@@ -153,6 +153,8 @@ public final class PlantUmlActivityDiagram {
                 emitBreak((JavaMethodInfo.Break) s, out, indent);
             } else if (s instanceof JavaMethodInfo.Continue) {
                 emitContinue((JavaMethodInfo.Continue) s, out, indent);
+            } else if (s instanceof JavaMethodInfo.Yield) {
+                emitYield((JavaMethodInfo.Yield) s, out, indent, opts);
             } else if (s instanceof JavaMethodInfo.Block) {
                 ended = emitBlock((JavaMethodInfo.Block) s, out, indent, opts);
             }
@@ -182,6 +184,17 @@ public final class PlantUmlActivityDiagram {
         }
         out.append(indent).append("stop\n");
         return true;
+    }
+
+    private static void emitYield(JavaMethodInfo.Yield y, StringBuilder out,
+                                   String indent, Options opts) {
+        String expr = y.getExpression();
+        if (expr == null || expr.isEmpty()) {
+            out.append(indent).append(":yield;\n");
+        } else {
+            out.append(indent).append(":yield ")
+                    .append(escapeAction(expr, opts.commentMaxLength)).append(";\n");
+        }
     }
 
     private static boolean emitThrow(JavaMethodInfo.Throw t, StringBuilder out,

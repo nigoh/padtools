@@ -180,24 +180,58 @@ public final class PlantUmlSvgRenderer {
 
     private static Rectangle2D findFirstRectBounds(Element a) {
         NodeList rects = a.getElementsByTagNameNS("*", "rect");
-        if (rects == null) {
-            return null;
-        }
-        for (int i = 0; i < rects.getLength(); i++) {
-            Node n = rects.item(i);
-            if (!(n instanceof Element)) {
-                continue;
-            }
-            Element rect = (Element) n;
-            try {
-                double x = Double.parseDouble(rect.getAttribute("x"));
-                double y = Double.parseDouble(rect.getAttribute("y"));
-                double w = Double.parseDouble(rect.getAttribute("width"));
-                double h = Double.parseDouble(rect.getAttribute("height"));
-                if (w > 0 && h > 0) {
-                    return new Rectangle2D.Double(x, y, w, h);
+        if (rects != null) {
+            for (int i = 0; i < rects.getLength(); i++) {
+                Node n = rects.item(i);
+                if (!(n instanceof Element)) {
+                    continue;
                 }
-            } catch (NumberFormatException ignored) {
+                Element rect = (Element) n;
+                try {
+                    double x = Double.parseDouble(rect.getAttribute("x"));
+                    double y = Double.parseDouble(rect.getAttribute("y"));
+                    double w = Double.parseDouble(rect.getAttribute("width"));
+                    double h = Double.parseDouble(rect.getAttribute("height"));
+                    if (w > 0 && h > 0) {
+                        return new Rectangle2D.Double(x, y, w, h);
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        // rect なし: text 要素の textLength + font-size からバウンドを推定する
+        // (メソッドレベルリンクは <rect> を持たず <text> のみを持つ)
+        NodeList texts = a.getElementsByTagNameNS("*", "text");
+        if (texts != null) {
+            for (int i = 0; i < texts.getLength(); i++) {
+                Node n = texts.item(i);
+                if (!(n instanceof Element)) {
+                    continue;
+                }
+                Element text = (Element) n;
+                try {
+                    double x = Double.parseDouble(text.getAttribute("x"));
+                    double y = Double.parseDouble(text.getAttribute("y"));
+                    String tlStr = text.getAttribute("textLength");
+                    if (tlStr == null || tlStr.isEmpty()) {
+                        continue;
+                    }
+                    double w = Double.parseDouble(tlStr);
+                    if (w <= 0) {
+                        continue;
+                    }
+                    String fsStr = text.getAttribute("font-size");
+                    double fontSize = 14;
+                    if (fsStr != null && !fsStr.isEmpty()) {
+                        try {
+                            fontSize = Double.parseDouble(fsStr);
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                    double h = fontSize * 1.4;
+                    return new Rectangle2D.Double(x, y - fontSize, w, h);
+                } catch (NumberFormatException ignored) {
+                }
             }
         }
         return null;

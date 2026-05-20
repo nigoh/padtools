@@ -506,20 +506,18 @@ public class SvgPreviewPanel extends JPanel {
     }
 
     /**
-     * 右クリック (ポップアップトリガ) かつリンク領域内なら登録済みリスナを発火する。
+     * 右クリック (ポップアップトリガ) なら登録済みリスナを発火する。
+     * リンク領域上なら対応する {@link LinkArea} を、それ以外は {@code null} を渡す。
      * Linux は {@code mousePressed}、Windows/Mac は {@code mouseReleased} 側で
      * isPopupTrigger が true になるため両方から呼ぶ前提。
      *
      * @return リンクポップアップを発火した場合 true (呼び出し側はそれ以降の処理を抑制してよい)
      */
     private boolean maybeFireLinkPopup(MouseEvent e) {
-        if (!e.isPopupTrigger() || linkPopupListener == null || linkAreas.isEmpty()) {
+        if (!e.isPopupTrigger() || linkPopupListener == null) {
             return false;
         }
-        LinkArea hit = hitTestLink(e.getPoint());
-        if (hit == null) {
-            return false;
-        }
+        LinkArea hit = linkAreas.isEmpty() ? null : hitTestLink(e.getPoint());
         linkPopupListener.accept(hit, e);
         return true;
     }

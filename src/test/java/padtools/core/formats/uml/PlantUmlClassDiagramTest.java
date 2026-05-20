@@ -826,4 +826,30 @@ public class PlantUmlClassDiagramTest {
         assertFalse("ordinary class should not have <<record>>: " + puml,
                 puml.contains("<<record>>"));
     }
+
+    @Test
+    public void testInteractiveLinksEmitsMethodLinks() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void doSomething() {} void helper() {} }");
+        PlantUmlClassDiagram.Options opts = new PlantUmlClassDiagram.Options();
+        opts.interactiveLinks = true;
+        opts.showMethods = true;
+        String puml = PlantUmlClassDiagram.generate(infos, opts);
+        assertTrue("method link for doSomething: " + puml,
+                puml.contains("[[padtools://method/x.Foo#doSomething ▶]]"));
+        assertTrue("method link for helper: " + puml,
+                puml.contains("[[padtools://method/x.Foo#helper ▶]]"));
+    }
+
+    @Test
+    public void testInteractiveLinksNoMethodLinksWhenMethodsHidden() {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "package x; class Foo { void doSomething() {} }");
+        PlantUmlClassDiagram.Options opts = new PlantUmlClassDiagram.Options();
+        opts.interactiveLinks = true;
+        opts.showMethods = false;
+        String puml = PlantUmlClassDiagram.generate(infos, opts);
+        assertFalse("no method links when showMethods=false: " + puml,
+                puml.contains("padtools://method/"));
+    }
 }

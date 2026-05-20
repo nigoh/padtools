@@ -84,8 +84,6 @@ public class EntitySearchDialog extends JDialog {
 
     private final List<Entry> allEntries = new ArrayList<>();
     private Entry selectedEntry;
-    /** OK ボタンの代わりに「Drill-down」を押したとき true。詳細図への遷移要求。 */
-    private boolean drillDownRequested = false;
     private final Timer debounceTimer = new Timer(150, e -> rebuildTree(filter.getText()));
 
     public EntitySearchDialog(Frame owner, List<JavaClassInfo> classes) {
@@ -111,18 +109,14 @@ public class EntitySearchDialog extends JDialog {
         JPanel south = new JPanel(new BorderLayout());
         south.add(countLabel, BorderLayout.WEST);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-        JButton drill = new JButton("Drill-down");
-        drill.setToolTipText("Open a detailed class diagram seeded by the selected entity");
         JButton ok = new JButton("OK");
         JButton cancel = new JButton("Cancel");
-        buttons.add(drill);
         buttons.add(ok);
         buttons.add(cancel);
         south.add(buttons, BorderLayout.EAST);
         add(south, BorderLayout.SOUTH);
 
         ok.addActionListener(e -> commit());
-        drill.addActionListener(e -> commitDrillDown());
         cancel.addActionListener(e -> dispose());
         DialogUtils.installEscapeAndDefault(this, ok);
 
@@ -411,27 +405,9 @@ public class EntitySearchDialog extends JDialog {
         }
     }
 
-    /** 選択中のエントリを「ドリルダウン要求」として確定し、ダイアログを閉じる。 */
-    private void commitDrillDown() {
-        Object last = tree.getLastSelectedPathComponent();
-        if (last instanceof DefaultMutableTreeNode) {
-            Object u = ((DefaultMutableTreeNode) last).getUserObject();
-            if (u instanceof EntryNode) {
-                selectedEntry = ((EntryNode) u).entry;
-                drillDownRequested = true;
-                dispose();
-            }
-        }
-    }
-
     /** モーダル終了後に取得する選択結果。キャンセル時は null。 */
     public Entry getResult() {
         return selectedEntry;
-    }
-
-    /** OK ではなく Drill-down ボタンで閉じた場合 true。{@link #getResult()} とセットで参照する。 */
-    public boolean isDrillDownRequested() {
-        return drillDownRequested;
     }
 
     /** テスト用: 総候補件数。 */

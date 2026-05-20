@@ -23,7 +23,6 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
@@ -44,14 +43,11 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
-import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.List;
 
-import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 import padtools.core.formats.uml.JavaClassInfo;
-import padtools.core.formats.uml.JavaMethodInfo;
 
 /**
  * UML 専用のメインウィンドウ。
@@ -123,12 +119,6 @@ public class UmlMainFrame extends JFrame {
     private String currentNavigationKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
-    /** ドリルダウン履歴 (戻る用)。null スコープは {@link #SCOPE_NULL_MARKER} で保持。 */
-    private final java.util.Deque<DiagramScope> scopeHistory = new java.util.ArrayDeque<>();
-    /** Back の対になる進む履歴。Back を実行したときに現在スコープがここに積まれる。 */
-    private final java.util.Deque<DiagramScope> forwardHistory = new java.util.ArrayDeque<>();
-    /** null スコープを Deque に保持するためのセンチネル (Deque は null 要素不可)。 */
-    private static final DiagramScope SCOPE_NULL_MARKER = DiagramScope.builder().build();
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
     /**
@@ -163,8 +153,6 @@ public class UmlMainFrame extends JFrame {
 
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
-        previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
-        previewPanel.setOnLinkClick(this::onPreviewLinkClick);
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnActivityMethodSelected(this::onTreeActivityMethodSelected);
         treePanel.setOnClassSelected(this::onTreeClassSelected);
@@ -398,52 +386,7 @@ public class UmlMainFrame extends JFrame {
         m.add(zoomOut);
         m.add(zoomReset);
         m.add(zoomFit);
-        m.addSeparator();
-        JMenuItem back = new JMenuItem("Back");
-        back.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT,
-                MENU_MASK | InputEvent.ALT_DOWN_MASK));
-        back.addActionListener(e -> popScopeHistory());
-        m.add(back);
-        JMenuItem forward = new JMenuItem("Forward");
-        forward.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT,
-                MENU_MASK | InputEvent.ALT_DOWN_MASK));
-        forward.addActionListener(e -> popForwardHistory());
-        m.add(forward);
         return m;
-    }
-
-    /** Deque に保存可能な値に変換する (null → センチネル)。 */
-    private static DiagramScope encodeScope(DiagramScope scope) {
-        return scope == null ? SCOPE_NULL_MARKER : scope;
-    }
-
-    /** Deque から取り出した値を元のスコープ (null 可) に戻す。 */
-    private static DiagramScope decodeScope(DiagramScope scope) {
-        return scope == SCOPE_NULL_MARKER ? null : scope;
-    }
-
-    /** ドリルダウン履歴を 1 段戻す。空のときは無視。 */
-    private void popScopeHistory() {
-        if (scopeHistory.isEmpty()) {
-            status.setText("No drill-down history.");
-            return;
-        }
-        forwardHistory.push(encodeScope(currentScope));
-        currentScope = decodeScope(scopeHistory.pop());
-        status.setText("Back to previous scope.");
-        refreshDiagram();
-    }
-
-    /** Back で積まれた forward 履歴を 1 段進める。空のときは無視。 */
-    private void popForwardHistory() {
-        if (forwardHistory.isEmpty()) {
-            status.setText("No forward history.");
-            return;
-        }
-        scopeHistory.push(encodeScope(currentScope));
-        currentScope = decodeScope(forwardHistory.pop());
-        status.setText("Forward to next scope.");
-        refreshDiagram();
     }
 
     private JMenu buildStyleMenu() {
@@ -689,8 +632,6 @@ public class UmlMainFrame extends JFrame {
         bar.add(makeButton("Save", "Save diagram (Ctrl+S)", e -> chooseAndExport()));
         bar.add(makeButton("Refresh", "Refresh diagram (F5)", e -> refreshDiagram()));
         bar.addSeparator();
-        bar.add(makeButton("Back", "Back to previous scope (Alt+←)",
-                e -> popScopeHistory()));
         bar.add(makeButton("Search", "Search entities (Ctrl+Shift+F)",
                 e -> openEntitySearch()));
         bar.add(makeButton("Scope", "Edit diagram scope", e -> openScopeDialog()));
@@ -1218,95 +1159,6 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
-     * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
-     * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
-     */
-    private void onPreviewLinkClick(LinkArea link, MouseEvent event) {
-        if (link == null) {
-            return;
-        }
-        String fqn = parseClassFqnFromHref(link.getHref());
-        if (fqn == null) {
-            return;
-        }
-        drillDownToClass(fqn);
-    }
-
-    /**
-     * 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。
-     * 現在のスコープは履歴に push され、Back メニューで戻せる。
-     */
-    private void drillDownToClass(String fqn) {
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        scopeHistory.push(encodeScope(currentScope));
-        // 新規ドリルダウン時は forward 履歴をクリア (ブラウザ動作と同じ)
-        forwardHistory.clear();
-        DiagramScope.Builder b = DiagramScope.builder()
-                .seed(fqn).neighborHops(1);
-        DiagramPreset.DETAILED.applyTo(b);
-        currentScope = b.build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        selectionContext = SelectionContext.NONE;
-        updateDiagramKindAvailability();
-        status.setText("Drill-down: " + fqn);
-        refreshDiagram();
-    }
-
-    /** href 文字列から {@code padtools://class/<FQN>} の FQN 部分を取り出す。 */
-    private static String parseClassFqnFromHref(String href) {
-        if (href == null) {
-            return null;
-        }
-        final String prefix = "padtools://class/";
-        if (href.startsWith(prefix)) {
-            String s = href.substring(prefix.length()).trim();
-            return s.isEmpty() ? null : s;
-        }
-        return null;
-    }
-
-    private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
-        if (link == null || event == null) {
-            return;
-        }
-        if (!cache.isLoaded()) {
-            return;
-        }
-        String fqn = parseClassFqn(link.getHref());
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        JavaClassInfo cls = lookupDetailedClass(fqn);
-        if (cls == null) {
-            return;
-        }
-        JPopupMenu popup = buildMethodPopup(cls);
-        if (popup.getComponentCount() == 0) {
-            status.setText(cls.getSimpleName() + ": no concrete methods");
-            return;
-        }
-        popup.show(event.getComponent(), event.getX(), event.getY());
-    }
-
-    /** {@code padtools://class/<FQN>} 形式の URL から FQN を取り出す。マッチしなければ null。 */
-    private static String parseClassFqn(String href) {
-        if (href == null) {
-            return null;
-        }
-        final String prefix = "padtools://class/";
-        if (!href.startsWith(prefix)) {
-            return null;
-        }
-        return href.substring(prefix.length());
-    }
-
-    /**
      * ステータス バー表示用に長文を短縮する。Batik 等が data: URI を本文に含めて
      * 投げてくる超長文メッセージをそのまま流すと UI が読めなくなるため、
      * 改行とスペースで折り返した先頭 {@code max} 文字に省略記号を付けて返す。
@@ -1321,63 +1173,6 @@ public class UmlMainFrame extends JFrame {
             return oneLine;
         }
         return oneLine.substring(0, Math.max(0, max - 1)) + "…";
-    }
-
-    /**
-     * FQN から詳細展開済みの {@link JavaClassInfo} を取得する。
-     * ClassIndex があれば Stage B (detail) を返し、メソッド本体まで揃った状態にする。
-     */
-    private JavaClassInfo lookupDetailedClass(String fqn) {
-        if (cache.getIndex() != null) {
-            JavaClassInfo d = cache.getIndex().detail(fqn, ErrorListener.silent());
-            if (d != null) {
-                return d;
-            }
-        }
-        for (JavaClassInfo c : cache.getClasses()) {
-            if (fqn.equals(c.getQualifiedName())) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * クラスのメソッド一覧から {@link JPopupMenu} を構築する。
-     * 抽象メソッドは ProjectTreePanel と同様に除外する。
-     */
-    private JPopupMenu buildMethodPopup(JavaClassInfo cls) {
-        JPopupMenu popup = new JPopupMenu(cls.getSimpleName());
-        for (JavaMethodInfo m : cls.getMethods()) {
-            if (m.isAbstract()) {
-                continue;
-            }
-            String name = m.getName();
-            if (name == null || name.isEmpty()) {
-                continue;
-            }
-            JMenuItem item = new JMenuItem(formatMethodLabel(m));
-            String entry = cls.getSimpleName() + "." + name;
-            item.addActionListener(e -> switchToSequenceDiagram(entry));
-            popup.add(item);
-        }
-        return popup;
-    }
-
-    /** PopupMenu 表示用のメソッドラベル: {@code name(paramType, ...)}。 */
-    private static String formatMethodLabel(JavaMethodInfo m) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(m.getName()).append('(');
-        List<String> types = m.getParameterTypes();
-        for (int i = 0; i < types.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            String t = types.get(i);
-            sb.append(t == null ? "?" : t);
-        }
-        sb.append(')');
-        return sb.toString();
     }
 
     /**
@@ -1407,12 +1202,6 @@ public class UmlMainFrame extends JFrame {
         dlg.setVisible(true);
         EntitySearchDialog.Entry result = dlg.getResult();
         if (result == null) {
-            return;
-        }
-        if (dlg.isDrillDownRequested()) {
-            // Drill-down ボタンを押された場合は kind に関係なく ownerQn のクラスへ
-            // DETAILED プリセットで遷移する。
-            drillDownToClass(result.ownerQn);
             return;
         }
         switch (result.kind) {

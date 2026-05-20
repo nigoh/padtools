@@ -639,19 +639,6 @@ public class UmlMainFrame extends JFrame {
         bar.addSeparator();
         bar.add(makeButton("Search", "Search entities (Ctrl+Shift+F)",
                 e -> openEntitySearch()));
-        bar.add(makeButton("Scope", "Edit diagram scope", e -> openScopeDialog()));
-        bar.add(makeButton("Clear Scope", "Clear current scope filter", e -> {
-            currentScope = null;
-            refreshDiagram();
-        }));
-        bar.addSeparator();
-        bar.add(makeButton("Zoom In", "Zoom in (Ctrl+=)", e -> previewPanel.zoomIn()));
-        bar.add(makeButton("Zoom Out", "Zoom out (Ctrl+-)",
-                e -> previewPanel.zoomOut()));
-        bar.add(makeButton("100%", "Reset zoom (Ctrl+0)",
-                e -> previewPanel.zoomReset()));
-        bar.add(makeButton("Fit", "Zoom to fit (Ctrl+F)",
-                e -> previewPanel.zoomToFit()));
         return bar;
     }
 

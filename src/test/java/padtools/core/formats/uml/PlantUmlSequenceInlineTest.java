@@ -230,4 +230,51 @@ public class PlantUmlSequenceInlineTest {
         assertTrue("legend should mention <<inline>>: \n" + diagram,
                 diagram.contains("<<inline>>"));
     }
+
+    // ── CompoundButton.OnCheckedChangeListener ────────────────────────────────
+
+    @Test
+    public void testSetOnCheckedChangeListenerLambdaExpanded() {
+        // setOnCheckedChangeListener(lambda) の SAM メソッド名が onCheckedChanged に解決され
+        // 参加者名が OwnerClass$onCheckedChanged になること
+        String src = ""
+                + "class SettingsFragment {\n"
+                + "  private IService mService;\n"
+                + "  void onViewCreated() {\n"
+                + "    toggle.setOnCheckedChangeListener((b, checked) -> mService.update(checked));\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "SettingsFragment", "onViewCreated", null);
+        assertTrue("participant should be SettingsFragment$onCheckedChanged: \n" + diagram,
+                diagram.contains("\"SettingsFragment$onCheckedChanged\""));
+        assertTrue("<<inline>> stereotype should appear: \n" + diagram,
+                diagram.contains("<<inline>>"));
+        assertTrue("callback body mService.update() should be expanded: \n" + diagram,
+                diagram.contains("update("));
+    }
+
+    @Test
+    public void testSetOnCheckedChangeListenerAnonymousClassExpanded() {
+        // setOnCheckedChangeListener(new OnCheckedChangeListener(){...}) の匿名クラスが展開されること
+        String src = ""
+                + "class SwitchActivity {\n"
+                + "  private IService mService;\n"
+                + "  void onCreate() {\n"
+                + "    sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {\n"
+                + "      public void onCheckedChanged(CompoundButton b, boolean checked) {\n"
+                + "        mService.toggle(checked);\n"
+                + "      }\n"
+                + "    });\n"
+                + "  }\n"
+                + "}";
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(src);
+        String diagram = PlantUmlSequenceDiagram.generate(classes, "SwitchActivity", "onCreate", null);
+        assertTrue("inline participant should contain SwitchActivity$: \n" + diagram,
+                diagram.contains("\"SwitchActivity$"));
+        assertTrue("<<inline>> stereotype should appear: \n" + diagram,
+                diagram.contains("<<inline>>"));
+        assertTrue("callback body mService.toggle() should be expanded: \n" + diagram,
+                diagram.contains("toggle("));
+    }
 }

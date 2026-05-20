@@ -52,7 +52,6 @@ import java.util.List;
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 import padtools.core.formats.uml.JavaClassInfo;
-import padtools.core.formats.uml.JavaMethodInfo;
 
 /**
  * UML 専用のメインウィンドウ。
@@ -114,6 +113,7 @@ public class UmlMainFrame extends JFrame {
     private String currentPuml;
     /** 現在ロード中のプロジェクトルート。null なら未ロード。 */
     private File currentProjectRoot;
+    private String currentSvgXml;
     /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
     private String sequenceEntry;
     /** 現在選択されているアクティビティ図起点 ({@code Class.method})。null なら未設定。 */
@@ -1241,20 +1241,57 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
-     * クラス図プレビュー上で右クリックされたとき、該当クラスのメソッド一覧を
-     * {@link JPopupMenu} で表示し、選択されたメソッドを起点にシーケンス図へ切り替える。
+     * クラス図プレビュー上で左クリックされたとき:
+     * - {@code padtools://method/<FQN>#<method>} リンクならシーケンス/アクティビティ図選択メニュー
+     * - {@code padtools://class/<FQN>} リンクならドリルダウン
      */
     private void onPreviewLinkClick(LinkArea link, MouseEvent event) {
         if (link == null) {
             return;
         }
-        String fqn = parseClassFqnFromHref(link.getHref());
+        String href = link.getHref();
+        if (href != null && href.startsWith("padtools://method/")) {
+            showMethodDiagramMenu(href, event);
+            return;
+        }
+        String fqn = parseClassFqnFromHref(href);
         if (fqn == null) {
             return;
         }
         drillDownToClass(fqn);
     }
 
+    /**
+     * メソッドリンク ({@code padtools://method/<FQN>#<methodName>}) がクリックされたとき、
+     * シーケンス図またはアクティビティ図へ遷移するサブメニューを表示する。
+     */
+    private void showMethodDiagramMenu(String href, MouseEvent event) {
+        String path = href.substring("padtools://method/".length());
+        int hash = path.lastIndexOf('#');
+        if (hash < 0) {
+            return;
+        }
+        String classFqn = path.substring(0, hash);
+        String methodName = path.substring(hash + 1);
+        if (classFqn.isEmpty() || methodName.isEmpty()) {
+            return;
+        }
+        String simpleName = extractSimpleClass(classFqn);
+        String entry = simpleName + "." + methodName;
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem seqItem = new JMenuItem("Sequence Diagram");
+        seqItem.addActionListener(e -> switchToSequenceDiagram(entry));
+        menu.add(seqItem);
+        JMenuItem actItem = new JMenuItem("Activity Diagram");
+        actItem.addActionListener(e -> switchToActivityDiagram(entry));
+        menu.add(actItem);
+        menu.show(event.getComponent(), event.getX(), event.getY());
+    }
+
+    /**
+     * 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。
+     * 現在のスコープは履歴に push され、Back メニューで戻せる。
+     */
     private void drillDownToClass(String fqn) {
         if (fqn == null || fqn.isEmpty()) {
             return;
@@ -1285,39 +1322,98 @@ public class UmlMainFrame extends JFrame {
         return null;
     }
 
+    /**
+     * プレビュー上で右クリックされたとき、図のエクスポートポップアップを表示する。
+     * {@code link} はヒットしたリンク領域 (null なら非リンク領域でのクリック)。
+     */
     private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
-        if (link == null || event == null) {
+        if (event == null) {
             return;
         }
-        if (!cache.isLoaded()) {
-            return;
-        }
-        String fqn = parseClassFqn(link.getHref());
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        JavaClassInfo cls = lookupDetailedClass(fqn);
-        if (cls == null) {
-            return;
-        }
-        JPopupMenu popup = buildMethodPopup(cls);
-        if (popup.getComponentCount() == 0) {
-            status.setText(cls.getSimpleName() + ": no concrete methods");
-            return;
-        }
+        JPopupMenu popup = buildExportPopup();
         popup.show(event.getComponent(), event.getX(), event.getY());
     }
 
-    /** {@code padtools://class/<FQN>} 形式の URL から FQN を取り出す。マッチしなければ null。 */
-    private static String parseClassFqn(String href) {
-        if (href == null) {
-            return null;
+    /** 右クリックエクスポートポップアップを構築する (SVG / PNG / PUML 保存 + SVG コピー)。 */
+    private JPopupMenu buildExportPopup() {
+        JPopupMenu popup = new JPopupMenu("Export");
+        JMenuItem saveSvg = new JMenuItem("Save as SVG...");
+        saveSvg.addActionListener(e -> exportAs(UmlExporter.Format.SVG));
+        popup.add(saveSvg);
+        JMenuItem savePng = new JMenuItem("Save as PNG...");
+        savePng.addActionListener(e -> exportAs(UmlExporter.Format.PNG));
+        popup.add(savePng);
+        JMenuItem savePuml = new JMenuItem("Save as PlantUML...");
+        savePuml.addActionListener(e -> exportAs(UmlExporter.Format.PUML));
+        popup.add(savePuml);
+        popup.addSeparator();
+        JMenuItem copySvg = new JMenuItem("Copy SVG to Clipboard");
+        copySvg.addActionListener(e -> copySvgToClipboard());
+        popup.add(copySvg);
+        return popup;
+    }
+
+    /** 指定フォーマットで保存ダイアログを開きエクスポートする。 */
+    private void exportAs(UmlExporter.Format fmt) {
+        if (currentPuml == null || currentPuml.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No diagram to export yet.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
         }
-        final String prefix = "padtools://class/";
-        if (!href.startsWith(prefix)) {
-            return null;
+        String ext;
+        String filterDesc;
+        switch (fmt) {
+            case SVG:  ext = "svg"; filterDesc = "SVG (*.svg)"; break;
+            case PNG:  ext = "png"; filterDesc = "PNG (*.png)"; break;
+            default:   ext = "puml"; filterDesc = "PlantUML source (*.puml)"; break;
         }
-        return href.substring(prefix.length());
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Save diagram as " + ext.toUpperCase());
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setFileFilter(new FileNameExtensionFilter(filterDesc, ext));
+        int r = fc.showSaveDialog(this);
+        if (r != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File chosen = fc.getSelectedFile();
+        if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith("." + ext)) {
+            chosen = new File(chosen.getAbsolutePath() + "." + ext);
+        }
+        try {
+            BufferedImage pngImage = null;
+            if (fmt == UmlExporter.Format.PNG) {
+                pngImage = PlantUmlImageRenderer.toBufferedImage(currentPuml);
+            }
+            UmlExporter.export(fmt, chosen, currentPuml, pngImage);
+            status.setText("Saved: " + chosen.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Export failed: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** 現在の SVG XML 全体をクリップボードへコピーする。 */
+    private void copySvgToClipboard() {
+        if (currentSvgXml == null || currentSvgXml.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No SVG to copy.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        try {
+            java.awt.datatransfer.StringSelection sel =
+                    new java.awt.datatransfer.StringSelection(currentSvgXml);
+            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(sel, null);
+            status.setText("SVG copied to clipboard ("
+                    + currentSvgXml.length() + " chars)");
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Failed to copy SVG: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**
@@ -1335,63 +1431,6 @@ public class UmlMainFrame extends JFrame {
             return oneLine;
         }
         return oneLine.substring(0, Math.max(0, max - 1)) + "…";
-    }
-
-    /**
-     * FQN から詳細展開済みの {@link JavaClassInfo} を取得する。
-     * ClassIndex があれば Stage B (detail) を返し、メソッド本体まで揃った状態にする。
-     */
-    private JavaClassInfo lookupDetailedClass(String fqn) {
-        if (cache.getIndex() != null) {
-            JavaClassInfo d = cache.getIndex().detail(fqn, ErrorListener.silent());
-            if (d != null) {
-                return d;
-            }
-        }
-        for (JavaClassInfo c : cache.getClasses()) {
-            if (fqn.equals(c.getQualifiedName())) {
-                return c;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * クラスのメソッド一覧から {@link JPopupMenu} を構築する。
-     * 抽象メソッドは ProjectTreePanel と同様に除外する。
-     */
-    private JPopupMenu buildMethodPopup(JavaClassInfo cls) {
-        JPopupMenu popup = new JPopupMenu(cls.getSimpleName());
-        for (JavaMethodInfo m : cls.getMethods()) {
-            if (m.isAbstract()) {
-                continue;
-            }
-            String name = m.getName();
-            if (name == null || name.isEmpty()) {
-                continue;
-            }
-            JMenuItem item = new JMenuItem(formatMethodLabel(m));
-            String entry = cls.getSimpleName() + "." + name;
-            item.addActionListener(e -> switchToSequenceDiagram(entry));
-            popup.add(item);
-        }
-        return popup;
-    }
-
-    /** PopupMenu 表示用のメソッドラベル: {@code name(paramType, ...)}。 */
-    private static String formatMethodLabel(JavaMethodInfo m) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(m.getName()).append('(');
-        List<String> types = m.getParameterTypes();
-        for (int i = 0; i < types.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            String t = types.get(i);
-            sb.append(t == null ? "?" : t);
-        }
-        sb.append(')');
-        return sb.toString();
     }
 
     /**
@@ -1759,6 +1798,7 @@ public class UmlMainFrame extends JFrame {
                         return;
                     }
                     currentPuml = r.puml;
+                    currentSvgXml = r.svg.getSvgXml();
                     previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
                             r.svg.getWidth(), r.svg.getHeight());
                     previewPanel.setLinkAreas(r.svg.getLinkAreas());

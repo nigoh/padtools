@@ -371,7 +371,7 @@ public final class PlantUmlClassDiagram {
                 if (o.showComments && o.commentStyle == CommentStyle.INLINE) {
                     emitInlineComment(out, m.getComment(), o, indent + "  ");
                 }
-                emitMethod(out, m, o, indent + "  ");
+                emitMethod(out, m, o, indent + "  ", c.getQualifiedName());
             }
         }
         // フィールド初期化子・コンストラクタ内代入で捕捉した「関数を変数として設定」する
@@ -650,13 +650,14 @@ public final class PlantUmlClassDiagram {
             }
             out.append(indent).append(".. ").append(label).append(" ..\n");
             for (JavaMethodInfo m : inlines) {
-                emitMethod(out, m, o, indent);
+                // インラインメソッド (匿名クラス/ラムダ) はメソッドリンク不要
+                emitMethod(out, m, o, indent, null);
             }
         }
     }
 
     private static void emitMethod(StringBuilder out, JavaMethodInfo m,
-                                    Options o, String indent) {
+                                    Options o, String indent, String classFqn) {
         if (o.publicOnly && m.getVisibility() != Visibility.PUBLIC) {
             return;
         }
@@ -687,6 +688,14 @@ public final class PlantUmlClassDiagram {
         out.append(')');
         if (!m.isConstructor() && m.getReturnType() != null && !m.getReturnType().isEmpty()) {
             out.append(": ").append(m.getReturnType());
+        }
+        // interactiveLinks 有効かつ通常メソッド (非コンストラクタ) にメソッドリンクを埋め込む
+        if (o.interactiveLinks
+                && !m.isConstructor()
+                && classFqn != null && !classFqn.isEmpty()
+                && m.getName() != null && !m.getName().isEmpty()) {
+            out.append(" [[padtools://method/")
+               .append(classFqn).append('#').append(m.getName()).append("]]");
         }
         out.append('\n');
     }

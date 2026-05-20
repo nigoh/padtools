@@ -105,12 +105,10 @@ public class UmlMainFrame extends JFrame {
 
     private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
 
-    /** 動的タブ管理 (機能 2)。null の場合はタブ機能未配線。 */
+    /** タブマネージャ。 */
     private DiagramTabPane tabPane;
-    /** 右側の最上位タブ (Preview / Source / Manifest / Tabs)。 */
-    private JTabbedPane rightTabs;
-    /** rightTabs 内での "Tabs" タブのインデックス。-1 なら未配線。 */
-    private int dynamicTabsIndex = -1;
+    /** 右側のフラットタブバー (Home / 動的タブ / Manifest / Impact / References)。 */
+    private JTabbedPane mainTabs;
 
     private DiagramKind currentKind = DiagramKind.CLASS;
     private String currentPuml;
@@ -169,21 +167,34 @@ public class UmlMainFrame extends JFrame {
 
         setJMenuBar(buildMenuBar());
 
-        // 右側: プレビュー (ベクター SVG) と PlantUML ソース / Manifest Summary のタブ
-        // 動的タブ機能 (機能 2) は "Tabs" タブ内に DiagramTabPane を配置する。
-        // この設計だと既存ビュー (Preview/Source/Manifest) には触らずに済むため、
-        // メソッド差し替えやズーム連動などのリグレッションを最小化できる。
-        tabPane = new DiagramTabPane(cache, status::setText,
-                previewPanel, sourcePanel, e -> chooseAndExport());
-        rightTabs = new JTabbedPane();
-        rightTabs.addTab("Preview", tabPane);
-        rightTabs.addTab("Manifest Summary", manifestSummaryPanel);
-        rightTabs.addTab("Impact", impactPanel);
-        rightTabs.addTab("References", referencesPanel);
-        dynamicTabsIndex = rightTabs.indexOfComponent(tabPane);
+        // 右側: 1 層のフラットタブバー
+        // [Home] [動的タブ…] [Manifest] [Impact] [References]
+        mainTabs = new JTabbedPane(JTabbedPane.TOP);
+
+        // Home タブ: 共有の previewPanel / sourcePanel を JSplitPane で上下に配置
+        JSplitPane homeSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                new JScrollPane(previewPanel), sourcePanel);
+        homeSplit.setResizeWeight(0.85);
+        mainTabs.addTab("Home", homeSplit);
+
+        // ユーティリティタブ (固定・末尾 3 本)
+        mainTabs.addTab("Manifest", manifestSummaryPanel);
+        mainTabs.addTab("Impact", impactPanel);
+        mainTabs.addTab("References", referencesPanel);
+
+        // 動的タブマネージャ (fixedSuffix=3 で Manifest/Impact/References の手前に挿入)
+        tabPane = new DiagramTabPane(mainTabs, 3, cache, status::setText);
+
+        // Home タブが表示された後に divider 位置を相対値でセット
+        mainTabs.addChangeListener(ev -> {
+            if (mainTabs.getSelectedIndex() == 0) {
+                javax.swing.SwingUtilities.invokeLater(
+                        () -> homeSplit.setDividerLocation(0.85));
+            }
+        });
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
-                treePanel, rightTabs);
+                treePanel, mainTabs);
         split.setResizeWeight(0.22);
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
@@ -743,6 +754,13 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
+    /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
+    private void showHomeTab() {
+        if (mainTabs != null && mainTabs.getSelectedIndex() != 0) {
+            mainTabs.setSelectedIndex(0);
+        }
+    }
+
     private JToolBar buildDiagramKindToolBar() {
         JToolBar bar = new JToolBar();
         bar.setFloatable(false);
@@ -978,6 +996,7 @@ public class UmlMainFrame extends JFrame {
         }
         status.setText("Scope: package " + pkg);
         updateAvailableDiagrams(DIAGRAMS_PACKAGE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1005,6 +1024,7 @@ public class UmlMainFrame extends JFrame {
         }
         status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
         updateAvailableDiagrams(DIAGRAMS_JAVA_TYPE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1025,6 +1045,7 @@ public class UmlMainFrame extends JFrame {
         }
         status.setText("Scope: module " + module);
         updateAvailableDiagrams(DIAGRAMS_MODULE);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1111,6 +1132,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         updateAvailableDiagrams(DIAGRAMS_ANDROID);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1135,6 +1157,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         updateAvailableDiagrams(DIAGRAMS_METHOD);
+        showHomeTab();
         refreshDiagram();
     }
 
@@ -1149,12 +1172,8 @@ public class UmlMainFrame extends JFrame {
         }
         if (tabPane != null) {
             tabPane.addOrFocusTab(req);
-            if (rightTabs != null && dynamicTabsIndex >= 0) {
-                rightTabs.setSelectedIndex(dynamicTabsIndex);
-            }
             return;
         }
-        // フォールバック: タブパネル未配線時は現在ビューを差し替えるのみ
         applyOpenRequest(req);
     }
 
@@ -1203,6 +1222,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         updateAvailableDiagrams(DIAGRAMS_METHOD);
+        showHomeTab();
         refreshDiagram();
     }
 

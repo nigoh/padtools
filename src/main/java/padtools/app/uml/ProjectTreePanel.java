@@ -94,12 +94,23 @@ public class ProjectTreePanel extends JPanel {
             @Override
             public void mousePressed(MouseEvent e) {
                 maybeShowPopup(e);
-                maybeOpenInNewTab(e);
+                // 中クリックは mousePressed で捕捉する (プラットフォーム互換性のため)
+                if (javax.swing.SwingUtilities.isMiddleMouseButton(e)) {
+                    maybeOpenInNewTab(e);
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 maybeShowPopup(e);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // ダブルクリックで新しいタブに開く (左ボタンのみ)
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
+                    maybeOpenInNewTab(e);
+                }
             }
         });
         tree.setCellRenderer(new ProjectTreeCellRenderer());
@@ -340,9 +351,6 @@ public class ProjectTreePanel extends JPanel {
      * 中クリックはツリーの選択を変えない (Web ブラウザの挙動に合わせる)。
      */
     private void maybeOpenInNewTab(MouseEvent e) {
-        if (!javax.swing.SwingUtilities.isMiddleMouseButton(e)) {
-            return;
-        }
         if (onOpenInNewTab == null) {
             return;
         }

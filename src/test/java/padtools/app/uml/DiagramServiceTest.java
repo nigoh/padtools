@@ -14,6 +14,7 @@ import padtools.core.formats.uml.JavaStructureExtractor;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -202,6 +203,29 @@ public class DiagramServiceTest {
         AndroidProjectAnalysis a = analysisWithLayout();
         DiagramService.generatePuml(new DiagramRequest(DiagramKind.LAYOUT),
                 a, sampleClasses());
+    }
+
+    @Test
+    public void testInheritanceDiagram() {
+        List<JavaClassInfo> classes = new ArrayList<>();
+        classes.addAll(JavaStructureExtractor.extract(
+                "package com.a; interface Runnable { void run(); }"));
+        classes.addAll(JavaStructureExtractor.extract(
+                "package com.a; class Animal { void breathe() {} }"));
+        classes.addAll(JavaStructureExtractor.extract(
+                "package com.a; class Dog extends Animal implements Runnable {"
+                        + " public void run() {} }"));
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.INHERITANCE),
+                sampleAnalysis(), classes);
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("top to bottom direction"));
+        assertTrue(puml, puml.contains("<|--"));   // extends
+        assertTrue(puml, puml.contains("<|.."));   // implements
+        assertFalse(puml, puml.contains("breathe")); // メソッドは出ない
+        assertFalse(puml, puml.contains(" --> "));   // 利用関係は出ない
     }
 
     @Test

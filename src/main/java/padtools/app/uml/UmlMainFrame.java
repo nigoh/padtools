@@ -794,6 +794,7 @@ public class UmlMainFrame extends JFrame {
             case DEPENDENCY: return "Dependency";
             case MANIFEST: return "Manifest";
             case LAYOUT: return "Layout";
+            case INHERITANCE: return "Inherit";
             default: return k.getDisplayName();
         }
     }
@@ -1653,7 +1654,8 @@ public class UmlMainFrame extends JFrame {
             @Override
             protected RenderResult doInBackground() {
                 try {
-                    boolean wantLinks = (kind == DiagramKind.CLASS);
+                    boolean wantLinks = (kind == DiagramKind.CLASS
+                            || kind == DiagramKind.INHERITANCE);
                     DiagramRequest req;
                     if (kind == DiagramKind.SEQUENCE && entry != null) {
                         req = buildSequenceRequest(entry);

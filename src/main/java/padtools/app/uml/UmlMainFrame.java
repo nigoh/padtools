@@ -152,6 +152,7 @@ public class UmlMainFrame extends JFrame {
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
         previewPanel.setOnLinkClick(this::onPreviewLinkClick);
+        previewPanel.setCopyFeedbackListener(msg -> status.setText(msg));
         treePanel.setOnMethodSelected(this::onTreeMethodSelected);
         treePanel.setOnActivityMethodSelected(this::onTreeActivityMethodSelected);
         treePanel.setOnClassSelected(this::onTreeClassSelected);
@@ -1718,6 +1719,7 @@ public class UmlMainFrame extends JFrame {
                     previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
                             r.svg.getWidth(), r.svg.getHeight());
                     previewPanel.setLinkAreas(r.svg.getLinkAreas());
+                    previewPanel.setTextItems(r.svg.getTextItems());
                     sourcePanel.setText(r.puml);
                     status.setText(kind.getDisplayName() + " rendered ("
                             + (int) Math.round(r.svg.getWidth()) + "x"

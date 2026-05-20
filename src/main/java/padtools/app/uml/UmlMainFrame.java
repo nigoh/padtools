@@ -922,12 +922,15 @@ public class UmlMainFrame extends JFrame {
     // --- イベント処理 ---------------------------------------------------------
 
     private void chooseProject() {
-        JFileChooser fc = new JFileChooser();
-        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        fc.setDialogTitle("Open Android / Gradle project");
-        int r = fc.showOpenDialog(this);
-        if (r == JFileChooser.APPROVE_OPTION) {
-            loadProject(fc.getSelectedFile());
+        java.util.List<padtools.ProjectRecord> records;
+        try {
+            records = padtools.ProjectRepository.getInstance().listRecent(10);
+        } catch (RuntimeException ex) {
+            records = java.util.Collections.emptyList();
+        }
+        File chosen = OpenProjectDialog.show(this, records);
+        if (chosen != null) {
+            loadProject(chosen);
         }
     }
 

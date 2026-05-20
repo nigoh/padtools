@@ -71,7 +71,7 @@ public final class PlantUmlCallGraphDiagram {
 
         // 起点ルートノード (WBS depth 1)
         sb.append("*[").append(opts.entryColor).append("] ")
-          .append(entryClass).append(".").append(entryMethod).append("()\n");
+          .append(kindTag(entryCls.getKind())).append(entryClass).append(".").append(entryMethod).append("()\n");
 
         // DFS パス (循環検出のための祖先集合)
         Set<String> path = new LinkedHashSet<>();
@@ -86,6 +86,7 @@ public final class PlantUmlCallGraphDiagram {
             sb.append("  ").append(opts.projectColor).append(" プロジェクト内クラス\n");
             sb.append("  (white) 外部 / 未解決クラス\n");
             sb.append("  [↩] 再帰 / 循環呼び出し\n");
+            sb.append("  [C] クラス / [I] インタフェース\n");
             sb.append("end legend\n");
         }
 
@@ -131,8 +132,10 @@ public final class PlantUmlCallGraphDiagram {
 
             // クラスノード
             if (isProject) {
+                JavaClassInfo calleeCls = bySimpleName.get(calleeClass);
+                String tag = calleeCls != null ? kindTag(calleeCls.getKind()) : "";
                 sb.append(classIndent).append("[").append(opts.projectColor).append("] ")
-                  .append(calleeClass).append("\n");
+                  .append(tag).append(calleeClass).append("\n");
             } else {
                 sb.append(classIndent).append(" ").append(calleeClass).append("\n");
             }
@@ -210,6 +213,13 @@ public final class PlantUmlCallGraphDiagram {
 
     private static String nodeKey(String cls, String method) {
         return cls + "." + method;
+    }
+
+    private static String kindTag(JavaClassInfo.Kind kind) {
+        if (kind == JavaClassInfo.Kind.INTERFACE || kind == JavaClassInfo.Kind.AIDL_INTERFACE) {
+            return "[I] ";
+        }
+        return "[C] ";
     }
 
     private static Map<String, JavaClassInfo> buildSimpleNameIndex(List<JavaClassInfo> classes) {

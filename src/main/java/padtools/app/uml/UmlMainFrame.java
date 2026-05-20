@@ -46,6 +46,7 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.EnumSet;
 import java.util.List;
 
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
@@ -697,6 +698,51 @@ public class UmlMainFrame extends JFrame {
         return bar;
     }
 
+    // ── ノード種別ごとに押下可能な図種セット ──────────────────────
+    private static final EnumSet<DiagramKind> DIAGRAMS_ALL =
+            EnumSet.allOf(DiagramKind.class);
+    /** 構造ノード (Module): モジュール図・クラス図・パッケージ図・依存図・コンポーネント図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_MODULE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.MODULE,
+            DiagramKind.DEPENDENCY, DiagramKind.COMPONENT, DiagramKind.COMMON);
+    /** 構造ノード (Package): クラス図・パッケージ図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_PACKAGE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.COMMON);
+    /** Java 型ノード (Class / Interface / Enum / Annotation / AIDL): クラス図・共通クラス */
+    private static final EnumSet<DiagramKind> DIAGRAMS_JAVA_TYPE = EnumSet.of(
+            DiagramKind.CLASS, DiagramKind.COMMON);
+    /** メソッドノード: シーケンス図・アクティビティ図 */
+    private static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
+            DiagramKind.SEQUENCE, DiagramKind.ACTIVITY);
+    /** Android ノード (Manifest / コンポーネント / Permission / Feature): Manifest 図・コンポーネント図 */
+    private static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
+            DiagramKind.MANIFEST, DiagramKind.COMPONENT);
+
+    /**
+     * ノード選択に応じてツールバーの図種ボタンを有効/無効化する。
+     *
+     * <p>{@code allowed} に含まれない図種のボタンは押下不可になる。
+     * 現在の選択図種が無効になった場合、{@code allowed} の先頭図種に自動切替する。</p>
+     */
+    private void updateAvailableDiagrams(EnumSet<DiagramKind> allowed) {
+        for (java.util.Map.Entry<DiagramKind, JToggleButton> e : diagramToggles.entrySet()) {
+            e.getValue().setEnabled(allowed.contains(e.getKey()));
+        }
+        if (!allowed.contains(currentKind)) {
+            DiagramKind fallback = allowed.iterator().next();
+            currentKind = fallback;
+            JToggleButton btn = diagramToggles.get(fallback);
+            if (btn != null) {
+                btn.setSelected(true);
+            }
+            JRadioButtonMenuItem item = diagramItems.get(fallback);
+            if (item != null) {
+                item.setSelected(true);
+            }
+            refreshDiagram();
+        }
+    }
+
     private JToolBar buildDiagramKindToolBar() {
         JToolBar bar = new JToolBar();
         bar.setFloatable(false);
@@ -931,6 +977,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: package " + pkg);
+        updateAvailableDiagrams(DIAGRAMS_PACKAGE);
         refreshDiagram();
     }
 
@@ -940,6 +987,7 @@ public class UmlMainFrame extends JFrame {
      */
     private void onTreeClassSelected(JavaClassInfo cls) {
         if (cls == null) {
+            updateAvailableDiagrams(DIAGRAMS_ALL);
             return;
         }
         String fqn = cls.getQualifiedName();
@@ -956,6 +1004,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
+        updateAvailableDiagrams(DIAGRAMS_JAVA_TYPE);
         refreshDiagram();
     }
 
@@ -975,6 +1024,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: module " + module);
+        updateAvailableDiagrams(DIAGRAMS_MODULE);
         refreshDiagram();
     }
 
@@ -1060,6 +1110,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_ANDROID);
         refreshDiagram();
     }
 
@@ -1083,6 +1134,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_METHOD);
         refreshDiagram();
     }
 
@@ -1150,6 +1202,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
+        updateAvailableDiagrams(DIAGRAMS_METHOD);
         refreshDiagram();
     }
 

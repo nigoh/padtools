@@ -122,12 +122,6 @@ public class UmlMainFrame extends JFrame {
     private String currentNavigationKey;
     /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
     private DiagramScope currentScope;
-    /** ドリルダウン履歴 (戻る用)。null スコープは {@link #SCOPE_NULL_MARKER} で保持。 */
-    private final java.util.Deque<DiagramScope> scopeHistory = new java.util.ArrayDeque<>();
-    /** Back の対になる進む履歴。Back を実行したときに現在スコープがここに積まれる。 */
-    private final java.util.Deque<DiagramScope> forwardHistory = new java.util.ArrayDeque<>();
-    /** null スコープを Deque に保持するためのセンチネル (Deque は null 要素不可)。 */
-    private static final DiagramScope SCOPE_NULL_MARKER = DiagramScope.builder().build();
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
     /**
@@ -399,52 +393,7 @@ public class UmlMainFrame extends JFrame {
         m.add(zoomOut);
         m.add(zoomReset);
         m.add(zoomFit);
-        m.addSeparator();
-        JMenuItem back = new JMenuItem("Back");
-        back.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT,
-                MENU_MASK | InputEvent.ALT_DOWN_MASK));
-        back.addActionListener(e -> popScopeHistory());
-        m.add(back);
-        JMenuItem forward = new JMenuItem("Forward");
-        forward.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT,
-                MENU_MASK | InputEvent.ALT_DOWN_MASK));
-        forward.addActionListener(e -> popForwardHistory());
-        m.add(forward);
         return m;
-    }
-
-    /** Deque に保存可能な値に変換する (null → センチネル)。 */
-    private static DiagramScope encodeScope(DiagramScope scope) {
-        return scope == null ? SCOPE_NULL_MARKER : scope;
-    }
-
-    /** Deque から取り出した値を元のスコープ (null 可) に戻す。 */
-    private static DiagramScope decodeScope(DiagramScope scope) {
-        return scope == SCOPE_NULL_MARKER ? null : scope;
-    }
-
-    /** ドリルダウン履歴を 1 段戻す。空のときは無視。 */
-    private void popScopeHistory() {
-        if (scopeHistory.isEmpty()) {
-            status.setText("No drill-down history.");
-            return;
-        }
-        forwardHistory.push(encodeScope(currentScope));
-        currentScope = decodeScope(scopeHistory.pop());
-        status.setText("Back to previous scope.");
-        refreshDiagram();
-    }
-
-    /** Back で積まれた forward 履歴を 1 段進める。空のときは無視。 */
-    private void popForwardHistory() {
-        if (forwardHistory.isEmpty()) {
-            status.setText("No forward history.");
-            return;
-        }
-        scopeHistory.push(encodeScope(currentScope));
-        currentScope = decodeScope(forwardHistory.pop());
-        status.setText("Forward to next scope.");
-        refreshDiagram();
     }
 
     private JMenu buildStyleMenu() {
@@ -610,7 +559,6 @@ public class UmlMainFrame extends JFrame {
                         + "    表示される箇所はクリックで詳細表示に切り替わります。\n"
                         + "    ※ アイコンが出ない箇所はクリック対象ではありません。\n"
                         + "  - 右クリックでポップアップメニュー (関連図への遷移など)。\n"
-                        + "  - View > Back (Alt+←) で 1 段戻る。\n"
                         + "\n"
                         + "■ 絞り込み / 検索\n"
                         + "  - Diagram > Search Entities... (" + mod + "+Shift+F): クラス/メソッドを検索。\n"
@@ -665,7 +613,7 @@ public class UmlMainFrame extends JFrame {
      * <p>2 段構成:
      * <ol>
      *   <li>上段: ファイル / 表示 / 検索など頻用操作のボタン群
-     *       (Open / Save / Refresh / Back / Search / Scope / Zoom 各種)。
+     *       (Open / Save / Refresh / Search / Scope / Zoom 各種)。
      *       すべてのアクションはメニュー側と同じハンドラを呼び出し、
      *       メニュー側で設定したショートカットも引き続き使用可能。</li>
      *   <li>下段: 図種切替のトグルボタン (Class / Package / Sequence / Activity /
@@ -690,23 +638,8 @@ public class UmlMainFrame extends JFrame {
         bar.add(makeButton("Save", "Save diagram (Ctrl+S)", e -> chooseAndExport()));
         bar.add(makeButton("Refresh", "Refresh diagram (F5)", e -> refreshDiagram()));
         bar.addSeparator();
-        bar.add(makeButton("Back", "Back to previous scope (Alt+←)",
-                e -> popScopeHistory()));
         bar.add(makeButton("Search", "Search entities (Ctrl+Shift+F)",
                 e -> openEntitySearch()));
-        bar.add(makeButton("Scope", "Edit diagram scope", e -> openScopeDialog()));
-        bar.add(makeButton("Clear Scope", "Clear current scope filter", e -> {
-            currentScope = null;
-            refreshDiagram();
-        }));
-        bar.addSeparator();
-        bar.add(makeButton("Zoom In", "Zoom in (Ctrl+=)", e -> previewPanel.zoomIn()));
-        bar.add(makeButton("Zoom Out", "Zoom out (Ctrl+-)",
-                e -> previewPanel.zoomOut()));
-        bar.add(makeButton("100%", "Reset zoom (Ctrl+0)",
-                e -> previewPanel.zoomReset()));
-        bar.add(makeButton("Fit", "Zoom to fit (Ctrl+F)",
-                e -> previewPanel.zoomToFit()));
         return bar;
     }
 
@@ -1243,17 +1176,10 @@ public class UmlMainFrame extends JFrame {
         drillDownToClass(fqn);
     }
 
-    /**
-     * 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。
-     * 現在のスコープは履歴に push され、Back メニューで戻せる。
-     */
     private void drillDownToClass(String fqn) {
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        scopeHistory.push(encodeScope(currentScope));
-        // 新規ドリルダウン時は forward 履歴をクリア (ブラウザ動作と同じ)
-        forwardHistory.clear();
         DiagramScope.Builder b = DiagramScope.builder()
                 .seed(fqn).neighborHops(1);
         DiagramPreset.DETAILED.applyTo(b);

@@ -450,15 +450,16 @@ public class UmlMainFrame extends JFrame {
                         StyleSettingsDialog.ClassDiagramPrefs.parseCsv(
                                 setting.getClassDiagramHiddenAnnotations()))
                 : StyleSettingsDialog.ClassDiagramPrefs.defaults();
+        int curCallGraphDepth = setting != null ? setting.getCallGraphMaxDepth() : 4;
         StyleSettingsDialog.Result edited = StyleSettingsDialog.showDialog(
                 this, PlantUmlRenderer.getStyle(), curShow, curStyle,
-                curPlacement, curQualify, curClass);
+                curPlacement, curQualify, curClass, curCallGraphDepth);
         if (edited != null) {
             applyStyleSettings(edited);
         }
     }
 
-    /** Style ダイアログ結果 (Style + シーケンス図設定 + クラス図設定) を反映する。 */
+    /** Style ダイアログ結果 (Style + シーケンス図設定 + クラス図設定 + コールグラフ設定) を反映する。 */
     private void applyStyleSettings(StyleSettingsDialog.Result r) {
         try {
             padtools.Setting setting = Main.getSetting();
@@ -467,6 +468,7 @@ public class UmlMainFrame extends JFrame {
                 setting.setSequenceCommentStyle(r.sequenceCommentStyle.name());
                 setting.setSequenceCommentPlacement(r.sequenceCommentPlacement.name());
                 setting.setSequenceQualifyMethodNames(r.sequenceQualifyMethodNames);
+                setting.setCallGraphMaxDepth(r.callGraphMaxDepth);
                 if (r.classDiagram != null) {
                     StyleSettingsDialog.ClassDiagramPrefs cp = r.classDiagram;
                     setting.setClassDiagramShowFields(cp.showFields);

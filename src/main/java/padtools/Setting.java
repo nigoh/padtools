@@ -61,6 +61,9 @@ public class Setting {
     /** 非表示アノテーション名の CSV (例: "Override,SuppressWarnings")。 */
     private String classDiagramHiddenAnnotations = "Override,SuppressWarnings";
 
+    /** コールグラフの最大追跡階層数 (1〜10)。 */
+    private int callGraphMaxDepth = 4;
+
     public int getWindowX() { return windowX; }
     public void setWindowX(int windowX) { this.windowX = windowX; }
     public int getWindowY() { return windowY; }
@@ -115,6 +118,11 @@ public class Setting {
     public String getClassDiagramHiddenAnnotations() { return classDiagramHiddenAnnotations; }
     public void setClassDiagramHiddenAnnotations(String v) {
         this.classDiagramHiddenAnnotations = v == null ? "" : v;
+    }
+
+    public int getCallGraphMaxDepth() { return callGraphMaxDepth; }
+    public void setCallGraphMaxDepth(int v) {
+        this.callGraphMaxDepth = Math.max(1, Math.min(10, v));
     }
 
     /** 永続化済みの値から {@link DiagramStyle} を組み立てて返す。 */
@@ -181,6 +189,7 @@ public class Setting {
                 Integer.toString(classDiagramCommentMaxLength));
         props.setProperty("classDiagram.hiddenAnnotations",
                 classDiagramHiddenAnnotations);
+        props.setProperty("callGraph.maxDepth", Integer.toString(callGraphMaxDepth));
 
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
             props.storeToXML(bos, "PadTools Settings");
@@ -239,6 +248,7 @@ public class Setting {
         s.classDiagramHiddenAnnotations = stringOrDefault(
                 props.getProperty("classDiagram.hiddenAnnotations"),
                 "Override,SuppressWarnings");
+        s.callGraphMaxDepth = parseIntSafe(props.getProperty("callGraph.maxDepth"), 4);
 
         return s;
     }

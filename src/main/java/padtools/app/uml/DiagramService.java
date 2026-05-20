@@ -270,10 +270,28 @@ public final class DiagramService {
                         ? promoteToDetailed(classes, index) : classes;
                 PlantUmlCallGraphDiagram.Options o = new PlantUmlCallGraphDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
+                applyCallGraphSettings(o);
                 return PlantUmlCallGraphDiagram.generate(source, cls, method, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());
+        }
+    }
+
+    /**
+     * コールグラフの最大深さ設定を {@link padtools.SettingManager} から読み出して反映する。
+     */
+    private static void applyCallGraphSettings(PlantUmlCallGraphDiagram.Options o) {
+        try {
+            padtools.Setting s = padtools.SettingManager.getInstance().getSetting();
+            if (s == null) {
+                return;
+            }
+            int depth = s.getCallGraphMaxDepth();
+            if (depth > 0) {
+                o.maxDepth = depth;
+            }
+        } catch (RuntimeException ignored) {
         }
     }
 

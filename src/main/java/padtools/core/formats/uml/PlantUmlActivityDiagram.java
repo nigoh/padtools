@@ -29,6 +29,8 @@ public final class PlantUmlActivityDiagram {
         public int commentMaxLength = 80;
         /** コメント色 (PlantUML の {@code <color:#RRGGBB>} 値)。null/空で色付け無効。 */
         public String commentColor = "#008800";
+        /** ラムダ/匿名クラスのコールバック本体を partition ブロックに展開する。 */
+        public boolean expandInlineCallbacks = true;
     }
 
     /** {@link #listCandidates(List)} の戻り値要素。 */
@@ -171,6 +173,38 @@ public final class PlantUmlActivityDiagram {
                 : rcv + "." + name + "()";
         out.append(indent).append(':').append(escapeAction(text, opts.commentMaxLength))
                 .append(";\n");
+
+        if (opts.expandInlineCallbacks && !call.getInlineMethods().isEmpty()) {
+            for (JavaMethodInfo inline : call.getInlineMethods()) {
+                // 汎用 SAM 名 (<inline>/accept/test 等) の場合は呼び出し元メソッド名をラベルに使う
+                String samLabel = isGenericSamName(inline.getName()) ? name : inline.getName();
+                String partLabel = name + " → " + samLabel + "()";
+                String inner = indent + "  ";
+                out.append(indent).append("partition \"")
+                        .append(escapeQuoted(partLabel)).append("\" {\n");
+                if (inline.getStatements().isEmpty()) {
+                    out.append(inner).append(':')
+                            .append(escapeAction(samLabel + "()", opts.commentMaxLength))
+                            .append(";\n");
+                } else {
+                    walkStatements(inline.getStatements(), out, inner, opts);
+                }
+                out.append(indent).append("}\n");
+            }
+        }
+    }
+
+    private static boolean isGenericSamName(String name) {
+        if (name == null) {
+            return true;
+        }
+        switch (name) {
+            case "<inline>": case "accept": case "test": case "apply":
+            case "get": case "getAsInt": case "getAsLong": case "getAsDouble":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static boolean emitReturn(JavaMethodInfo.Return r, StringBuilder out,
@@ -387,7 +421,7 @@ public final class PlantUmlActivityDiagram {
         out.append("while/endwhile  ループ (while / for)\n");
         out.append("repeat/repeat while  do-while ループ\n");
         out.append("switch/case   多分岐\n");
-        out.append("partition     try/catch/finally / synchronized ブロック\n");
+        out.append("partition     try/catch/finally / synchronized / コールバック展開ブロック\n");
         out.append("stop          正常終端 (return)\n");
         out.append("kill (x印)    例外送出 (throw)\n");
         out.append("endlegend\n");

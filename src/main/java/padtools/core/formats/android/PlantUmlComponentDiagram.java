@@ -43,6 +43,9 @@ public final class PlantUmlComponentDiagram {
             out.append("title ").append(o.title).append('\n');
         }
         Map<String, String> aliasByFqn = new LinkedHashMap<>();
+        // モジュール順と各モジュールの最初のエイリアスを追跡（縦積み用）
+        List<String> moduleOrder = new java.util.ArrayList<>();
+        Map<String, String> firstAliasByModule = new LinkedHashMap<>();
         int seq = 0;
         boolean any = false;
         for (Map.Entry<String, List<AndroidManifestInfo>> e
@@ -67,6 +70,7 @@ public final class PlantUmlComponentDiagram {
                     }
                     String alias = "K" + (seq++);
                     aliasByFqn.put(fqn, alias);
+                    firstAliasByModule.putIfAbsent(moduleName, alias);
                     String stereo = "<<" + c.getKind().label() + ">>";
                     String indent = o.groupByModule ? "  " : "";
                     out.append(indent).append("component \"").append(fqn)
@@ -87,6 +91,17 @@ public final class PlantUmlComponentDiagram {
             }
             if (o.groupByModule) {
                 out.append("}\n");
+            }
+            moduleOrder.add(moduleName);
+        }
+        // 無接続モジュールが横に広がるのを防ぐ: 連続モジュール間に隠しリンクを追加
+        if (o.groupByModule && moduleOrder.size() > 1) {
+            for (int i = 1; i < moduleOrder.size(); i++) {
+                String prevAlias = firstAliasByModule.get(moduleOrder.get(i - 1));
+                String currAlias = firstAliasByModule.get(moduleOrder.get(i));
+                if (prevAlias != null && currAlias != null) {
+                    out.append(prevAlias).append(" -[hidden]-> ").append(currAlias).append('\n');
+                }
             }
         }
         if (!any) {

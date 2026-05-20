@@ -122,6 +122,12 @@ public final class PlantUmlClassDiagram {
          * 継承階層図のように親クラスを上・子クラスを下に並べたい場合に使う。既定 false。
          */
         public boolean topToBottomDirection = false;
+        /**
+         * {@link #topToBottomDirection} が true の場合に、同一親を持つ兄弟ノードを
+         * 指定数ごとに折り返す。超えた分は隠しリンクで次の行（ランク）に押し出す。
+         * 0 以下で無制限 (折り返しなし)。
+         */
+        public int maxSiblingsPerRow = 0;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -239,6 +245,9 @@ public final class PlantUmlClassDiagram {
         if (o.showInheritance || o.showImplementations) {
             for (JavaClassInfo c : classes) {
                 emitInheritance(out, c, o, aliasByQn, qnBySimple);
+            }
+            if (o.topToBottomDirection && o.maxSiblingsPerRow > 0) {
+                emitSiblingWrapHints(out, classes, aliasByQn, qnBySimple, o);
             }
         }
         if (o.showUsageRelations) {
@@ -718,6 +727,39 @@ public final class PlantUmlClassDiagram {
             for (String iface : c.getInterfaces()) {
                 String parent = relationId(simplifyTypeRef(iface), aliasByQn, qnBySimple);
                 out.append(parent).append(" <|.. ").append(me).append('\n');
+            }
+        }
+    }
+
+    /**
+     * topToBottomDirection 時に同一親を持つ兄弟ノードが横に広がりすぎるのを防ぐため、
+     * {@link Options#maxSiblingsPerRow} 個ごとに隠しリンク ({@code -[hidden]->}) を挿入する。
+     *
+     * <p>グループ末尾 → 次グループ先頭 に hidden リンクを打つことで、
+     * Graphviz/Smetana のランク割り当てが次グループを強制的に下のランクに押し出す。</p>
+     */
+    private static void emitSiblingWrapHints(
+            StringBuilder out, List<JavaClassInfo> classes,
+            java.util.Map<String, String> aliasByQn,
+            java.util.Map<String, String> qnBySimple,
+            Options o) {
+        // parent alias → 子エイリアスの順序リスト (extends のみ追跡)
+        java.util.Map<String, List<String>> childrenByParent = new java.util.LinkedHashMap<>();
+        for (JavaClassInfo c : classes) {
+            if (!o.showInheritance) break;
+            if (c.getSuperClass() == null || c.getSuperClass().isEmpty()) continue;
+            String childAlias = aliasByQn.get(c.getQualifiedName());
+            if (childAlias == null) continue;
+            String parentId = relationId(simplifyTypeRef(c.getSuperClass()), aliasByQn, qnBySimple);
+            childrenByParent.computeIfAbsent(parentId, k -> new ArrayList<>()).add(childAlias);
+        }
+        for (List<String> siblings : childrenByParent.values()) {
+            if (siblings.size() <= o.maxSiblingsPerRow) continue;
+            int n = o.maxSiblingsPerRow;
+            // グループ境界ごとに hidden リンクを打つ
+            for (int i = n; i < siblings.size(); i += n) {
+                out.append(siblings.get(i - 1)).append(" -[hidden]-> ")
+                   .append(siblings.get(i)).append('\n');
             }
         }
     }

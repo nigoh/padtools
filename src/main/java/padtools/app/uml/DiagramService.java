@@ -256,6 +256,8 @@ public final class DiagramService {
                 o.excludeExternalLibraries = false;
                 o.markAaosCategories = true;
                 o.topToBottomDirection = true;
+                // 兄弟ノードが 5 個を超えたら次の行に折り返す
+                o.maxSiblingsPerRow = 5;
                 o.includeLegend = request.isIncludeLegend();
                 o.interactiveLinks = request.isInteractiveLinks();
                 return PlantUmlClassDiagram.generate(scoped, o);

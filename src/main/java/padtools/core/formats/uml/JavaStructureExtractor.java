@@ -926,6 +926,19 @@ public final class JavaStructureExtractor {
 
         private static String resolveSamMethodName(String type, String nameHint) {
             if (type == null || type.isEmpty()) {
+                // nameHint が set+型名 パターン (例: setOnCheckedChangeListener → OnCheckedChangeListener)
+                // なら型名を抽出して SAM_FALLBACK / 命名規約で解決を再試行する
+                if (nameHint != null && nameHint.length() > 3
+                        && nameHint.startsWith("set")
+                        && Character.isUpperCase(nameHint.charAt(3))) {
+                    return resolveSamMethodName(nameHint.substring(3), null);
+                }
+                // onXxx 形式の nameHint ならそのまま SAM メソッド名として採用
+                if (nameHint != null && nameHint.length() > 2
+                        && nameHint.startsWith("on")
+                        && Character.isUpperCase(nameHint.charAt(2))) {
+                    return nameHint;
+                }
                 return "<inline>";
             }
             // ジェネリックを取り除く

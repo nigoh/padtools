@@ -15,6 +15,7 @@ import padtools.core.formats.uml.JavaFieldInfo;
 import padtools.core.formats.uml.PlantUmlClassDiagram;
 import padtools.core.formats.uml.PlantUmlActivityDiagram;
 import padtools.core.formats.uml.PlantUmlCommonClassesDiagram;
+import padtools.core.formats.uml.PlantUmlModuleDiagram;
 import padtools.core.formats.uml.PlantUmlPackageDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.util.ErrorListener;
@@ -221,6 +222,11 @@ public final class DiagramService {
                         new PlantUmlNavigationGraphDiagram.Options();
                 o.includeLegend = request.isIncludeLegend();
                 return PlantUmlNavigationGraphDiagram.generate(nav, o);
+            }
+            case MODULE: {
+                PlantUmlModuleDiagram.Options o = new PlantUmlModuleDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlModuleDiagram.generate(classes, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());

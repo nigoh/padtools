@@ -382,12 +382,44 @@ public final class PlantUmlSequenceDiagram {
                 emitCall((JavaMethodInfo.Call) s, currentClass, classes,
                         participants, inlineParticipants, participantMethods,
                         body, stack, depth, opts, indent);
+            } else if (s instanceof JavaMethodInfo.Return) {
+                emitReturnStatement((JavaMethodInfo.Return) s,
+                        currentClass.getSimpleName(), body, indent);
+            } else if (s instanceof JavaMethodInfo.Throw) {
+                emitThrowStatement((JavaMethodInfo.Throw) s,
+                        currentClass.getSimpleName(), body, indent);
             } else if (s instanceof JavaMethodInfo.Block) {
                 emitBlock((JavaMethodInfo.Block) s, currentClass, classes,
                         participants, inlineParticipants, participantMethods,
                         body, stack, depth, opts, indent);
             }
         }
+    }
+
+    private static void emitReturnStatement(JavaMethodInfo.Return r,
+                                             String participant,
+                                             StringBuilder body,
+                                             String indent) {
+        String expr = r.getExpression();
+        String text = (expr == null || expr.isEmpty()) ? "return" : "return " + expr;
+        if (text.length() > 80) {
+            text = text.substring(0, 77) + "...";
+        }
+        body.append(indent).append("note over ").append(quote(participant))
+                .append(" : ").append(text).append('\n');
+    }
+
+    private static void emitThrowStatement(JavaMethodInfo.Throw t,
+                                            String participant,
+                                            StringBuilder body,
+                                            String indent) {
+        String expr = t.getExpression();
+        String text = (expr == null || expr.isEmpty()) ? "throw" : "throw " + expr;
+        if (text.length() > 80) {
+            text = text.substring(0, 77) + "...";
+        }
+        body.append(indent).append("note over ").append(quote(participant))
+                .append(" : ").append(text).append('\n');
     }
 
     private static void emitCall(JavaMethodInfo.Call call,

@@ -279,6 +279,8 @@ public final class PlantUmlClassDiagram {
             case "AIDL": return "AIDL ファイル由来のインタフェース";
             case "AaosApi": return "@AddedIn 等の AAOS API アノテーション付きクラス";
             case "aidl": return "AIDL 由来 (補助)";
+            case "record": return "Java 16+ record 宣言";
+            case "sealed": return "sealed クラス/インタフェース (permits で継承先を限定)";
             default: return stereo;
         }
     }
@@ -469,6 +471,7 @@ public final class PlantUmlClassDiagram {
             case ENUM: return "enum";
             case ANNOTATION: return "annotation";
             case AIDL_INTERFACE: return "interface";
+            case RECORD: return "class";
             case CLASS:
             default:
                 return c.isAbstract() ? "abstract class" : "class";
@@ -523,6 +526,12 @@ public final class PlantUmlClassDiagram {
         }
         if (c.getKind() == JavaClassInfo.Kind.AIDL_INTERFACE) {
             parts.add("aidl");
+        }
+        if (c.getKind() == JavaClassInfo.Kind.RECORD) {
+            parts.add("record");
+        }
+        if (c.getModifiers().contains("sealed")) {
+            parts.add("sealed");
         }
         if (o.jetpack != null && o.jetpack.enabled) {
             for (String j : c.getJetpackStereotypes()) {

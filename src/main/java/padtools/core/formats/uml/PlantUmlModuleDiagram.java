@@ -53,6 +53,7 @@ public final class PlantUmlModuleDiagram {
 
         StringBuilder out = new StringBuilder();
         out.append("@startuml\n");
+        out.append("top to bottom direction\n");
         if (o.title != null && !o.title.isEmpty()) {
             out.append("title ").append(o.title).append('\n');
         }

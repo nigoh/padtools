@@ -32,6 +32,7 @@ public final class AndroidSuperclassDetector {
 
     /** 判定種別 (Manifest の {@code AndroidComponentInfo.Kind} とは別 enum)。 */
     public enum ComponentKind {
+        APPLICATION,
         ACTIVITY,
         SERVICE,
         RECEIVER,
@@ -45,6 +46,8 @@ public final class AndroidSuperclassDetector {
     static {
         Map<String, ComponentKind> m = new HashMap<>();
         // FQN マッチ
+        m.put("android.app.Application", ComponentKind.APPLICATION);
+        m.put("androidx.multidex.MultiDexApplication", ComponentKind.APPLICATION);
         m.put("android.app.Activity", ComponentKind.ACTIVITY);
         m.put("androidx.appcompat.app.AppCompatActivity", ComponentKind.ACTIVITY);
         m.put("androidx.fragment.app.FragmentActivity", ComponentKind.ACTIVITY);
@@ -57,6 +60,8 @@ public final class AndroidSuperclassDetector {
         m.put("androidx.fragment.app.Fragment", ComponentKind.FRAGMENT);
         m.put("androidx.fragment.app.DialogFragment", ComponentKind.FRAGMENT);
         // 単純名フォールバック (依存 JAR が走査対象外で super_class が単純名のみのケース)
+        m.put("Application", ComponentKind.APPLICATION);
+        m.put("MultiDexApplication", ComponentKind.APPLICATION);
         m.put("Activity", ComponentKind.ACTIVITY);
         m.put("AppCompatActivity", ComponentKind.ACTIVITY);
         m.put("FragmentActivity", ComponentKind.ACTIVITY);

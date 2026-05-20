@@ -14,6 +14,7 @@ import padtools.core.formats.android.PlantUmlManifestDiagram;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
+import padtools.core.formats.uml.GraphvizLocator;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
 import padtools.core.aaos.AidlBinding;
@@ -59,6 +60,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -78,6 +81,20 @@ public class Main {
      */
     public static void saveSetting() {
         SettingManager.getInstance().save();
+    }
+
+    /** 実行中の jar が置かれているディレクトリを返す。不明なら null。 */
+    private static File detectJarDir() {
+        try {
+            URL loc = Main.class.getProtectionDomain().getCodeSource().getLocation();
+            if (loc == null) {
+                return null;
+            }
+            File f = new File(loc.toURI());
+            return f.isFile() ? f.getParentFile() : f;
+        } catch (URISyntaxException | SecurityException e) {
+            return null;
+        }
     }
 
     /** 指定パスが存在する/読める File を返す。問題があれば stderr に出して System.exit(1)。 */
@@ -117,6 +134,7 @@ public class Main {
         SettingManager.initialize();
         ProjectRepository.initialize();
         PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());
+        GraphvizLocator.init(detectJarDir());
 
         //オプション定義
         final Option optHelp = new Option("h", "help", false);

@@ -117,6 +117,11 @@ public final class PlantUmlClassDiagram {
          * 既定 false (全可視性を表示)。
          */
         public boolean publicOnly = false;
+        /**
+         * {@code top to bottom direction} を図冒頭に出力する。
+         * 継承階層図のように親クラスを上・子クラスを下に並べたい場合に使う。既定 false。
+         */
+        public boolean topToBottomDirection = false;
     }
 
     private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
@@ -170,6 +175,9 @@ public final class PlantUmlClassDiagram {
         }
         StringBuilder out = new StringBuilder();
         out.append("@startuml\n");
+        if (o.topToBottomDirection) {
+            out.append("top to bottom direction\n");
+        }
         if (o.title != null && !o.title.isEmpty()) {
             out.append("title ").append(o.title).append('\n');
         }

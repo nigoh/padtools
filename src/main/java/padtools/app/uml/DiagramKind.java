@@ -28,7 +28,9 @@ public enum DiagramKind {
     /** Navigation 図 — res/navigation/*.xml の画面遷移を State 図として可視化。 */
     NAVIGATION("Navigation Graph"),
     /** モジュール依存グラフ — module-info.java の requires/exports/opens を可視化。 */
-    MODULE("Module Diagram");
+    MODULE("Module Diagram"),
+    /** 継承図 — extends/implements 階層のみをツリー状に表示。クラス名・型種別のみ出力。 */
+    INHERITANCE("Inheritance Diagram");
 
     private final String displayName;
 

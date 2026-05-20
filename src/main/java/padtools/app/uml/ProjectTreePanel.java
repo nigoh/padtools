@@ -104,6 +104,7 @@ public class ProjectTreePanel extends JPanel {
         });
         tree.setCellRenderer(new ProjectTreeCellRenderer());
         add(new JScrollPane(tree), BorderLayout.CENTER);
+        add(new TreeIconLegendPanel(), BorderLayout.SOUTH);
     }
 
     public void setOnClassSelected(java.util.function.Consumer<JavaClassInfo> listener) {
@@ -488,7 +489,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** モジュール名を保持するノード値。 */
-    private static final class ModuleEntry {
+    static final class ModuleEntry {
         final String name;
 
         ModuleEntry(String name) {
@@ -502,7 +503,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** パッケージ情報。expanded フラグと、遅延構築用に対象クラス一覧を保持する。 */
-    private static final class PackageEntry {
+    static final class PackageEntry {
         final String name;
         final int count;
         final List<JavaClassInfo> classes;
@@ -521,7 +522,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** クラス情報を保持するノード値。表示はシンプル名のみ。 */
-    private static final class ClassEntry {
+    static final class ClassEntry {
         final JavaClassInfo info;
         boolean expanded;
 
@@ -544,7 +545,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** メソッド情報を保持するノード値。シーケンス図起点として使える。 */
-    private static final class MethodEntry {
+    static final class MethodEntry {
         final JavaClassInfo owner;
         final JavaMethodInfo method;
 
@@ -602,7 +603,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** AndroidManifest.xml 単位のノード値。表示は sourceSet とパッケージ名。 */
-    private static final class ManifestEntry {
+    static final class ManifestEntry {
         final AndroidManifestInfo info;
 
         ManifestEntry(AndroidManifestInfo info) {
@@ -623,7 +624,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** Activities/Services/Receivers/Providers/Permissions/Features のグループ見出し。 */
-    private static final class ComponentGroupEntry {
+    static final class ComponentGroupEntry {
         final String label;
         final int count;
 
@@ -639,7 +640,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** Manifest 配下の Activity / Service / Receiver / Provider ノード値。 */
-    private static final class ComponentEntry {
+    static final class ComponentEntry {
         final AndroidComponentInfo info;
 
         ComponentEntry(AndroidComponentInfo info) {
@@ -675,7 +676,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** uses-permission ノード値。 */
-    private static final class PermissionEntry {
+    static final class PermissionEntry {
         final AndroidPermissionInfo info;
 
         PermissionEntry(AndroidPermissionInfo info) {
@@ -689,7 +690,7 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /** uses-feature ノード値。 */
-    private static final class FeatureEntry {
+    static final class FeatureEntry {
         final String name;
 
         FeatureEntry(String name) {

@@ -17,6 +17,7 @@ import padtools.core.formats.uml.PlantUmlActivityDiagram;
 import padtools.core.formats.uml.PlantUmlCommonClassesDiagram;
 import padtools.core.formats.uml.PlantUmlModuleDiagram;
 import padtools.core.formats.uml.PlantUmlPackageDiagram;
+import padtools.core.formats.uml.PlantUmlCallGraphDiagram;
 import padtools.core.formats.uml.PlantUmlSequenceDiagram;
 import padtools.util.ErrorListener;
 
@@ -257,6 +258,19 @@ public final class DiagramService {
                 o.includeLegend = request.isIncludeLegend();
                 o.interactiveLinks = request.isInteractiveLinks();
                 return PlantUmlClassDiagram.generate(scoped, o);
+            }
+            case CALLGRAPH: {
+                String cls = request.getSequenceEntryClass();
+                String method = request.getSequenceEntryMethod();
+                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Call graph diagram requires entry Class.method");
+                }
+                List<JavaClassInfo> source = classes != null
+                        ? promoteToDetailed(classes, index) : classes;
+                PlantUmlCallGraphDiagram.Options o = new PlantUmlCallGraphDiagram.Options();
+                o.includeLegend = request.isIncludeLegend();
+                return PlantUmlCallGraphDiagram.generate(source, cls, method, o);
             }
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());

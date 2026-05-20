@@ -116,6 +116,8 @@ public class UmlMainFrame extends JFrame {
     private String sequenceEntry;
     /** 現在選択されているアクティビティ図起点 ({@code Class.method})。null なら未設定。 */
     private String activityEntry;
+    /** 現在選択されているコールグラフ起点 ({@code Class.method})。null なら未設定。 */
+    private String callGraphEntry;
     /** 現在選択されている Layout 図のキー ({@link AndroidLayoutInfo#getKey()})。null なら未設定。 */
     private String currentLayoutKey;
     /** 現在選択されている Navigation 図のキー ({@link padtools.core.formats.android.AndroidNavigationGraphInfo#getKey()})。null なら未設定。 */
@@ -656,9 +658,9 @@ public class UmlMainFrame extends JFrame {
     /** Java 型ノード (Class / Interface / Enum / Annotation / AIDL): クラス図・共通クラス */
     private static final EnumSet<DiagramKind> DIAGRAMS_JAVA_TYPE = EnumSet.of(
             DiagramKind.CLASS, DiagramKind.COMMON);
-    /** メソッドノード: シーケンス図・アクティビティ図 */
+    /** メソッドノード: シーケンス図・アクティビティ図・コールグラフ */
     private static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
-            DiagramKind.SEQUENCE, DiagramKind.ACTIVITY);
+            DiagramKind.SEQUENCE, DiagramKind.ACTIVITY, DiagramKind.CALLGRAPH);
     /** Android ノード (Manifest / コンポーネント / Permission / Feature): Manifest 図・コンポーネント図 */
     private static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
             DiagramKind.MANIFEST, DiagramKind.COMPONENT);
@@ -723,6 +725,7 @@ public class UmlMainFrame extends JFrame {
             case PACKAGE: return "Package";
             case SEQUENCE: return "Sequence";
             case ACTIVITY: return "Activity";
+            case CALLGRAPH: return "Call Graph";
             case COMMON: return "Common";
             case COMPONENT: return "Component";
             case DEPENDENCY: return "Dependency";
@@ -738,6 +741,7 @@ public class UmlMainFrame extends JFrame {
         switch (k) {
             case SEQUENCE:   return " (choose entry from Diagram menu)";
             case ACTIVITY:   return " (choose method from Diagram menu)";
+            case CALLGRAPH:  return " — shows which functions are called from entry";
             case LAYOUT:     return " (choose layout file from Diagram menu)";
             case NAVIGATION: return " (choose navigation file from Diagram menu)";
             case COMMON:     return " — top-N most referenced classes (fan-in)";
@@ -769,6 +773,15 @@ public class UmlMainFrame extends JFrame {
                 && (activityEntry == null || activityEntry.isEmpty())) {
             if (cache.isLoaded()) {
                 pickActivityEntry();
+            } else {
+                refreshDiagram();
+            }
+            return;
+        }
+        if (kind == DiagramKind.CALLGRAPH
+                && (callGraphEntry == null || callGraphEntry.isEmpty())) {
+            if (cache.isLoaded()) {
+                pickCallGraphEntry();
             } else {
                 refreshDiagram();
             }
@@ -883,6 +896,7 @@ public class UmlMainFrame extends JFrame {
                         root.getName(), cache.getClassToModule());
                 sequenceEntry = null;
                 activityEntry = null;
+                callGraphEntry = null;
                 sequenceHiddenParticipants.clear();
                 currentScope = null;
                 updateManifestSummary();
@@ -1074,13 +1088,18 @@ public class UmlMainFrame extends JFrame {
 
     /**
      * 左ペインのツリーでメソッドが選択された際のハンドラ。
-     * シーケンス図モードへ切り替えてその起点メソッドで再描画する。
+     * シーケンス図モードへ切り替え、かつ Activity / CallGraph 起点も同じメソッドに同期する。
+     * これにより、ツールバーの Sequence / Activity / Call Graph ボタンを押すだけで
+     * ダイアログを開かずに切り替えられる。
      */
     private void onTreeMethodSelected(ProjectTreePanel.MethodSelection sel) {
         if (sel == null) {
             return;
         }
-        switchToSequenceDiagram(sel.getEntry());
+        String entry = sel.getEntry();
+        activityEntry = entry;
+        callGraphEntry = entry;
+        switchToSequenceDiagram(entry);
     }
 
     /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
@@ -1138,14 +1157,18 @@ public class UmlMainFrame extends JFrame {
     }
 
     /**
-     * 左ペインのアクティビティ図リーフ (青丸) が選択された際のハンドラ。
-     * アクティビティ図モードへ切り替えてその起点メソッドで再描画する。
+     * 左ペインのアクティビティ図リーフが選択された際のハンドラ (後方互換)。
+     * 現在はツリーからこのハンドラを呼ぶ経路はないが、中クリック等の内部処理で
+     * 引き続き利用するため残している。
      */
     private void onTreeActivityMethodSelected(ProjectTreePanel.MethodSelection sel) {
         if (sel == null) {
             return;
         }
-        switchToActivityDiagram(sel.getEntry());
+        String entry = sel.getEntry();
+        sequenceEntry = entry;
+        callGraphEntry = entry;
+        switchToActivityDiagram(entry);
     }
 
     /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
@@ -1153,6 +1176,19 @@ public class UmlMainFrame extends JFrame {
         activityEntry = entry;
         currentKind = DiagramKind.ACTIVITY;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        showHomeTab();
+        refreshDiagram();
+    }
+
+    /** {@code Class.method} 起点をセットしてコールグラフモードへ切り替える。 */
+    private void switchToCallGraphDiagram(String entry) {
+        callGraphEntry = entry;
+        currentKind = DiagramKind.CALLGRAPH;
+        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
         if (item != null) {
             item.setSelected(true);
         }
@@ -1498,6 +1534,34 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
+    private void pickCallGraphEntry() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this,
+                    "Open a project first.",
+                    "No project", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
+        dlg.setTitle("Select call graph entry method");
+        if (dlg.getCandidateCount() == 0) {
+            JOptionPane.showMessageDialog(this,
+                    "No methods found in this project.",
+                    "Call graph", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        dlg.setVisible(true);
+        String picked = dlg.getSelectedEntry();
+        if (picked != null) {
+            callGraphEntry = picked;
+            currentKind = DiagramKind.CALLGRAPH;
+            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
+            if (item != null) {
+                item.setSelected(true);
+            }
+            refreshDiagram();
+        }
+    }
+
     private void pickLayoutFile() {
         String picked = LayoutFileChooserDialog.chooseLayoutKey(this, cache);
         if (picked == null) {
@@ -1563,12 +1627,20 @@ public class UmlMainFrame extends JFrame {
             status.setText("Choose a navigation file from Diagram menu.");
             return;
         }
+        if (kind == DiagramKind.CALLGRAPH
+                && (callGraphEntry == null || callGraphEntry.isEmpty())) {
+            previewPanel.setSvgGraphicsNode(null, 0, 0);
+            sourcePanel.setText("");
+            status.setText("Choose a call graph entry from Diagram menu.");
+            return;
+        }
         status.setText("Rendering " + kind.getDisplayName() + " ...");
         loadProgress.setString("Rendering...");
         loadProgress.setIndeterminate(true);
         loadProgress.setVisible(true);
         final String entry = sequenceEntry;
         final String activity = activityEntry;
+        final String callGraph = callGraphEntry;
         final String layoutKey = currentLayoutKey;
         final String navigationKey = currentNavigationKey;
         final DiagramScope scope = currentScope;
@@ -1588,6 +1660,8 @@ public class UmlMainFrame extends JFrame {
                         req = buildSequenceRequest(entry);
                     } else if (kind == DiagramKind.ACTIVITY && activity != null) {
                         req = buildActivityRequest(activity);
+                    } else if (kind == DiagramKind.CALLGRAPH && callGraph != null) {
+                        req = buildCallGraphRequest(callGraph);
                     } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
                         req = DiagramRequest.forLayout(layoutKey, true);
                     } else if (kind == DiagramKind.NAVIGATION && navigationKey != null) {
@@ -1680,6 +1754,16 @@ public class UmlMainFrame extends JFrame {
                     "Activity entry must be in 'Class.method' format: " + entry);
         }
         return DiagramRequest.forActivity(
+                entry.substring(0, dot), entry.substring(dot + 1), true);
+    }
+
+    private DiagramRequest buildCallGraphRequest(String entry) {
+        int dot = entry.lastIndexOf('.');
+        if (dot < 0) {
+            throw new IllegalArgumentException(
+                    "Call graph entry must be in 'Class.method' format: " + entry);
+        }
+        return DiagramRequest.forCallGraph(
                 entry.substring(0, dot), entry.substring(dot + 1), true);
     }
 

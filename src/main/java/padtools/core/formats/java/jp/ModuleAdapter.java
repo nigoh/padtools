@@ -26,6 +26,7 @@ final class ModuleAdapter {
         JavaClassInfo c = new JavaClassInfo();
         c.setKind(JavaClassInfo.Kind.MODULE);
         c.setSimpleName(md.getNameAsString());
+        c.getAnnotations().addAll(JpText.annotations(md));
         if (md.isOpen()) {
             c.getModifiers().add("open");
         }

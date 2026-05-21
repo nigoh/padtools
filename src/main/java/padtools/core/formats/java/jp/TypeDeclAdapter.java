@@ -12,8 +12,6 @@ import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import padtools.core.formats.uml.JavaClassInfo;
 
-import java.util.List;
-
 /**
  * JavaParser の型宣言（class/interface/enum/@interface/record）を {@link JavaClassInfo} に変換する。
  *
@@ -25,39 +23,57 @@ final class TypeDeclAdapter {
     private TypeDeclAdapter() {
     }
 
-    static void adapt(TypeDeclaration<?> td, String packageName, String enclosing,
-                      List<String> imports, List<JavaClassInfo> out) {
+    /** トップレベル/ネスト型を変換する。 */
+    static void adapt(TypeDeclaration<?> td, String enclosing, JpContext ctx) {
         JavaClassInfo c = new JavaClassInfo();
-        c.setPackageName(packageName);
+        c.setPackageName(ctx.packageName);
         c.setSimpleName(td.getNameAsString());
         c.setEnclosingClass(enclosing);
-        c.getImports().addAll(imports);
+        c.getImports().addAll(ctx.imports);
         c.getModifiers().addAll(JpText.modifiers(td));
         c.getAnnotations().addAll(JpText.annotations(td));
         c.setKind(kindOf(td));
+        c.setComment(ctx.comments.before(td));
         applyExtendsImplements(td, c);
+        String childEnclosing = enclosing == null || enclosing.isEmpty()
+                ? td.getNameAsString() : enclosing + "." + td.getNameAsString();
+        String savedEnclosing = ctx.currentEnclosing;
+        ctx.currentEnclosing = childEnclosing;
+        // フィールドを先に確定させてから本体を解析する
+        // (コンストラクタ内 this.field = ... の inline 取り込みが後方宣言でも効くように)。
         for (BodyDeclaration<?> bd : td.getMembers()) {
             if (bd instanceof FieldDeclaration) {
-                MemberAdapter.addField(c, (FieldDeclaration) bd);
-            } else if (bd instanceof MethodDeclaration) {
-                MemberAdapter.addMethod(c, (MethodDeclaration) bd);
-            } else if (bd instanceof ConstructorDeclaration) {
-                MemberAdapter.addConstructor(c, (ConstructorDeclaration) bd);
+                MemberAdapter.addField(c, (FieldDeclaration) bd, ctx);
             }
         }
+        for (BodyDeclaration<?> bd : td.getMembers()) {
+            if (bd instanceof MethodDeclaration) {
+                MemberAdapter.addMethod(c, (MethodDeclaration) bd, ctx);
+            } else if (bd instanceof ConstructorDeclaration) {
+                MemberAdapter.addConstructor(c, (ConstructorDeclaration) bd, ctx);
+            } else if (bd instanceof com.github.javaparser.ast.body
+                    .AnnotationMemberDeclaration) {
+                MemberAdapter.addAnnotationMember(c,
+                        (com.github.javaparser.ast.body.AnnotationMemberDeclaration) bd, ctx);
+            }
+        }
+        ctx.currentEnclosing = savedEnclosing;
         if (td instanceof EnumDeclaration) {
             for (EnumConstantDeclaration ec : ((EnumDeclaration) td).getEntries()) {
                 c.getEnumConstants().add(ec.getNameAsString());
             }
         }
-        out.add(c);
-        String childEnclosing = enclosing == null || enclosing.isEmpty()
-                ? td.getNameAsString() : enclosing + "." + td.getNameAsString();
+        ctx.out.add(c);
         for (BodyDeclaration<?> bd : td.getMembers()) {
             if (bd instanceof TypeDeclaration) {
-                adapt((TypeDeclaration<?>) bd, packageName, childEnclosing, imports, out);
+                adapt((TypeDeclaration<?>) bd, childEnclosing, ctx);
             }
         }
+    }
+
+    /** メソッド本体内のローカルクラス/レコードを別 top-level エントリとして追加する。 */
+    static void adaptLocal(TypeDeclaration<?> td, JpContext ctx) {
+        adapt(td, ctx.currentEnclosing, ctx);
     }
 
     private static JavaClassInfo.Kind kindOf(TypeDeclaration<?> td) {

@@ -10,7 +10,7 @@ import java.util.Map;
  * <p>トークンカーソルやパース状態に依存しない文字列処理・命名推定・判定ロジックのみを集約する。
  * これらをパーサ本体から切り離すことで、字句走査のロジックと純粋関数を分離して見通しを良くする。</p>
  */
-final class JavaParseSupport {
+public final class JavaParseSupport {
 
     private JavaParseSupport() {
     }
@@ -59,7 +59,7 @@ final class JavaParseSupport {
         return resolveSamMethodName(type, null);
     }
 
-    static String resolveSamMethodName(String type, String nameHint) {
+    public static String resolveSamMethodName(String type, String nameHint) {
         if (type == null || type.isEmpty()) {
             // nameHint が set+型名 パターン (例: setOnCheckedChangeListener → OnCheckedChangeListener)
             // なら型名を抽出して SAM_FALLBACK / 命名規約で解決を再試行する
@@ -195,7 +195,7 @@ final class JavaParseSupport {
      * 大文字始まりで、英大文字・数字・アンダースコアのみで構成され、長さ 2 以上。
      * ({@code F} のような 1 文字は誤検出を避けて除外。{@code PI} は採用。)
      */
-    static boolean looksLikeConstantSymbol(String name) {
+    public static boolean looksLikeConstantSymbol(String name) {
         if (name == null || name.length() < 2) {
             return false;
         }

@@ -33,8 +33,8 @@ public final class JavaStructureExtractor {
      * 既定は従来の手書きパーサー ({@code legacy})。
      */
     private static boolean useJavaParser() {
-        return "javaparser".equalsIgnoreCase(
-                System.getProperty("padtools.java.parser", "legacy"));
+        return !"legacy".equalsIgnoreCase(
+                System.getProperty("padtools.java.parser", "javaparser"));
     }
 
     /** エラーリスナー付き。 */

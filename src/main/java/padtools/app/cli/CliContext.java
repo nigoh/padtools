@@ -1,6 +1,7 @@
 package padtools.app.cli;
 
 import padtools.UmlOverrides;
+import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.ErrorListener;
 
 import java.io.File;
@@ -35,5 +36,59 @@ public final class CliContext {
         this.legendOverride = legendOverride;
         this.mergeManifest = mergeManifest;
         this.overrides = overrides;
+    }
+
+    /**
+     * パース済みオプションから実行コンテキストを構築する。
+     * {@code --preset} などの不正値があった場合は ({@link UmlOverrides#build} 内で
+     * {@code System.exit(1)} した上で) null を返す。
+     */
+    public static CliContext from(CliOptions options) {
+        File fileIn = options.arguments().isEmpty()
+                ? null : requireReadable(new File(options.arguments().getFirst()));
+        File fileOut = options.out.getArguments().isEmpty()
+                ? null : new File(options.out.getArguments().getLast());
+
+        ErrorListener listener = options.verbose.isSet()
+                ? ErrorListener.stderr() : ErrorListener.silent();
+        // PlantUML 同梱 Smetana が直接 stderr に書く UNSURE_ABOUT 等のデバッグ出力を
+        // 既定で抑制する。-v 時は素通しさせて Smetana 内部のログも見えるようにする。
+        PlantUmlRenderer.setVerbose(options.verbose.isSet());
+
+        // UML 凡例は既定 ON。明示的な --legend / --no-legend で上書き可。
+        Boolean legendOverride = null;
+        if (options.legend.isSet()) {
+            legendOverride = Boolean.TRUE;
+        } else if (options.noLegend.isSet()) {
+            legendOverride = Boolean.FALSE;
+        }
+        boolean mergeManifest = !options.noManifestMerge.isSet();
+        UmlOverrides overrides = UmlOverrides.build(
+                options.noComments, options.noAnnotations, options.noEnumConstants,
+                options.noFinal, options.commentStyle, options.seqDepth, options.jetpack,
+                options.preset, options.noFields, options.noMethods, options.publicOnly,
+                options.excludeExternal, options.excludePackage, options.relation, options.mode,
+                options.interactiveSvg, options.hiddenAnnotations, options.commentMaxLength);
+        if (overrides == null) {
+            return null;
+        }
+        return new CliContext(fileIn, fileOut, listener,
+                legendOverride, mergeManifest, overrides);
+    }
+
+    /** 指定パスが存在する/読める File を返す。問題があれば stderr に出して System.exit(1)。 */
+    private static File requireReadable(File f) {
+        if (f == null) {
+            return null;
+        }
+        if (!f.exists()) {
+            System.err.println("Input not found: " + f.getPath());
+            System.exit(1);
+        }
+        if (!f.canRead()) {
+            System.err.println("Cannot read: " + f.getPath());
+            System.exit(1);
+        }
+        return f;
     }
 }

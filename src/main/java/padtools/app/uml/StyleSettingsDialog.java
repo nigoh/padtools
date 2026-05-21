@@ -245,7 +245,8 @@ public final class StyleSettingsDialog extends JDialog {
         c.gridx = 0; c.gridy = row; c.weightx = 0;
         form.add(new JLabel("Font name:"), c);
         fontField.setText(initial.getFontName());
-        fontField.setToolTipText("e.g. Helvetica, Noto Sans CJK JP. Empty = PlantUML default");
+        fontField.setToolTipText(
+                "e.g. Helvetica, Noto Sans CJK JP. Empty = auto-detected Japanese font");
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
         form.add(fontField, c);
         c.gridwidth = 1;

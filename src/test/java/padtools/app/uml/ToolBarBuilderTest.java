@@ -1,0 +1,57 @@
+package padtools.app.uml;
+
+import org.junit.Test;
+
+import javax.swing.JToggleButton;
+
+import static org.junit.Assert.*;
+
+public class ToolBarBuilderTest {
+
+    private ToolBarBuilder.Result buildDefault() {
+        ToolBarBuilder.Callbacks cb = new ToolBarBuilder.Callbacks();
+        cb.chooseProject = () -> {};
+        cb.chooseAndExport = () -> {};
+        cb.refreshDiagram = () -> {};
+        cb.openEntitySearch = () -> {};
+        cb.selectDiagramKind = k -> {};
+        return new ToolBarBuilder(DiagramKind.CLASS, cb).build();
+    }
+
+    @Test
+    public void build_createsToggleForEveryDiagramKind() {
+        ToolBarBuilder.Result r = buildDefault();
+        for (DiagramKind k : DiagramKind.values()) {
+            assertNotNull("Missing toggle for " + k, r.diagramToggles.get(k));
+        }
+        assertEquals(DiagramKind.values().length, r.diagramToggles.size());
+    }
+
+    @Test
+    public void build_initialKindIsSelected() {
+        ToolBarBuilder.Result r = buildDefault();
+        JToggleButton classBtn = r.diagramToggles.get(DiagramKind.CLASS);
+        assertTrue("CLASS button should be selected initially", classBtn.isSelected());
+    }
+
+    @Test
+    public void build_nonInitialKindIsNotSelected() {
+        ToolBarBuilder.Result r = buildDefault();
+        JToggleButton seqBtn = r.diagramToggles.get(DiagramKind.SEQUENCE);
+        assertFalse("SEQUENCE button should not be selected initially", seqBtn.isSelected());
+    }
+
+    @Test
+    public void build_toolBarPanelIsNotNull() {
+        ToolBarBuilder.Result r = buildDefault();
+        assertNotNull(r.toolBarPanel);
+    }
+
+    @Test
+    public void diagramsMethod_containsSequenceActivityCallgraph() {
+        assertTrue(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.SEQUENCE));
+        assertTrue(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.ACTIVITY));
+        assertTrue(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.CALLGRAPH));
+        assertFalse(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.CLASS));
+    }
+}

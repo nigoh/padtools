@@ -58,6 +58,7 @@ public class ProjectTreePanel extends JPanel {
     private final JTree tree;
     private final DefaultTreeModel model;
     private final DefaultMutableTreeNode root;
+    private boolean suppressNotify;
     private java.util.function.Consumer<JavaClassInfo> onClassSelected;
     private java.util.function.Consumer<MethodSelection> onMethodSelected;
     private java.util.function.Consumer<MethodSelection> onActivityMethodSelected;
@@ -268,6 +269,104 @@ public class ProjectTreePanel extends JPanel {
         mnode.add(g);
     }
 
+    /**
+     * 指定 FQN のクラスノードをツリーで選択・スクロールする。
+     * パッケージ/クラスノードは必要に応じて遅延展開する。
+     * 選択変更コールバック ({@link #notifySelection}) は発火しない。
+     */
+    public void selectClassNode(String fqn) {
+        if (fqn == null || fqn.isEmpty()) {
+            return;
+        }
+        int lastDot = fqn.lastIndexOf('.');
+        String pkg = lastDot < 0 ? "(default)" : fqn.substring(0, lastDot);
+        for (int m = 0; m < root.getChildCount(); m++) {
+            DefaultMutableTreeNode moduleNode = (DefaultMutableTreeNode) root.getChildAt(m);
+            DefaultMutableTreeNode pkgNode = findPackageNode(moduleNode, pkg);
+            if (pkgNode == null) {
+                continue;
+            }
+            tree.expandPath(new TreePath(pkgNode.getPath()));
+            DefaultMutableTreeNode classNode = findClassNode(pkgNode, fqn);
+            if (classNode != null) {
+                TreePath path = new TreePath(classNode.getPath());
+                suppressNotify = true;
+                tree.setSelectionPath(path);
+                suppressNotify = false;
+                tree.scrollPathToVisible(path);
+                return;
+            }
+        }
+    }
+
+    /**
+     * 指定 FQN クラス + メソッド名のメソッドノードをツリーで選択・スクロールする。
+     * クラス/パッケージノードは必要に応じて遅延展開する。
+     * 選択変更コールバック ({@link #notifySelection}) は発火しない。
+     */
+    public void selectMethodNode(String classFqn, String methodName) {
+        if (classFqn == null || classFqn.isEmpty() || methodName == null || methodName.isEmpty()) {
+            return;
+        }
+        int lastDot = classFqn.lastIndexOf('.');
+        String pkg = lastDot < 0 ? "(default)" : classFqn.substring(0, lastDot);
+        for (int m = 0; m < root.getChildCount(); m++) {
+            DefaultMutableTreeNode moduleNode = (DefaultMutableTreeNode) root.getChildAt(m);
+            DefaultMutableTreeNode pkgNode = findPackageNode(moduleNode, pkg);
+            if (pkgNode == null) {
+                continue;
+            }
+            tree.expandPath(new TreePath(pkgNode.getPath()));
+            DefaultMutableTreeNode classNode = findClassNode(pkgNode, classFqn);
+            if (classNode == null) {
+                continue;
+            }
+            tree.expandPath(new TreePath(classNode.getPath()));
+            DefaultMutableTreeNode methodNode = findMethodNode(classNode, methodName);
+            if (methodNode != null) {
+                TreePath path = new TreePath(methodNode.getPath());
+                suppressNotify = true;
+                tree.setSelectionPath(path);
+                suppressNotify = false;
+                tree.scrollPathToVisible(path);
+                return;
+            }
+        }
+    }
+
+    private static DefaultMutableTreeNode findPackageNode(DefaultMutableTreeNode moduleNode, String pkg) {
+        for (int i = 0; i < moduleNode.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) moduleNode.getChildAt(i);
+            Object u = child.getUserObject();
+            if (u instanceof PackageEntry && pkg.equals(((PackageEntry) u).name)) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static DefaultMutableTreeNode findClassNode(DefaultMutableTreeNode pkgNode, String fqn) {
+        for (int i = 0; i < pkgNode.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) pkgNode.getChildAt(i);
+            Object u = child.getUserObject();
+            if (u instanceof ClassEntry && fqn.equals(((ClassEntry) u).info.getQualifiedName())) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static DefaultMutableTreeNode findMethodNode(DefaultMutableTreeNode classNode, String methodName) {
+        for (int i = 0; i < classNode.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) classNode.getChildAt(i);
+            Object u = child.getUserObject();
+            if (u instanceof MethodEntry && methodName.equals(((MethodEntry) u).method.getName())) {
+                return child;
+            }
+        }
+        return null;
+    }
+
     /** ツリーをクリアして空状態に戻す。 */
     public void clear() {
         root.setUserObject("(no project)");
@@ -276,6 +375,9 @@ public class ProjectTreePanel extends JPanel {
     }
 
     private void notifySelection() {
+        if (suppressNotify) {
+            return;
+        }
         Object last = tree.getLastSelectedPathComponent();
         if (last instanceof DefaultMutableTreeNode) {
             Object u = ((DefaultMutableTreeNode) last).getUserObject();

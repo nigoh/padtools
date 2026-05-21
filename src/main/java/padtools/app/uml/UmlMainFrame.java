@@ -10,7 +10,6 @@ import padtools.util.CancelToken;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JComponent;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -26,14 +25,12 @@ import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.image.BufferedImage;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
@@ -95,6 +92,8 @@ public class UmlMainFrame extends JFrame {
 
     /** 全可変状態。テスト互換のため currentKind のみ UmlMainFrame に直接残す。 */
     private final DiagramState state = new DiagramState();
+    /** 図のエクスポート (保存ダイアログ・クリップボード) を担う補助。 */
+    private final ExportController exportController = new ExportController(this, state, status);
 
     DiagramKind currentKind = DiagramKind.CLASS;
     /** 現在ロード中のプロジェクトルート。null なら未ロード。 */
@@ -479,90 +478,8 @@ public class UmlMainFrame extends JFrame {
         if (event == null) {
             return;
         }
-        JPopupMenu popup = buildExportPopup();
+        JPopupMenu popup = exportController.buildExportPopup();
         popup.show(event.getComponent(), event.getX(), event.getY());
-    }
-
-    /** 右クリックエクスポートポップアップを構築する (SVG / PNG / PUML 保存 + SVG コピー)。 */
-    private JPopupMenu buildExportPopup() {
-        JPopupMenu popup = new JPopupMenu("Export");
-        JMenuItem saveSvg = new JMenuItem("Save as SVG...");
-        saveSvg.addActionListener(e -> exportAs(UmlExporter.Format.SVG));
-        popup.add(saveSvg);
-        JMenuItem savePng = new JMenuItem("Save as PNG...");
-        savePng.addActionListener(e -> exportAs(UmlExporter.Format.PNG));
-        popup.add(savePng);
-        JMenuItem savePuml = new JMenuItem("Save as PlantUML...");
-        savePuml.addActionListener(e -> exportAs(UmlExporter.Format.PUML));
-        popup.add(savePuml);
-        popup.addSeparator();
-        JMenuItem copySvg = new JMenuItem("Copy SVG to Clipboard");
-        copySvg.addActionListener(e -> copySvgToClipboard());
-        popup.add(copySvg);
-        return popup;
-    }
-
-    /** 指定フォーマットで保存ダイアログを開きエクスポートする。 */
-    private void exportAs(UmlExporter.Format fmt) {
-        if (state.currentPuml == null || state.currentPuml.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No diagram to export yet.",
-                    "Export", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        String ext;
-        String filterDesc;
-        switch (fmt) {
-            case SVG:  ext = "svg"; filterDesc = "SVG (*.svg)"; break;
-            case PNG:  ext = "png"; filterDesc = "PNG (*.png)"; break;
-            default:   ext = "puml"; filterDesc = "PlantUML source (*.puml)"; break;
-        }
-        JFileChooser fc = new JFileChooser();
-        fc.setDialogTitle("Save diagram as " + ext.toUpperCase());
-        fc.setAcceptAllFileFilterUsed(false);
-        fc.setFileFilter(new FileNameExtensionFilter(filterDesc, ext));
-        int r = fc.showSaveDialog(this);
-        if (r != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
-        File chosen = fc.getSelectedFile();
-        if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith("." + ext)) {
-            chosen = new File(chosen.getAbsolutePath() + "." + ext);
-        }
-        try {
-            BufferedImage pngImage = null;
-            if (fmt == UmlExporter.Format.PNG) {
-                pngImage = PlantUmlImageRenderer.toBufferedImage(state.currentPuml);
-            }
-            UmlExporter.export(fmt, chosen, state.currentPuml, pngImage);
-            status.setText("Saved: " + chosen.getAbsolutePath());
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Export failed: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    /** 現在の SVG XML 全体をクリップボードへコピーする。 */
-    private void copySvgToClipboard() {
-        if (state.currentSvgXml == null || state.currentSvgXml.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No SVG to copy.",
-                    "Export", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        try {
-            java.awt.datatransfer.StringSelection sel =
-                    new java.awt.datatransfer.StringSelection(state.currentSvgXml);
-            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(sel, null);
-            status.setText("SVG copied to clipboard ("
-                    + state.currentSvgXml.length() + " chars)");
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Failed to copy SVG: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
     }
 
     /**
@@ -727,54 +644,7 @@ public class UmlMainFrame extends JFrame {
     }
 
     private void chooseAndExport() {
-        if (state.currentPuml == null || state.currentPuml.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No diagram to export yet.",
-                    "Export", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        JFileChooser fc = new JFileChooser();
-        fc.setDialogTitle("Save diagram as");
-        fc.setAcceptAllFileFilterUsed(false);
-        FileNameExtensionFilter svg = new FileNameExtensionFilter("SVG (*.svg)", "svg");
-        FileNameExtensionFilter png = new FileNameExtensionFilter("PNG (*.png)", "png");
-        FileNameExtensionFilter puml = new FileNameExtensionFilter(
-                "PlantUML source (*.puml)", "puml");
-        fc.addChoosableFileFilter(svg);
-        fc.addChoosableFileFilter(png);
-        fc.addChoosableFileFilter(puml);
-        fc.setFileFilter(svg);
-        int r = fc.showSaveDialog(this);
-        if (r != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
-        File chosen = fc.getSelectedFile();
-        UmlExporter.Format fmt = UmlExporter.Format.fromFileName(chosen.getName());
-        if (fmt == null) {
-            // フィルタ選択に応じて拡張子を補完
-            String ext = "svg";
-            if (fc.getFileFilter() == png) {
-                ext = "png";
-            } else if (fc.getFileFilter() == puml) {
-                ext = "puml";
-            }
-            chosen = new File(chosen.getAbsolutePath() + "." + ext);
-            fmt = UmlExporter.Format.fromFileName(chosen.getName());
-        }
-        try {
-            BufferedImage pngImage = null;
-            if (fmt == UmlExporter.Format.PNG) {
-                // プレビューはベクター SVG なので PNG エクスポート時にだけ
-                // 同じ PlantUML テキストから PNG をレンダリングする。
-                pngImage = PlantUmlImageRenderer.toBufferedImage(state.currentPuml);
-            }
-            UmlExporter.export(fmt, chosen, state.currentPuml, pngImage);
-            status.setText("Saved: " + chosen.getAbsolutePath());
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Export failed: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        exportController.chooseAndExport();
     }
 
     // --- 状態管理 -------------------------------------------------------------

@@ -2,6 +2,10 @@ package padtools.core.formats.android;
 
 import org.junit.Test;
 
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static org.junit.Assert.*;
 
 /**
@@ -55,6 +59,65 @@ public class PlantUmlGradleDependencyGraphTest {
         // 矢印 (具体的なエイリアスは可変なので "-->" の存在を確認)
         assertTrue(puml, puml.contains("-->"));
         assertTrue(puml, puml.contains("implementation"));
+    }
+
+    /** モジュール→モジュールのエッジ ({@code M0 --> M1}) が puml に存在するか。 */
+    private static boolean hasModuleToModuleEdge(String puml) {
+        Matcher m = Pattern.compile("(?m)^M\\d+ --> M\\d+ : ").matcher(puml);
+        return m.find();
+    }
+
+    /**
+     * Gradle のサブプロジェクトのディレクトリ単体をルートとして開いた場合の回帰テスト。
+     *
+     * <p>モジュール名はルート相対の {@code "lib"} になる一方、依存宣言は絶対 Gradle パス
+     * {@code project(':group:lib')} を保持する。このとき完全一致だけでは
+     * モジュール間の {@code project()} 依存エッジが解決できず脱落していた
+     * (依存グラフがモジュール同士の接続を一切描かない)。末尾セグメント一致の
+     * フォールバックでエッジを復元する。</p>
+     */
+    @Test
+    public void testModuleEdgeResolvedByLeafSegmentWhenRootRelative() {
+        AndroidProjectAnalysis a = new AndroidProjectAnalysis();
+        GradleProjectInfo app = new GradleProjectInfo();
+        app.setModuleName("app");
+        app.getPlugins().add("com.android.application");
+        // 絶対 Gradle パスでの参照 (ルートに settings.gradle がある本来の構成由来)
+        app.getDependencies().add(new GradleDependency("implementation",
+                "project(':group:lib')"));
+        a.getGradleByModule().put("app", app);
+
+        GradleProjectInfo lib = new GradleProjectInfo();
+        lib.setModuleName("lib"); // ルート相対で短縮されたモジュール名
+        lib.getPlugins().add("com.android.library");
+        a.getGradleByModule().put("lib", lib);
+
+        String puml = PlantUmlGradleDependencyGraph.generate(a);
+        assertTrue("module-to-module edge must be present: " + puml,
+                hasModuleToModuleEdge(puml));
+        assertTrue(puml, puml.contains("component \"app\""));
+        assertTrue(puml, puml.contains("component \"lib\""));
+    }
+
+    @Test
+    public void testResolveModuleKeyExactMatchPreferred() {
+        Set<String> keys = Set.of("showcase:common", "places:common", "app");
+        assertEquals("showcase:common",
+                PlantUmlGradleDependencyGraph.resolveModuleKey("showcase:common", keys));
+    }
+
+    @Test
+    public void testResolveModuleKeyLeafFallback() {
+        Set<String> keys = Set.of("common", "mobile", "automotive");
+        assertEquals("common",
+                PlantUmlGradleDependencyGraph.resolveModuleKey("showcase:common", keys));
+    }
+
+    @Test
+    public void testResolveModuleKeyAmbiguousLeafUnresolved() {
+        // 末尾セグメントが複数モジュールで重複する場合は誤接続を避けて解決しない
+        Set<String> keys = Set.of("showcase:common", "places:common");
+        assertNull(PlantUmlGradleDependencyGraph.resolveModuleKey(":other:common", keys));
     }
 
     @Test

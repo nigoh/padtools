@@ -101,7 +101,8 @@ public final class PlantUmlGradleDependencyGraph {
                 }
                 String arrow = arrowForScope(d.getScope());
                 if (d.isModuleReference()) {
-                    String to = moduleAlias.get(d.getModuleRef());
+                    String toModule = resolveModuleKey(d.getModuleRef(), moduleAlias.keySet());
+                    String to = toModule != null ? moduleAlias.get(toModule) : null;
                     if (to != null) {
                         out.append(from).append(' ').append(arrow).append(' ')
                                 .append(to).append(" : ").append(d.getScope()).append('\n');
@@ -140,8 +141,9 @@ public final class PlantUmlGradleDependencyGraph {
                     continue;
                 }
                 if (d.isModuleReference()) {
-                    String to = d.getModuleRef();
-                    if (analysis.getGradleByModule().containsKey(to)) {
+                    String to = resolveModuleKey(d.getModuleRef(),
+                            analysis.getGradleByModule().keySet());
+                    if (to != null) {
                         connected.add(from);
                         connected.add(to);
                     }
@@ -152,6 +154,41 @@ public final class PlantUmlGradleDependencyGraph {
             }
         }
         return connected;
+    }
+
+    /**
+     * {@code project(...)} のモジュール参照を実際のモジュールキーへ解決する。
+     *
+     * <p>まず完全一致を試し、失敗したらコロン区切りの末尾セグメント一致でフォールバックする。
+     * これは Gradle のサブプロジェクトのディレクトリ単体をルートとして開いたとき
+     * (モジュール名がルート相対の {@code "common"} になる一方、依存宣言は絶対 Gradle パス
+     * {@code ":showcase:common"} を保持するケース) でも、モジュール間の {@code project()}
+     * 依存エッジを失わないようにするため。末尾セグメントが複数モジュールで重複する場合は
+     * 誤接続を避けるため解決しない (null)。</p>
+     */
+    static String resolveModuleKey(String ref, Set<String> moduleKeys) {
+        if (ref == null || ref.isEmpty() || moduleKeys == null) {
+            return null;
+        }
+        if (moduleKeys.contains(ref)) {
+            return ref;
+        }
+        String refLeaf = lastSegment(ref);
+        String match = null;
+        for (String key : moduleKeys) {
+            if (lastSegment(key).equals(refLeaf)) {
+                if (match != null) {
+                    return null;
+                }
+                match = key;
+            }
+        }
+        return match;
+    }
+
+    private static String lastSegment(String path) {
+        int i = path.lastIndexOf(':');
+        return i >= 0 ? path.substring(i + 1) : path;
     }
 
     private static boolean isTestScope(String scope) {

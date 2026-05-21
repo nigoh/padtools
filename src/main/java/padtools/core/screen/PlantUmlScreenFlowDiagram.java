@@ -71,10 +71,11 @@ public final class PlantUmlScreenFlowDiagram {
         return sb.toString();
     }
 
+    // State 図で有効な矢印のみ使う（双方向 <--> や ..> は state 図では構文エラーになる）。
     private static String arrowFor(ScreenTransition.Kind kind) {
         switch (kind) {
-            case START_FOR_RESULT: return "<-->";
-            case SET_CLASS: return "..>";
+            case START_FOR_RESULT: return "-[#1f6fb0]->";
+            case SET_CLASS: return "-[#888888,dashed]->";
             case SCREEN_PUSH: return "-[#2e8b57]->";
             default: return "-->";
         }

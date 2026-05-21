@@ -170,6 +170,22 @@ public class IntentNavigationDetectorTest {
     }
 
     @Test
+    public void diagramUsesStateDiagramSafeArrows() {
+        // <--> や ..> は PlantUML state 図では構文エラーになるため使わない
+        java.util.List<ScreenTransition> ts = new java.util.ArrayList<>();
+        ts.add(new ScreenTransition("p.A", "pick", "B", "A.java", 1,
+                ScreenTransition.Kind.START_FOR_RESULT));
+        ts.add(new ScreenTransition("p.A", "go", "C", "A.java", 2,
+                ScreenTransition.Kind.SET_CLASS));
+        String puml = PlantUmlScreenFlowDiagram.render(ts);
+        assertTrue(puml.startsWith("@startuml"));
+        assertTrue("state 図で双方向矢印は不可", !puml.contains("<-->"));
+        assertTrue("state 図で ..> 依存矢印は不可", !puml.contains("..>"));
+        assertTrue(puml.contains("START_FOR_RESULT"));
+        assertTrue(puml.contains("SET_CLASS"));
+    }
+
+    @Test
     public void emptyReportRendersPlaceholder() {
         String md = MarkdownScreenFlowReport.render(new java.util.ArrayList<>());
         assertNotNull(md);

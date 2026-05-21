@@ -4,6 +4,8 @@ import net.sourceforge.plantuml.FileFormat;
 import net.sourceforge.plantuml.FileFormatOption;
 import net.sourceforge.plantuml.SourceStringReader;
 
+import padtools.util.JapaneseFontSupport;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -32,6 +34,14 @@ public final class PlantUmlRenderer {
      * 起動時に設定ファイルから読み込んだ値で上書きされる想定。GUI から変更可能。
      */
     private static volatile DiagramStyle currentStyle = DiagramStyle.defaults();
+
+    /**
+     * スタイルでフォント未指定時に既定として補う日本語対応フォントファミリ名。
+     * 実行環境に存在する日本語フォントを {@link JapaneseFontSupport} で解決した値を持つ
+     * （見つからなければ空文字 = 補わない）。これにより図内の日本語が文字化け（豆腐 □）
+     * しないようにする。ユーザがスタイルで明示的にフォントを指定した場合はそちらが優先される。
+     */
+    private static volatile String fallbackFontName = JapaneseFontSupport.defaultFontFamily();
 
     /**
      * verbose モード。true なら同梱 Smetana 由来の stderr (UNSURE_ABOUT 等) を素通し、
@@ -96,6 +106,23 @@ public final class PlantUmlRenderer {
     /** Graphviz dot が利用可能かどうか返す。 */
     public static boolean isGraphvizAvailable() {
         return graphvizAvailable;
+    }
+
+    /**
+     * フォント未指定時に補う既定フォント名を返す。日本語対応フォントが見つからない
+     * 環境では空文字。
+     */
+    public static String getFallbackFontName() {
+        String s = fallbackFontName;
+        return s != null ? s : "";
+    }
+
+    /**
+     * フォント未指定時に補う既定フォント名を設定する。主にテストで決定的な挙動を
+     * 得るために使用する。null は空文字（補わない）として扱う。
+     */
+    public static void setFallbackFontName(String name) {
+        fallbackFontName = name != null ? name : "";
     }
 
     /**
@@ -206,14 +233,22 @@ public final class PlantUmlRenderer {
         }
         boolean hasLayoutPragma = puml.contains("!pragma layout");
         String prelude = style != null ? style.toPlantUmlPrelude() : "";
-        if (hasLayoutPragma && prelude.isEmpty()) {
+        // スタイルでフォント未指定なら、日本語対応の既定フォントを補って文字化けを防ぐ。
+        // !theme 由来のフォント指定より後に置くことで、こちらが優先される。
+        String fontFallback = "";
+        boolean noExplicitFont = style == null || style.getFontName().isEmpty();
+        if (noExplicitFont && !getFallbackFontName().isEmpty()) {
+            fontFallback = "skinparam defaultFontName " + getFallbackFontName() + "\n";
+        }
+        String styleLines = prelude + fontFallback;
+        if (hasLayoutPragma && styleLines.isEmpty()) {
             return puml;
         }
         StringBuilder injected = new StringBuilder();
         if (!hasLayoutPragma && !graphvizAvailable) {
             injected.append("!pragma layout smetana\n");
         }
-        injected.append(prelude);
+        injected.append(styleLines);
         if (injected.length() == 0) {
             return puml;
         }

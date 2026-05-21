@@ -17,16 +17,22 @@ import static org.junit.Assert.assertTrue;
  */
 public class PlantUmlRendererStyleTest {
 
+    private String savedFallbackFont;
+
     @Before
     public void resetStyle() {
         PlantUmlRenderer.setStyle(DiagramStyle.defaults());
         PlantUmlRenderer.setGraphvizAvailable(false);
+        // 実行環境のフォント有無に依存しないよう、フォールバックフォントを無効化する。
+        savedFallbackFont = PlantUmlRenderer.getFallbackFontName();
+        PlantUmlRenderer.setFallbackFontName("");
     }
 
     @After
     public void tearDownStyle() {
         PlantUmlRenderer.setStyle(DiagramStyle.defaults());
         PlantUmlRenderer.setGraphvizAvailable(false);
+        PlantUmlRenderer.setFallbackFontName(savedFallbackFont);
     }
 
     @Test
@@ -102,6 +108,34 @@ public class PlantUmlRendererStyleTest {
         String out = PlantUmlRenderer.injectLayout(puml);
         assertTrue(out, out.contains("!pragma layout dot"));
         assertFalse(out, out.contains("!pragma layout smetana"));
+    }
+
+    @Test
+    public void fallbackFontInjectedWhenStyleHasNoFont() {
+        PlantUmlRenderer.setFallbackFontName("Noto Sans CJK JP");
+        String puml = "@startuml\nclass A\n@enduml\n";
+        String out = PlantUmlRenderer.injectLayout(puml);
+        assertTrue(out, out.contains("skinparam defaultFontName Noto Sans CJK JP\n"));
+    }
+
+    @Test
+    public void explicitFontOverridesFallback() {
+        PlantUmlRenderer.setFallbackFontName("Noto Sans CJK JP");
+        DiagramStyle s = new DiagramStyle();
+        s.setFontName("Helvetica");
+        PlantUmlRenderer.setStyle(s);
+        String puml = "@startuml\nclass A\n@enduml\n";
+        String out = PlantUmlRenderer.injectLayout(puml);
+        assertTrue(out, out.contains("skinparam defaultFontName Helvetica\n"));
+        assertFalse(out, out.contains("Noto Sans CJK JP"));
+    }
+
+    @Test
+    public void noFallbackFontMeansNoFontLine() {
+        PlantUmlRenderer.setFallbackFontName("");
+        String puml = "@startuml\nclass A\n@enduml\n";
+        String out = PlantUmlRenderer.injectLayout(puml);
+        assertFalse(out, out.contains("skinparam defaultFontName"));
     }
 
     @Test

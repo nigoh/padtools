@@ -144,6 +144,13 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 自動除外ディレクトリ: `build/`, `.gradle/`, `.idea/`, `.git/`, `out/`, `bin/`, `node_modules/`, `.kotlin/`, `captures/`, `.cxx/`。
 テストソース (`src/test/`, `src/androidTest/`) はデフォルト除外。
 
+ドキュメント
+------------------------------------------------
+詳細なドキュメントは [`docs/`](docs/) に置いています。
+
+* [GUI 操作マニュアル](docs/gui-manual.md) — 起動・プロジェクトを開く・ツールバー・各図種の操作・ショートカット一覧などを網羅した GUI の使い方ガイド
+* [Claude エージェント / スキル導入手順](docs/SETUP_CLAUDE_AGENTS_SKILLS.md) — AOSP / AAOS 解析向けの Claude Code エージェント・スキルを `~/.claude/` に導入する手順
+
 既知の制約
 ------------------------------------------------
 

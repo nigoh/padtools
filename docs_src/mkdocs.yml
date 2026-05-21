@@ -1,8 +1,0 @@
-site_name: Pad Tools 2.0
-theme: material
-extra:
-    language: ja
-plugins: []
-nav:
-  - ホーム: index.md
-  - GUI 操作マニュアル: gui-manual.md

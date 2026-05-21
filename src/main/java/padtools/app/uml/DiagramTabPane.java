@@ -185,10 +185,32 @@ public final class DiagramTabPane {
         if (insertAt < 0) {
             insertAt = 0;
         }
-        tabs.insertTab(label, null, tab, null, insertAt);
-        tabs.setTabComponentAt(insertAt, buildHeader(label, icon, tab, key));
+        String tip = tooltipFor(spec, treeSync);
+        tabs.insertTab(label, null, tab, tip, insertAt);
+        tabs.setTabComponentAt(insertAt, buildHeader(label, icon, tab, key, tip));
         tabs.setSelectedIndex(insertAt);
         tab.startRender();
+    }
+
+    /** タブのツールチップ: 図種 + 完全名 (同名タブの曖昧さ解消)。 */
+    private static String tooltipFor(DiagramRequest spec, TreeNodeOpenRequest treeSync) {
+        String kind = ToolBarBuilder.toolbarLabel(spec.getKind());
+        if (treeSync != null) {
+            switch (treeSync.target) {
+                case METHOD:
+                    return kind + " — " + treeSync.classInfo.getQualifiedName()
+                            + "#" + treeSync.methodInfo.getName();
+                case CLASS:
+                    return kind + " — " + treeSync.classInfo.getQualifiedName();
+                case PACKAGE:
+                    return "Class — package " + treeSync.name;
+                case MODULE:
+                    return "Class — module " + treeSync.name;
+                default:
+                    break;
+            }
+        }
+        return kind + " diagram (whole project)";
     }
 
     /** アクティブタブの描画リクエストを差し替えて再描画する (スコープ/プリセット適用など)。 */
@@ -243,14 +265,17 @@ public final class DiagramTabPane {
         }
     }
 
-    private JPanel buildHeader(String label, TreeNodeIcon icon, DiagramTab tab, String key) {
+    private JPanel buildHeader(String label, TreeNodeIcon icon, DiagramTab tab,
+                               String key, String tooltip) {
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         header.setOpaque(false);
+        header.setToolTipText(tooltip);
         if (icon != null) {
             header.add(new JLabel(icon));
         }
         JLabel title = new JLabel(label);
         title.setFont(title.getFont().deriveFont(Font.PLAIN, 11f));
+        title.setToolTipText(tooltip);
         header.add(title);
 
         JButton close = new JButton("×");
@@ -262,7 +287,62 @@ public final class DiagramTabPane {
         close.setToolTipText("Close tab");
         close.addActionListener(e -> closeTab(tab, key));
         header.add(close);
+
+        // 中クリックで閉じる / 右クリックで「閉じる・他を閉じる・すべて閉じる」メニュー。
+        java.awt.event.MouseAdapter ma = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (javax.swing.SwingUtilities.isMiddleMouseButton(e)) {
+                    closeTab(tab, key);
+                } else if (e.isPopupTrigger()) {
+                    showTabMenu(tab, key, e);
+                } else if (javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    tabs.setSelectedComponent(tab);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showTabMenu(tab, key, e);
+                }
+            }
+        };
+        header.addMouseListener(ma);
+        title.addMouseListener(ma);
         return header;
+    }
+
+    private void showTabMenu(DiagramTab tab, String key, MouseEvent e) {
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem close = new JMenuItem("Close");
+        close.addActionListener(a -> closeTab(tab, key));
+        menu.add(close);
+        JMenuItem others = new JMenuItem("Close Others");
+        others.addActionListener(a -> closeOtherTabs(key));
+        others.setEnabled(openTabs.size() > 1);
+        menu.add(others);
+        JMenuItem all = new JMenuItem("Close All");
+        all.addActionListener(a -> closeAllTabs());
+        all.setEnabled(!openTabs.isEmpty());
+        menu.add(all);
+        menu.show(e.getComponent(), e.getX(), e.getY());
+    }
+
+    /** {@code keepKey} 以外のすべてのダイアグラムタブを閉じる。 */
+    private void closeOtherTabs(String keepKey) {
+        for (Map.Entry<String, DiagramTab> en : new ArrayList<>(openTabs.entrySet())) {
+            if (!en.getKey().equals(keepKey)) {
+                closeTab(en.getValue(), en.getKey());
+            }
+        }
+    }
+
+    /** すべてのダイアグラムタブを閉じる (ユーティリティタブは残す)。 */
+    private void closeAllTabs() {
+        for (Map.Entry<String, DiagramTab> en : new ArrayList<>(openTabs.entrySet())) {
+            closeTab(en.getValue(), en.getKey());
+        }
     }
 
     private static TreeNodeIcon iconFor(TreeNodeOpenRequest req) {
@@ -305,6 +385,10 @@ public final class DiagramTabPane {
         private DiagramRequest spec;
         private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
         private final PumlSourcePanel sourcePanel  = new PumlSourcePanel();
+        /** プレビュー / メッセージ(描画中・失敗・空) を切り替えるカード。 */
+        private final java.awt.CardLayout cards = new java.awt.CardLayout();
+        private final JPanel viewCards = new JPanel(cards);
+        private final JLabel messageLabel = new JLabel("", javax.swing.SwingConstants.CENTER);
         private String renderedPuml;
         private String renderedSvgXml;
         private String lastStatus;
@@ -315,8 +399,15 @@ public final class DiagramTabPane {
             this.label = label;
             this.spec = spec;
             this.treeSync = treeSync;
-            JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                    new JScrollPane(previewPanel), sourcePanel);
+
+            viewCards.add(new JScrollPane(previewPanel), "view");
+            JPanel msgPanel = new JPanel(new java.awt.GridBagLayout());
+            msgPanel.setBackground(java.awt.Color.WHITE);
+            messageLabel.setForeground(new Color(0x555555));
+            msgPanel.add(messageLabel);
+            viewCards.add(msgPanel, "msg");
+
+            JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, viewCards, sourcePanel);
             split.setResizeWeight(0.85);
             split.setDividerLocation(0.85);
             add(split, java.awt.BorderLayout.CENTER);
@@ -332,6 +423,18 @@ public final class DiagramTabPane {
 
         private boolean isActive() {
             return tabs.getSelectedComponent() == this;
+        }
+
+        /** プレビュー(SVG)カードを前面に出す。 */
+        private void showPreviewCard() {
+            cards.show(viewCards, "view");
+        }
+
+        /** メッセージカード(描画中 / 失敗 / 空)を中央寄せ HTML で表示する。 */
+        private void showMessageCard(String html) {
+            messageLabel.setText("<html><div style='text-align:center;width:460px'>"
+                    + html + "</div></html>");
+            cards.show(viewCards, "msg");
         }
 
         private void setStatus(String msg) {
@@ -388,6 +491,7 @@ public final class DiagramTabPane {
 
         void startRender() {
             setStatus("Rendering " + label + " ...");
+            showMessageCard("<b>Rendering " + esc(label) + " …</b>");
             final DiagramRequest dreq = spec;
             new SwingWorker<RenderResult, Void>() {
                 private Throwable error;
@@ -418,7 +522,8 @@ public final class DiagramTabPane {
                         if (isActive()) {
                             mirrorToState();
                         }
-                        setStatus(label + ": rendering failed.");
+                        showMessageCard(failureMessage(error));
+                        setStatus(label + ": rendering failed -- " + failureReason(error));
                         return;
                     }
                     try {
@@ -430,6 +535,10 @@ public final class DiagramTabPane {
                             if (isActive()) {
                                 mirrorToState();
                             }
+                            showMessageCard("<b>No diagram to display.</b><br><br>"
+                                    + "Pick a class, package or method from the tree, "
+                                    + "or choose another diagram kind from the toolbar.");
+                            setStatus(label + ": (no diagram)");
                             return;
                         }
                         previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
@@ -439,6 +548,7 @@ public final class DiagramTabPane {
                         sourcePanel.setText(r.puml);
                         renderedPuml = r.puml;
                         renderedSvgXml = r.svg.getSvgXml();
+                        showPreviewCard();
                         if (isActive()) {
                             mirrorToState();
                         }
@@ -446,10 +556,38 @@ public final class DiagramTabPane {
                                 + (int) Math.round(r.svg.getWidth()) + "x"
                                 + (int) Math.round(r.svg.getHeight()) + ", SVG)");
                     } catch (Exception ex) {
+                        showMessageCard(failureMessage(ex));
                         setStatus(label + ": " + ex.getMessage());
                     }
                 }
             }.execute();
+        }
+
+        /** 描画失敗時にタブ内へ表示する案内 (原因 + 対処)。 */
+        private String failureMessage(Throwable error) {
+            return "<b>Couldn't render this diagram.</b><br>"
+                    + esc(failureReason(error)) + "<br><br>"
+                    + "The diagram may be too large for the layout engine. Try:<br>"
+                    + "• selecting a single package / class / method in the tree<br>"
+                    + "• applying a preset (Diagram → Preset) to reduce detail<br>"
+                    + "• narrowing the scope (Diagram → Scope…)<br><br>"
+                    + "The generated PlantUML is shown in the lower pane.";
+        }
+
+        private String failureReason(Throwable error) {
+            if (error instanceof padtools.core.formats.uml.PlantUmlRenderFailedException) {
+                return "PlantUML layout error (Smetana)";
+            }
+            String m = error != null ? error.getMessage() : null;
+            return m == null ? (error != null ? error.getClass().getSimpleName() : "unknown")
+                    : (m.length() > 160 ? m.substring(0, 159) + "…" : m);
+        }
+
+        private String esc(String s) {
+            if (s == null) {
+                return "";
+            }
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         }
 
         private void handleLinkClick(LinkArea link, MouseEvent event) {

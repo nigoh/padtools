@@ -152,11 +152,21 @@ public final class DiagramController {
         if (tabPane == null) {
             return;
         }
+        // 大規模プロジェクトで全体 Class/Inheritance 図は巨大化・描画失敗しやすいので事前に案内する。
+        if ((kind == DiagramKind.CLASS || kind == DiagramKind.INHERITANCE)
+                && cache().isLoaded() && cache().getClasses().size() > LARGE_PROJECT_CLASSES) {
+            statusLabel.setText("Tip: " + cache().getClasses().size()
+                    + " classes — a whole-project " + ToolBarBuilder.toolbarLabel(kind)
+                    + " diagram is large. Pick a package/class from the tree to focus it.");
+        }
         boolean links = kind == DiagramKind.CLASS || kind == DiagramKind.INHERITANCE;
         DiagramRequest spec = new DiagramRequest(kind, null, null, true, null, links);
         tabPane.openDiagram("KIND:" + kind.name(),
                 ToolBarBuilder.toolbarLabel(kind), iconForKind(kind), spec, null);
     }
+
+    /** これを超えるクラス数のプロジェクトでは全体図のサイズ警告を出す。 */
+    private static final int LARGE_PROJECT_CLASSES = 40;
 
     /** Manifest 図をタブで開く。 */
     void openManifestDiagram() {
@@ -205,9 +215,12 @@ public final class DiagramController {
                 DiagramRequest.forNavigationGraph(navKey, true), null);
     }
 
-    /** プロジェクトロード後に開く既定タブ (Common = 代表的な構成図)。 */
+    /**
+     * プロジェクトロード後に開く既定タブ。Common 図は参照関係が薄いプロジェクトで
+     * 空になりがちなため、構造が一目で分かる Package 概要図を既定とする。
+     */
     public void openDefaultDiagram() {
-        openProjectWide(DiagramKind.COMMON);
+        openProjectWide(DiagramKind.PACKAGE);
     }
 
     private JavaClassInfo findClassBySimpleName(String simple) {

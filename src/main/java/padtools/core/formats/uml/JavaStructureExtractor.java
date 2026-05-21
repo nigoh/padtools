@@ -39,12 +39,21 @@ public final class JavaStructureExtractor {
 
     /** エラーリスナー付き。 */
     public static List<JavaClassInfo> extract(String source, ErrorListener listener) {
+        return extract(source, listener, null);
+    }
+
+    /**
+     * {@code solver} を渡すと (JavaParser 実装時のみ) 呼び出し先をシンボル解決して
+     * {@code Call.resolvedOwnerFqn} を埋める。legacy 実装では solver は無視される。
+     */
+    public static List<JavaClassInfo> extract(String source, ErrorListener listener,
+            padtools.core.formats.java.jp.JpSolver solver) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
         if (useJavaParser()) {
             return padtools.core.formats.java.jp.JavaParserFrontend.parse(
-                    source, listener != null ? listener : ErrorListener.silent());
+                    source, false, listener != null ? listener : ErrorListener.silent(), solver);
         }
         // Java の Unicode エスケープは字句解析の前に展開される (JLS 3.3)。
         // 識別子・キーワードを含むエスケープを正しく扱うため、入口で 1 度だけ展開する。

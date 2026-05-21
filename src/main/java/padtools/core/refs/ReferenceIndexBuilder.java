@@ -140,7 +140,12 @@ public final class ReferenceIndexBuilder {
         if (methodName == null || methodName.isEmpty()) {
             return;
         }
-        String receiverFqn = resolveReceiver(receiver, owner, fieldTypes, paramTypes);
+        // シンボル解決器が宣言型を特定済みなら、それを優先する
+        // (チェーン/オーバーロード/継承/ジェネリクスを正確に辿れる)。
+        String resolvedOwner = call.getResolvedOwnerFqn();
+        String receiverFqn = (resolvedOwner != null && !resolvedOwner.isEmpty())
+                ? resolvedOwner
+                : resolveReceiver(receiver, owner, fieldTypes, paramTypes);
         if (receiverFqn == null) {
             // 受信側不明 — 診断目的で未解決を記録
             index.addUnresolved(methodName + "() in " + ownerFqn + "." + callerMethod);

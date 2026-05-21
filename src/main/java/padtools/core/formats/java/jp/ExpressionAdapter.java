@@ -64,6 +64,9 @@ final class ExpressionAdapter {
                                  JpContext ctx) {
         JavaMethodInfo.Call call = new JavaMethodInfo.Call(receiver(mc), mc.getNameAsString());
         setFirstArgLabel(call, mc);
+        if (ctx.resolve) {
+            resolveTarget(mc, call);
+        }
         boolean firstInlined = false;
         if (!mc.getArguments().isEmpty()) {
             Expression a0 = mc.getArgument(0);
@@ -85,6 +88,18 @@ final class ExpressionAdapter {
     /** 呼び出しの receiver 文字列（{@code ""} / {@code "foo"} / {@code "a.b"} / {@code "this.x"}）。 */
     static String receiver(MethodCallExpr mc) {
         return mc.getScope().map(Node::toString).orElse("");
+    }
+
+    /** SymbolSolver で呼び出し先の宣言型 FQN とシグネチャを解決する。失敗時は何もしない。 */
+    private static void resolveTarget(MethodCallExpr mc, JavaMethodInfo.Call call) {
+        try {
+            com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration rmd =
+                    mc.resolve();
+            call.setResolvedOwnerFqn(rmd.declaringType().getQualifiedName());
+            call.setResolvedSignature(rmd.getSignature());
+        } catch (RuntimeException ex) {
+            // UnsolvedSymbolException / UnsupportedOperationException 等は無視してフォールバック
+        }
     }
 
     private static boolean isInlineArg(Expression e) {

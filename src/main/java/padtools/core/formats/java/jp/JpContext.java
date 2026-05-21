@@ -18,15 +18,18 @@ final class JpContext {
     final List<JavaClassInfo> out;
     final boolean headersOnly;
     final JpComments comments;
+    /** シンボル解決 (Call.resolvedOwnerFqn の設定) を行うか。solver がある FULL 解析時のみ true。 */
+    final boolean resolve;
     /** ローカルクラスの enclosingClass に使う、現在解析中の型の単純名チェーン。 */
     String currentEnclosing;
 
     JpContext(String packageName, List<String> imports, List<JavaClassInfo> out,
-              boolean headersOnly, JpComments comments) {
+              boolean headersOnly, JpComments comments, boolean resolve) {
         this.packageName = packageName;
         this.imports = imports;
         this.out = out;
         this.headersOnly = headersOnly;
         this.comments = comments;
+        this.resolve = resolve;
     }
 }

@@ -32,12 +32,21 @@ public final class JavaParserFrontend {
 
     /** ソースを解析して {@link JavaClassInfo} のリストを返す。 */
     public static List<JavaClassInfo> parse(String source, ErrorListener listener) {
-        return parse(source, false, listener);
+        return parse(source, false, listener, null);
     }
 
     /** {@code headersOnly} のときはメソッド本体の statement tree を構築しない。 */
     public static List<JavaClassInfo> parse(String source, boolean headersOnly,
                                             ErrorListener listener) {
+        return parse(source, headersOnly, listener, null);
+    }
+
+    /**
+     * {@code solver} が非 null なら SymbolSolver で呼び出し先を解決し、
+     * {@link padtools.core.formats.uml.JavaMethodInfo.Call#getResolvedOwnerFqn()} を埋める。
+     */
+    public static List<JavaClassInfo> parse(String source, boolean headersOnly,
+                                            ErrorListener listener, JpSolver solver) {
         ErrorListener l = listener != null ? listener : ErrorListener.silent();
         List<JavaClassInfo> out = new ArrayList<>();
         if (source == null || source.isEmpty()) {
@@ -45,9 +54,15 @@ public final class JavaParserFrontend {
         }
         // Java の Unicode エスケープ (\\uXXXX) は識別子/キーワードにも使えるため、字句解析前に展開する。
         String expanded = JavaLexer.expandUnicodeEscapes(source);
-        ParserConfiguration cfg = new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE);
-        ParseResult<CompilationUnit> result = new JavaParser(cfg).parse(expanded);
+        boolean resolve = solver != null && !headersOnly;
+        JavaParser parser;
+        if (solver != null) {
+            parser = solver.newParser();
+        } else {
+            parser = new JavaParser(new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE));
+        }
+        ParseResult<CompilationUnit> result = parser.parse(expanded);
         if (!result.isSuccessful()) {
             for (Problem p : result.getProblems()) {
                 l.onError(null, lineOf(p), p.getMessage());
@@ -63,7 +78,8 @@ public final class JavaParserFrontend {
             imports.add(importString(imp));
         }
         cu.getModule().ifPresent(m -> out.add(ModuleAdapter.adapt(m)));
-        JpContext ctx = new JpContext(pkg, imports, out, headersOnly, new JpComments(expanded));
+        JpContext ctx = new JpContext(pkg, imports, out, headersOnly,
+                new JpComments(expanded), resolve);
         for (TypeDeclaration<?> td : cu.getTypes()) {
             TypeDeclAdapter.adapt(td, null, ctx);
         }

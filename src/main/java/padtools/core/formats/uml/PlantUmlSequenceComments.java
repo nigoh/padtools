@@ -56,7 +56,7 @@ final class PlantUmlSequenceComments {
         String classFirst = JavaCommentScanner.firstLine(c.getComment());
         if (classFirst != null && !classFirst.isEmpty()) {
             appendInlineLine(out, participant, o,
-                    PlantUmlClassDiagram.sanitizeInlineComment(classFirst, o.commentMaxLength));
+                    PlantUmlCommentFormatter.sanitizeInlineComment(classFirst, o.commentMaxLength));
         }
         for (String name : methodNames) {
             JavaMethodInfo m = findMethod(c, name);
@@ -67,7 +67,7 @@ final class PlantUmlSequenceComments {
             if (first == null || first.isEmpty()) {
                 continue;
             }
-            String line = PlantUmlClassDiagram.sanitizeInlineComment(
+            String line = PlantUmlCommentFormatter.sanitizeInlineComment(
                     name + "(): " + first, o.commentMaxLength);
             appendInlineLine(out, participant, o, line);
         }
@@ -111,7 +111,7 @@ final class PlantUmlSequenceComments {
 
         out.append("note over ").append(quote(participant)).append('\n');
         if (hasClassComment) {
-            PlantUmlClassDiagram.appendNoteBody(out, c.getComment(), "", o.commentMaxLength);
+            PlantUmlCommentFormatter.appendNoteBody(out, c.getComment(), "", o.commentMaxLength);
         }
         boolean needSeparator = hasClassComment && hasAnyMethodContent;
         for (String name : methodNames) {
@@ -152,7 +152,7 @@ final class PlantUmlSequenceComments {
                 continue;
             }
             if (first) {
-                String[] wl = PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1);
+                String[] wl = PlantUmlCommentFormatter.wordWrap(t, o.commentMaxLength).split("\n", -1);
                 out.append("  ").append(name).append("(): ").append(wl[0]).append('\n');
                 for (int i = 1; i < wl.length; i++) {
                     if (!wl[i].isEmpty()) {
@@ -161,7 +161,7 @@ final class PlantUmlSequenceComments {
                 }
                 first = false;
             } else {
-                for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                for (String wl : PlantUmlCommentFormatter.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
                     if (!wl.isEmpty()) {
                         out.append("    ").append(wl).append('\n');
                     }
@@ -183,7 +183,7 @@ final class PlantUmlSequenceComments {
                 if (t.isEmpty()) {
                     continue;
                 }
-                for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                for (String wl : PlantUmlCommentFormatter.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
                     if (!wl.isEmpty()) {
                         out.append("    // ").append(wl).append('\n');
                     }

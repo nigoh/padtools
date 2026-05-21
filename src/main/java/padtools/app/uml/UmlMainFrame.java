@@ -483,8 +483,9 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
-    /** 全クラスの関数使用マップ (署名・利用側・実行条件・リスナー) を構築する。 */
-    private String buildFunctionListReport() {
+    /** 全クラスの関数使用マップ (署名・利用側・実行条件・リスナー) を指定形式で構築する。 */
+    private String buildFunctionListReport(
+            padtools.core.formats.uml.MethodUsageReport.Format format) {
         java.util.List<padtools.core.formats.android.actions.UiActionEntry> actions =
                 java.util.Collections.emptyList();
         if (currentProjectRoot != null) {
@@ -496,22 +497,30 @@ public class UmlMainFrame extends JFrame {
             }
         }
         return padtools.core.formats.uml.MethodUsageReport.render(
-                cache.getClasses(), refIndexCache.get(), actions);
+                cache.getClasses(), refIndexCache.get(), actions, format);
     }
 
     /** 「Functions」タブの内容をプロジェクトの現状で更新する (タブ選択時に遅延生成)。 */
     private void updateFunctionList() {
-        methodListPanel.setText(cache.isLoaded() ? buildFunctionListReport() : "");
+        methodListPanel.setText(cache.isLoaded()
+                ? buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.TABLE)
+                : "");
     }
 
-    /** 関数使用マップをファイルに保存する (File メニュー)。 */
+    /** 関数使用マップをファイルに保存する (File メニュー、Markdown テーブル / CSV を拡張子で選択)。 */
     private void exportFunctionList() {
         if (!cache.isLoaded()) {
             JOptionPane.showMessageDialog(this, "Open a project first.",
                     "Functions", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        exportController.exportText(buildFunctionListReport(), "Save function list as Markdown");
+        exportController.exportFunctionList(
+                buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.TABLE),
+                buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.CSV),
+                "Save function list (Markdown table or CSV)");
     }
 
     /**

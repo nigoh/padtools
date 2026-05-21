@@ -22,7 +22,10 @@ public final class CliDispatcher {
             return true;
         }
         if (o.functionList.isSet()) {
-            UmlCommands.handleFunctionList(ctx);
+            String fmt = o.functionListFormat.getArguments().isEmpty()
+                    ? null : o.functionListFormat.getArguments().getLast();
+            UmlCommands.handleFunctionList(ctx,
+                    padtools.core.formats.uml.MethodUsageReport.Format.fromString(fmt));
             return true;
         }
         if (o.sequenceDiagrams.isSet()) {

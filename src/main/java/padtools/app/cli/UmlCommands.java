@@ -158,7 +158,8 @@ public final class UmlCommands {
      * 実行条件（呼び出しを囲む分岐条件 / リスナーの UI トリガ）付きで出力する。
      * ディレクトリ入力時はボタン押下リスナー (XML/Compose/メニュー) も併記する。
      */
-    public static void handleFunctionList(CliContext ctx) throws IOException {
+    public static void handleFunctionList(CliContext ctx,
+            padtools.core.formats.uml.MethodUsageReport.Format format) throws IOException {
         File fileIn = ctx.fileIn;
         File fileOut = ctx.fileOut;
         ErrorListener listener = ctx.listener;
@@ -184,7 +185,8 @@ public final class UmlCommands {
             infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
         }
         CliOutput.writeText(fileOut,
-                padtools.core.formats.uml.MethodUsageReport.render(infos, refIndex, actions));
+                padtools.core.formats.uml.MethodUsageReport.render(
+                        infos, refIndex, actions, format));
     }
 
     /**

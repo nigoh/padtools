@@ -159,9 +159,12 @@ final class ExportController {
         }
     }
 
-    /** 任意の Markdown テキスト (関数一覧など) を保存ダイアログでファイル出力する。 */
-    public void exportText(String content, String dialogTitle) {
-        if (content == null || content.isEmpty()) {
+    /**
+     * 関数一覧を Markdown テーブル / CSV のいずれかで保存する。
+     * 選択フィルタ（または入力した拡張子）が {@code .csv} なら CSV を、それ以外は Markdown を書き出す。
+     */
+    public void exportFunctionList(String markdown, String csv, String dialogTitle) {
+        if ((markdown == null || markdown.isEmpty()) && (csv == null || csv.isEmpty())) {
             JOptionPane.showMessageDialog(parent, "No content to export.",
                     "Export", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -169,17 +172,26 @@ final class ExportController {
         JFileChooser fc = new JFileChooser();
         fc.setDialogTitle(dialogTitle);
         fc.setAcceptAllFileFilterUsed(false);
-        fc.setFileFilter(new FileNameExtensionFilter("Markdown (*.md)", "md"));
+        FileNameExtensionFilter mdFilter =
+                new FileNameExtensionFilter("Markdown table (*.md)", "md");
+        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV (*.csv)", "csv");
+        fc.addChoosableFileFilter(mdFilter);
+        fc.addChoosableFileFilter(csvFilter);
+        fc.setFileFilter(mdFilter);
         int r = fc.showSaveDialog(parent);
         if (r != JFileChooser.APPROVE_OPTION) {
             return;
         }
         File chosen = fc.getSelectedFile();
-        if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".md")) {
-            chosen = new File(chosen.getAbsolutePath() + ".md");
+        String lower = chosen.getName().toLowerCase(java.util.Locale.ROOT);
+        boolean asCsv = lower.endsWith(".csv")
+                || (!lower.endsWith(".md") && fc.getFileFilter() == csvFilter);
+        String ext = asCsv ? "csv" : "md";
+        if (!lower.endsWith("." + ext)) {
+            chosen = new File(chosen.getAbsolutePath() + "." + ext);
         }
         try {
-            padtools.app.cli.CliOutput.writeText(chosen, content);
+            padtools.app.cli.CliOutput.writeText(chosen, asCsv ? csv : markdown);
             status.setText("Saved: " + chosen.getAbsolutePath());
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(parent,

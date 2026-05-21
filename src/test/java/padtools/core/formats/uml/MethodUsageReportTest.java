@@ -22,6 +22,18 @@ public class MethodUsageReportTest {
     }
 
     @Test
+    public void render_csvFormat_emitsHeaderAndMethodRows() {
+        List<JavaClassInfo> classes = JavaStructureExtractor.extract(
+                "package x; public class Foo { public int add(int a, int b) { return a + b; } }");
+        String csv = MethodUsageReport.render(classes, null, Collections.emptyList(),
+                MethodUsageReport.Format.CSV);
+        assertTrue(csv, csv.startsWith("category,class,kind,signature,callers,conditions"));
+        // 署名にカンマを含むためクォートされる
+        assertTrue(csv, csv.contains("\"+ add(a: int, b: int): int\""));
+        assertTrue(csv, csv.contains("method,x.Foo,CLASS,"));
+    }
+
+    @Test
     public void render_includesClickListenerHandlersAsListeners() {
         List<JavaClassInfo> classes = JavaStructureExtractor.extract(
                 "class Screen { void setup() {"

@@ -506,4 +506,23 @@ public class MainCliTest {
         assertTrue(md, md.contains("実行条件"));
         assertTrue(md, md.contains("if"));
     }
+
+    @Test
+    public void testFunctionListCsvCli() throws Exception {
+        File root = tmp.newFolder("ProjFnCsv");
+        File pkg = new File(root, "app/src/main/java/x");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Svc.java"),
+                "package x; public class Svc {"
+                + " public void run(boolean f) { if (f) { helper(); } }"
+                + " void helper() {} }");
+        File out = new File(tmp.getRoot(), "fn.csv");
+        Main.main(new String[]{"--function-list", "--function-list-format", "csv",
+                "-o", out.getAbsolutePath(), root.getAbsolutePath()});
+        String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(csv, csv.startsWith("category,class,kind,signature,callers,conditions"));
+        assertTrue(csv, csv.contains("method,x.Svc,CLASS,"));
+        // helper() の呼び出しは if(f) 配下なので条件列に反映される
+        assertTrue(csv, csv.contains("if (f)"));
+    }
 }

@@ -18,14 +18,28 @@ import java.util.Set;
 
 /**
  * 全クラスの関数（メソッド）一覧を、各関数の「利用側（呼び出し元）」と
- * 「実行条件（呼び出しを囲む分岐条件 / リスナーの UI トリガ）」付きで Markdown 出力する。
+ * 「実行条件（呼び出しを囲む分岐条件 / リスナーの UI トリガ）」付きで出力する。
  *
- * <p>署名整形は {@link PlantUmlClassDiagram#emitMethod} と同等のロジックをプレーン化したもの。
+ * <p>出力形式は {@link Format} で選択する（Markdown テーブル または CSV）。
+ * 署名整形は {@link PlantUmlClassDiagram#emitMethod} と同等のロジックをプレーン化したもの。
  * 呼び出し元は {@link ReferenceIndex}、実行条件はパース済み statement tree の分岐ラベルから求める。
  * ボタン押下時のリスナーは、コード内のラムダ/匿名本体に加え、{@code UiActionScanner} が検出した
- * XML / Compose / メニューのアクションを「## UI Actions」セクションに併記する。</p>
+ * XML / Compose / メニューのアクションを「## UI Actions」セクション（CSV では ui-action 行）に併記する。</p>
  */
 public final class MethodUsageReport {
+
+    /** 出力形式。 */
+    public enum Format {
+        /** Markdown テーブル（1メソッド=1行 + UI Actions 表）。 */
+        TABLE,
+        /** カンマ区切り（スプレッドシート取込向け）。 */
+        CSV;
+
+        /** 文字列 ("table" / "csv") から形式を解決する。不明・null は TABLE。 */
+        public static Format fromString(String s) {
+            return s != null && "csv".equalsIgnoreCase(s.trim()) ? CSV : TABLE;
+        }
+    }
 
     private MethodUsageReport() {
     }
@@ -33,8 +47,38 @@ public final class MethodUsageReport {
     public static String render(List<JavaClassInfo> classes,
                                 ReferenceIndex refIndex,
                                 List<UiActionEntry> actions) {
-        StringBuilder out = new StringBuilder();
-        out.append("# 関数使用マップ (Function usage map)\n\n");
+        return render(classes, refIndex, actions, Format.TABLE);
+    }
+
+    public static String render(List<JavaClassInfo> classes,
+                                ReferenceIndex refIndex,
+                                List<UiActionEntry> actions,
+                                Format format) {
+        List<Row> rows = buildRows(classes, refIndex);
+        return format == Format.CSV ? renderCsv(rows, actions) : renderTable(rows, actions);
+    }
+
+    /** 1メソッド（または1リスナー）分の出力行。形式非依存の中間表現。 */
+    private static final class Row {
+        final String classFqn;
+        final String kind;
+        final String signature;
+        final boolean listener;
+        final List<String> callers;
+        final List<String> conditions;
+
+        Row(String classFqn, String kind, String signature, boolean listener,
+            List<String> callers, List<String> conditions) {
+            this.classFqn = classFqn;
+            this.kind = kind;
+            this.signature = signature;
+            this.listener = listener;
+            this.callers = callers;
+            this.conditions = conditions;
+        }
+    }
+
+    private static List<Row> buildRows(List<JavaClassInfo> classes, ReferenceIndex refIndex) {
         Map<String, JavaClassInfo> byQn = new HashMap<>();
         List<JavaClassInfo> sorted = new ArrayList<>();
         for (JavaClassInfo c : classes) {
@@ -47,50 +91,32 @@ public final class MethodUsageReport {
             }
         }
         sorted.sort(Comparator.comparing(c -> nz(c.getQualifiedName())));
+        List<Row> rows = new ArrayList<>();
         for (JavaClassInfo c : sorted) {
-            renderClass(out, c, refIndex, byQn);
+            String qn = nz(c.getQualifiedName());
+            String kind = String.valueOf(c.getKind());
+            for (JavaMethodInfo m : c.getMethods()) {
+                rows.add(methodRow(qn, kind, m, refIndex, byQn));
+            }
+            for (JavaMethodInfo listener : collectListeners(c)) {
+                List<String> trigger = new ArrayList<>();
+                trigger.add(triggerOf(listener.getName()));
+                rows.add(new Row(qn, kind, signature(listener), true,
+                        new ArrayList<>(), trigger));
+            }
         }
-        if (actions != null && !actions.isEmpty()) {
-            out.append("## UI Actions（ボタン押下時のリスナー: XML / Compose / メニュー含む）\n\n");
-            out.append(MarkdownActionReport.render(actions));
-        }
-        return out.toString();
+        return rows;
     }
 
-    private static void renderClass(StringBuilder out, JavaClassInfo c,
-                                    ReferenceIndex refIndex, Map<String, JavaClassInfo> byQn) {
-        out.append("## ").append(c.getKind()).append(' ').append(nz(c.getQualifiedName()))
-                .append("\n\n");
-        boolean any = false;
-        for (JavaMethodInfo m : c.getMethods()) {
-            renderMethod(out, c, m, refIndex, byQn);
-            any = true;
-        }
-        for (JavaMethodInfo listener : collectListeners(c)) {
-            renderListener(out, listener);
-            any = true;
-        }
-        if (!any) {
-            out.append("_(no methods)_\n");
-        }
-        out.append('\n');
-    }
-
-    private static void renderMethod(StringBuilder out, JavaClassInfo owner, JavaMethodInfo m,
-                                     ReferenceIndex refIndex, Map<String, JavaClassInfo> byQn) {
-        out.append("- `").append(signature(m)).append("`\n");
+    private static Row methodRow(String qn, String kind, JavaMethodInfo m,
+                                 ReferenceIndex refIndex, Map<String, JavaClassInfo> byQn) {
         List<ReferenceSite> sites = refIndex == null
                 ? new ArrayList<>()
-                : refIndex.sites(ReferenceKey.ofMethod(nz(owner.getQualifiedName()), nz(m.getName())));
-        if (sites.isEmpty()) {
-            out.append("    - 利用側: (呼び出し元なし)\n");
-            out.append("    - 実行条件: (直接呼び出し)\n");
-            return;
-        }
-        out.append("    - 利用側:\n");
+                : refIndex.sites(ReferenceKey.ofMethod(qn, nz(m.getName())));
+        List<String> callers = new ArrayList<>();
         Set<String> conditions = new LinkedHashSet<>();
         for (ReferenceSite s : sites) {
-            out.append("        - ").append(callerLabel(s)).append('\n');
+            callers.add(callerLabel(s));
             JavaClassInfo caller = byQn.get(s.getCallerFqn());
             if (caller != null && !nz(s.getCallerMethod()).isEmpty()) {
                 for (JavaMethodInfo cm : caller.getMethods()) {
@@ -101,14 +127,85 @@ public final class MethodUsageReport {
                 }
             }
         }
-        out.append("    - 実行条件: ")
-                .append(conditions.isEmpty() ? "(直接呼び出し)" : String.join(" / ", conditions))
-                .append('\n');
+        return new Row(qn, kind, signature(m), false, callers, new ArrayList<>(conditions));
     }
 
-    private static void renderListener(StringBuilder out, JavaMethodInfo listener) {
-        out.append("- `[listener] ").append(signature(listener)).append("`\n");
-        out.append("    - 実行条件: ").append(triggerOf(listener.getName())).append('\n');
+    private static String renderTable(List<Row> rows, List<UiActionEntry> actions) {
+        StringBuilder out = new StringBuilder();
+        out.append("# 関数使用マップ (Function usage map)\n\n");
+        out.append("| クラス | 種別 | 関数 | 利用側 | 実行条件 |\n");
+        out.append("|---|---|---|---|---|\n");
+        for (Row r : rows) {
+            String sig = r.listener ? "[listener] " + r.signature : r.signature;
+            out.append("| `").append(mdInline(r.classFqn)).append("` | ")
+                    .append(mdInline(r.kind)).append(" | `")
+                    .append(mdInline(sig)).append("` | ")
+                    .append(callersCell(r)).append(" | ")
+                    .append(conditionsCell(r)).append(" |\n");
+        }
+        out.append('\n');
+        if (actions != null && !actions.isEmpty()) {
+            out.append("## UI Actions（ボタン押下時のリスナー: XML / Compose / メニュー含む）\n\n");
+            out.append(MarkdownActionReport.render(actions));
+        }
+        return out.toString();
+    }
+
+    private static String callersCell(Row r) {
+        if (r.listener) {
+            return "—";
+        }
+        return r.callers.isEmpty() ? "(呼び出し元なし)" : joinMd(r.callers);
+    }
+
+    private static String conditionsCell(Row r) {
+        if (r.listener) {
+            return joinMd(r.conditions);
+        }
+        return r.conditions.isEmpty() ? "(直接呼び出し)" : joinMd(r.conditions);
+    }
+
+    private static String joinMd(List<String> items) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) {
+                sb.append("<br>");
+            }
+            sb.append(mdInline(items.get(i)));
+        }
+        return sb.toString();
+    }
+
+    private static String renderCsv(List<Row> rows, List<UiActionEntry> actions) {
+        StringBuilder out = new StringBuilder();
+        out.append("category,class,kind,signature,callers,conditions\n");
+        for (Row r : rows) {
+            out.append(csv(r.listener ? "listener" : "method")).append(',')
+                    .append(csv(r.classFqn)).append(',')
+                    .append(csv(r.kind)).append(',')
+                    .append(csv(r.signature)).append(',')
+                    .append(csv(r.listener ? "" : String.join("; ", r.callers))).append(',')
+                    .append(csv(String.join("; ", r.conditions))).append('\n');
+        }
+        if (actions != null) {
+            for (UiActionEntry a : actions) {
+                out.append(csv("ui-action")).append(',')
+                        .append(csv(a.componentId)).append(',')
+                        .append(csv(a.actionType.label)).append(',')
+                        .append(csv(a.handler)).append(',')
+                        .append(csv(actionSource(a))).append(',')
+                        .append(csv("")).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    private static String actionSource(UiActionEntry a) {
+        String name = a.shortFileName();
+        if (a.line > 0) {
+            return name.isEmpty() ? String.valueOf(a.line) : name + ":" + a.line;
+        }
+        return name;
     }
 
     /** クラス内の `setOnClickListener(...)` 等で渡されたラムダ/匿名本体を収集する。 */
@@ -220,6 +317,19 @@ public final class MethodUsageReport {
             sb.append(')');
         }
         return sb.toString();
+    }
+
+    private static String mdInline(String s) {
+        return nz(s).replace("|", "\\|").replace("\r", " ").replace("\n", " ");
+    }
+
+    private static String csv(String s) {
+        String v = nz(s);
+        if (v.indexOf(',') >= 0 || v.indexOf('"') >= 0
+                || v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0) {
+            return "\"" + v.replace("\"", "\"\"") + "\"";
+        }
+        return v;
     }
 
     private static String nz(String s) {

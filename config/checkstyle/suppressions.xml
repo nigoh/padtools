@@ -5,7 +5,6 @@
 
 <suppressions>
     <!-- Legacy naming conventions that cannot be safely changed -->
-    <suppress checks="LocalVariableName" files="Main\.java" />
     <suppress checks="LocalVariableName" files="ViewListView\.java" />
     <suppress checks="MethodName" files="SwitchView\.java" />
 
@@ -28,11 +27,4 @@
     <!-- StyleSettingsDialog.buildForm は GridBag フォームの行を順に積むため、
          フィールドが増えるたびに行数が伸びる。1 関数に収めた方が UI の縦並びが直感的。 -->
     <suppress checks="MethodLength" files="StyleSettingsDialog\.java" />
-
-    <!-- Main.java は CLI 引数パースと全 出力モード (UML / Gradle / Manifest / Deep Link /
-         Component / Dependency / Summary / All / Sequence) のディスパッチャを兼ねるため、
-         出力モードが増えるたびに main 内 dispatch とファイル全体が比例して伸びる。
-         CLI の入口として凝集しており、機能単位での分割は反って関連性を失わせるため許可。 -->
-    <suppress checks="FileLength" files="Main\.java" />
-    <suppress checks="MethodLength" files="Main\.java" />
 </suppressions>

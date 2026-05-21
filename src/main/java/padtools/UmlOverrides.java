@@ -19,7 +19,7 @@ import java.util.Set;
  * 双方を保持する。{@link DiagramPreset} を CLI {@code --preset} で適用してから、
  * 個別フラグ ({@code --no-fields} / {@code --public-only} 等) で上書きする 2 段方式。</p>
  */
-final class UmlOverrides {
+public final class UmlOverrides {
 
     DiagramPreset preset = DiagramPreset.BALANCED;
 
@@ -41,13 +41,13 @@ final class UmlOverrides {
             PlantUmlClassDiagram.CommentStyle.INLINE;
     Integer commentMaxLengthOverride; // null = preset 既定をそのまま使う
     Set<String> hiddenAnnotationsOverride; // null = preset 既定をそのまま使う
-    Set<String> excludedPackages = new LinkedHashSet<>();
-    UmlGenerator.ParseMode parseMode = UmlGenerator.ParseMode.FULL;
+    public Set<String> excludedPackages = new LinkedHashSet<>();
+    public UmlGenerator.ParseMode parseMode = UmlGenerator.ParseMode.FULL;
 
-    Integer seqDepth;
+    public Integer seqDepth;
 
     /** クラス図向け Options に値を反映する。 */
-    void applyTo(PlantUmlClassDiagram.Options o) {
+    public void applyTo(PlantUmlClassDiagram.Options o) {
         o.showComments = showComments;
         o.showAnnotations = showAnnotations;
         o.showEnumConstants = showEnumConstants;
@@ -73,7 +73,7 @@ final class UmlOverrides {
     }
 
     /** シーケンス図向けにコメント関連オプションを適用する。 */
-    void applyTo(padtools.core.formats.uml.PlantUmlSequenceDiagram.Options o) {
+    public void applyTo(padtools.core.formats.uml.PlantUmlSequenceDiagram.Options o) {
         o.showComments = showComments;
         o.commentStyle = commentStyle;
     }
@@ -82,7 +82,7 @@ final class UmlOverrides {
      * CLI 引数から {@link UmlOverrides} を組み立てる。
      * 不正値の場合は {@code System.exit(1)} で終了して null を返す。
      */
-    static UmlOverrides build(Option optNoComments, Option optNoAnnotations,
+    public static UmlOverrides build(Option optNoComments, Option optNoAnnotations,
                                Option optNoEnumConstants, Option optNoFinal,
                                Option optCommentStyle, Option optSeqDepth,
                                Option optJetpack, Option optPreset,

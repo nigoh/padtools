@@ -439,4 +439,49 @@ public class MainCliTest {
         assertEquals(padtools.app.uml.DiagramPreset.CUSTOM,
                 padtools.app.uml.DiagramPreset.fromCli("bogus"));
     }
+
+    @Test
+    public void testFuncDiffCli() throws Exception {
+        File fileA = tmp.newFile("ServiceA.java");
+        writeFile(fileA,
+                "class ServiceA { Manager m; void bind() {"
+                + " m.connect(); m.init(); } }");
+        File fileB = tmp.newFile("ServiceB.java");
+        writeFile(fileB,
+                "class ServiceB { Manager m; void bind() {"
+                + " m.connect(); m.init(); m.extra(); } }");
+        File out = new File(tmp.getRoot(), "diff.md");
+
+        String spec = fileA.getAbsolutePath() + "::ServiceA.bind,"
+                + fileB.getAbsolutePath() + "::ServiceB.bind";
+        Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
+
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("# Function Diff Report"));
+        assertTrue(md, md.contains("## Summary"));
+        assertTrue(md, md.contains("## Call Comparison"));
+        assertTrue(md, md.contains("MATCH"));
+        assertTrue(md, md.contains("ONLY_B"));
+        assertTrue(md, md.contains("extra"));
+    }
+
+    @Test
+    public void testFuncDiffCliMethodOnly() throws Exception {
+        File fileA = tmp.newFile("Alpha.java");
+        writeFile(fileA, "class Alpha { X x; void go() { x.run(); } }");
+        File fileB = tmp.newFile("Beta.java");
+        writeFile(fileB, "class Beta { X x; void go() { x.run(); x.stop(); } }");
+        File out = new File(tmp.getRoot(), "d2.md");
+
+        String spec = fileA.getAbsolutePath() + "::go,"
+                + fileB.getAbsolutePath() + "::go";
+        Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
+
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("# Function Diff Report"));
+        assertTrue(md, md.contains("LCS Similarity"));
+        assertTrue(md, md.contains("Edit Distance"));
+        assertTrue(md, md.contains("Jaccard"));
+        assertTrue(md, md.contains("ONLY_B"));
+    }
 }

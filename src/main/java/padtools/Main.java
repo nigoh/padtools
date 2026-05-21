@@ -195,6 +195,7 @@ public class Main {
         final Option optSettings = new Option(null, "settings", false);
         final Option optInitFlow = new Option(null, "init-flow", false);
         final Option optActionMap = new Option(null, "action-map", false);
+        final Option optFuncDiff = new Option(null, "func-diff", true);
 
         final OptionParser optParser = new OptionParser(new Option[]{
                 optHelp, optOut,
@@ -213,7 +214,8 @@ public class Main {
                 optImpact, optImpactDepth, optRefFind,
                 optVhalFlow, optAidlBinding, optErDiagram, optDataFlow,
                 optScreenFlow, optAndroidBp, optSelinux, optRro,
-                optSettings, optInitFlow, optActionMap});
+                optSettings, optInitFlow, optActionMap,
+                optFuncDiff});
 
         try {
             optParser.parse(args);
@@ -366,6 +368,10 @@ public class Main {
         }
         if (optActionMap.isSet()) {
             handleActionMap(file_in, file_out, listener);
+            return;
+        }
+        if (optFuncDiff.isSet()) {
+            handleFuncDiff(file_out, optFuncDiff.getArguments().getLast(), listener);
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
@@ -901,6 +907,61 @@ public class Main {
         java.util.List<UiActionEntry> entries =
                 new UiActionScanner().analyzeProject(fileIn);
         writeText(fileOut, MarkdownActionReport.render(entries));
+    }
+
+    /**
+     * {@code --func-diff "FileA.java::ClassName.methodA,FileB.java::ClassName.methodB"}:
+     * 2つのメソッドの呼び出し列を比較し、LCS/Levenshtein/Jaccard の3指標と
+     * 行ごとの信頼度スコアを Markdown レポートとして出力する。
+     */
+    private static void handleFuncDiff(File fileOut, String spec,
+                                         ErrorListener listener) throws IOException {
+        if (spec == null || !spec.contains(",")) {
+            System.err.println(
+                    "--func-diff requires \"SpecA,SpecB\" format where each spec is"
+                    + " \"filePath::ClassName.methodName\".");
+            System.exit(1);
+            return;
+        }
+        int comma = spec.indexOf(',');
+        String rawA = spec.substring(0, comma).trim();
+        String rawB = spec.substring(comma + 1).trim();
+
+        padtools.core.funcdiff.MethodDiffAnalyzer.MethodSpec specA;
+        padtools.core.funcdiff.MethodDiffAnalyzer.MethodSpec specB;
+        try {
+            specA = padtools.core.funcdiff.MethodDiffAnalyzer.parseSpec(rawA);
+            specB = padtools.core.funcdiff.MethodDiffAnalyzer.parseSpec(rawB);
+        } catch (IllegalArgumentException e) {
+            System.err.println("--func-diff: " + e.getMessage());
+            System.exit(1);
+            return;
+        }
+
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> classesA =
+                UmlGenerator.extractFromSource(
+                        AndroidProjectScanner.readFile(new java.io.File(specA.filePath)),
+                        new java.io.File(specA.filePath).getName(), listener);
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> classesB =
+                UmlGenerator.extractFromSource(
+                        AndroidProjectScanner.readFile(new java.io.File(specB.filePath)),
+                        new java.io.File(specB.filePath).getName(), listener);
+
+        padtools.core.formats.uml.JavaMethodInfo methodA =
+                padtools.core.funcdiff.MethodDiffAnalyzer.findMethod(classesA, specA);
+        padtools.core.formats.uml.JavaMethodInfo methodB =
+                padtools.core.funcdiff.MethodDiffAnalyzer.findMethod(classesB, specB);
+
+        if (methodA == null) {
+            System.err.println("--func-diff: method not found: " + rawA);
+        }
+        if (methodB == null) {
+            System.err.println("--func-diff: method not found: " + rawB);
+        }
+
+        padtools.core.funcdiff.MethodDiffAnalyzer.DiffResult result =
+                padtools.core.funcdiff.MethodDiffAnalyzer.analyze(methodA, specA, methodB, specB);
+        writeText(fileOut, padtools.core.funcdiff.MarkdownMethodDiffReport.render(result));
     }
 
     /**

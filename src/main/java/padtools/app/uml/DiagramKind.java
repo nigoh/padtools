@@ -32,7 +32,9 @@ public enum DiagramKind {
     /** 継承図 — extends/implements 階層のみをツリー状に表示。クラス名・型種別のみ出力。 */
     INHERITANCE("Inheritance Diagram"),
     /** コールグラフ — 任意の {@code Class.method} を起点にどの関数を呼び出しているかをグラフで表示。 */
-    CALLGRAPH("Call Graph");
+    CALLGRAPH("Call Graph"),
+    /** 画面遷移図 — Intent 起動 + Car App Library の Screen.push を統合した遷移を State 図で表示。 */
+    SCREEN_FLOW("Screen Flow");
 
     private final String displayName;
 

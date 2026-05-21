@@ -94,191 +94,295 @@ public final class DiagramService {
         if (request == null) {
             throw new IllegalArgumentException("request is null");
         }
-        switch (request.getKind()) {
-            case CLASS: {
-                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
-                        index != null ? index.moduleMap() : null);
-                int originalTotal = (classes != null) ? classes.size() : 0;
-                int scopedTotal = scoped.size();
-                int maxClasses = request.getScope() != null ? request.getScope().getMaxClasses() : 0;
-                if (index != null) {
-                    scoped = promoteToDetailed(scoped, index);
-                }
-                PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                o.maxClasses = maxClasses;
-                o.interactiveLinks = request.isInteractiveLinks();
-                // Setting → Options (GUI で永続化されたクラス図設定の既定)
-                applyClassDiagramSettings(o);
-                // Scope → Options (Scope に明示値があれば上書き)
-                applyScopeToClassOptions(request.getScope(), o);
-                if (scopedTotal < originalTotal) {
-                    o.footerWarning = "scope filter: " + scopedTotal + " of "
-                            + originalTotal + " classes";
-                }
-                return PlantUmlClassDiagram.generate(scoped, o);
-            }
-            case PACKAGE: {
-                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
-                        index != null ? index.moduleMap() : null);
-                PlantUmlPackageDiagram.Options o = new PlantUmlPackageDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlPackageDiagram.generate(scoped, o);
-            }
-            case SEQUENCE: {
-                String cls = request.getSequenceEntryClass();
-                String method = request.getSequenceEntryMethod();
-                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Sequence diagram requires entry Class.method");
-                }
-                List<JavaClassInfo> source = classes != null
-                        ? promoteToDetailed(classes, index) : classes;
-                PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                o.dependencyIndex = depIndex;
-                applySequenceCommentSettings(o);
-                Set<String> hidden = request.getSequenceHiddenParticipants();
-                if (hidden != null && !hidden.isEmpty()) {
-                    o.hiddenParticipants = hidden;
-                }
-                return PlantUmlSequenceDiagram.generate(source, cls, method, o);
-            }
-            case ACTIVITY: {
-                String cls = request.getActivityEntryClass();
-                String method = request.getActivityEntryMethod();
-                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Activity diagram requires entry Class.method");
-                }
-                List<JavaClassInfo> source = classes != null
-                        ? promoteToDetailed(classes, index) : classes;
-                PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlActivityDiagram.generate(source, cls, method, o);
-            }
-            case COMPONENT: {
-                PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlComponentDiagram.generate(analysis, o);
-            }
-            case DEPENDENCY: {
-                PlantUmlGradleDependencyGraph.Options o =
-                        new PlantUmlGradleDependencyGraph.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlGradleDependencyGraph.generate(analysis, o);
-            }
-            case MANIFEST: {
-                PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlManifestDiagram.generate(analysis, o);
-            }
-            case COMMON: {
-                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
-                        index != null ? index.moduleMap() : null);
-                if (index != null) {
-                    scoped = promoteToDetailed(scoped, index);
-                }
-                PlantUmlCommonClassesDiagram.Options o =
-                        new PlantUmlCommonClassesDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlCommonClassesDiagram.generate(scoped, o);
-            }
-            case LAYOUT: {
-                String key = request.getLayoutKey();
-                if (key == null || key.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Layout diagram requires layoutKey (select a layout file)");
-                }
-                if (analysis == null) {
-                    throw new IllegalStateException(
-                            "Layout diagram requires Android project analysis");
-                }
-                AndroidLayoutInfo layout = analysis.findLayoutByKey(key);
-                if (layout == null) {
-                    throw new IllegalArgumentException(
-                            "Layout not found for key: " + key);
-                }
-                PlantUmlLayoutDiagram.Options o = new PlantUmlLayoutDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlLayoutDiagram.generate(layout, o);
-            }
-            case NAVIGATION: {
-                String navKey = request.getNavigationGraphKey();
-                if (navKey == null || navKey.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Navigation diagram requires navigationGraphKey"
-                                    + " (select a navigation file)");
-                }
-                if (analysis == null) {
-                    throw new IllegalStateException(
-                            "Navigation diagram requires Android project analysis");
-                }
-                AndroidNavigationGraphInfo nav = analysis.findNavigationByKey(navKey);
-                if (nav == null) {
-                    throw new IllegalArgumentException(
-                            "Navigation graph not found for key: " + navKey);
-                }
-                PlantUmlNavigationGraphDiagram.Options o =
-                        new PlantUmlNavigationGraphDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlNavigationGraphDiagram.generate(nav, o);
-            }
-            case MODULE: {
-                PlantUmlModuleDiagram.Options o = new PlantUmlModuleDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                return PlantUmlModuleDiagram.generate(classes, o);
-            }
-            case INHERITANCE: {
-                List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
-                        index != null ? index.moduleMap() : null);
-                if (index != null) {
-                    scoped = promoteToDetailed(scoped, index);
-                }
-                PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
-                // Setting から共通設定を先に適用し、その後 INHERITANCE 固定値で上書き
-                applyClassDiagramSettings(o);
-                applyScopeToClassOptions(request.getScope(), o);
-                // 継承図固有: 関係線のみ・クラス名のみ・上から下レイアウト
-                o.showFields = false;
-                o.showMethods = false;
-                o.showVisibility = false;
-                o.showInheritance = true;
-                o.showImplementations = true;
-                o.showUsageRelations = false;
-                o.showAnnotations = false;
-                o.showComments = false;
-                o.showEnumConstants = false;
-                o.showFinal = false;
-                o.showInlineFunctions = false;
-                // パッケージボックスを廃止: package ネストが横幅を膨らませるため
-                o.groupByPackage = false;
-                o.excludeExternalLibraries = false;
-                o.markAaosCategories = true;
-                o.topToBottomDirection = true;
-                // 兄弟ノードが 5 個を超えたら次の行に折り返す
-                o.maxSiblingsPerRow = 5;
-                o.includeLegend = request.isIncludeLegend();
-                o.interactiveLinks = request.isInteractiveLinks();
-                return PlantUmlClassDiagram.generate(scoped, o);
-            }
-            case CALLGRAPH: {
-                String cls = request.getSequenceEntryClass();
-                String method = request.getSequenceEntryMethod();
-                if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "Call graph diagram requires entry Class.method");
-                }
-                List<JavaClassInfo> source = classes != null
-                        ? promoteToDetailed(classes, index) : classes;
-                PlantUmlCallGraphDiagram.Options o = new PlantUmlCallGraphDiagram.Options();
-                o.includeLegend = request.isIncludeLegend();
-                applyCallGraphSettings(o);
-                return PlantUmlCallGraphDiagram.generate(source, cls, method, o);
-            }
+                switch (request.getKind()) {
+            case CLASS:
+                return generateClassDiagram(request, analysis, classes, index, depIndex);
+            case PACKAGE:
+                return generatePackageDiagram(request, analysis, classes, index, depIndex);
+            case SEQUENCE:
+                return generateSequenceDiagram(request, analysis, classes, index, depIndex);
+            case ACTIVITY:
+                return generateActivityDiagram(request, analysis, classes, index, depIndex);
+            case COMPONENT:
+                return generateComponentDiagram(request, analysis, classes, index, depIndex);
+            case DEPENDENCY:
+                return generateDependencyDiagram(request, analysis, classes, index, depIndex);
+            case MANIFEST:
+                return generateManifestDiagram(request, analysis, classes, index, depIndex);
+            case COMMON:
+                return generateCommonDiagram(request, analysis, classes, index, depIndex);
+            case LAYOUT:
+                return generateLayoutDiagram(request, analysis, classes, index, depIndex);
+            case NAVIGATION:
+                return generateNavigationDiagram(request, analysis, classes, index, depIndex);
+            case MODULE:
+                return generateModuleDiagram(request, analysis, classes, index, depIndex);
+            case INHERITANCE:
+                return generateInheritanceDiagram(request, analysis, classes, index, depIndex);
+            case CALLGRAPH:
+                return generateCallgraphDiagram(request, analysis, classes, index, depIndex);
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());
         }
+    }
+
+    private static String generateClassDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                    index != null ? index.moduleMap() : null);
+            int originalTotal = (classes != null) ? classes.size() : 0;
+            int scopedTotal = scoped.size();
+            int maxClasses = request.getScope() != null ? request.getScope().getMaxClasses() : 0;
+            if (index != null) {
+                scoped = promoteToDetailed(scoped, index);
+            }
+            PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            o.maxClasses = maxClasses;
+            o.interactiveLinks = request.isInteractiveLinks();
+            // Setting → Options (GUI で永続化されたクラス図設定の既定)
+            applyClassDiagramSettings(o);
+            // Scope → Options (Scope に明示値があれば上書き)
+            applyScopeToClassOptions(request.getScope(), o);
+            if (scopedTotal < originalTotal) {
+                o.footerWarning = "scope filter: " + scopedTotal + " of "
+                        + originalTotal + " classes";
+            }
+            return PlantUmlClassDiagram.generate(scoped, o);
+        
+    }
+
+    private static String generatePackageDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                    index != null ? index.moduleMap() : null);
+            PlantUmlPackageDiagram.Options o = new PlantUmlPackageDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlPackageDiagram.generate(scoped, o);
+        
+    }
+
+    private static String generateSequenceDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            String cls = request.getSequenceEntryClass();
+            String method = request.getSequenceEntryMethod();
+            if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Sequence diagram requires entry Class.method");
+            }
+            List<JavaClassInfo> source = classes != null
+                    ? promoteToDetailed(classes, index) : classes;
+            PlantUmlSequenceDiagram.Options o = new PlantUmlSequenceDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            o.dependencyIndex = depIndex;
+            applySequenceCommentSettings(o);
+            Set<String> hidden = request.getSequenceHiddenParticipants();
+            if (hidden != null && !hidden.isEmpty()) {
+                o.hiddenParticipants = hidden;
+            }
+            return PlantUmlSequenceDiagram.generate(source, cls, method, o);
+        
+    }
+
+    private static String generateActivityDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            String cls = request.getActivityEntryClass();
+            String method = request.getActivityEntryMethod();
+            if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Activity diagram requires entry Class.method");
+            }
+            List<JavaClassInfo> source = classes != null
+                    ? promoteToDetailed(classes, index) : classes;
+            PlantUmlActivityDiagram.Options o = new PlantUmlActivityDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlActivityDiagram.generate(source, cls, method, o);
+        
+    }
+
+    private static String generateComponentDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlComponentDiagram.generate(analysis, o);
+        
+    }
+
+    private static String generateDependencyDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            PlantUmlGradleDependencyGraph.Options o =
+                    new PlantUmlGradleDependencyGraph.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlGradleDependencyGraph.generate(analysis, o);
+        
+    }
+
+    private static String generateManifestDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlManifestDiagram.generate(analysis, o);
+        
+    }
+
+    private static String generateCommonDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                    index != null ? index.moduleMap() : null);
+            if (index != null) {
+                scoped = promoteToDetailed(scoped, index);
+            }
+            PlantUmlCommonClassesDiagram.Options o =
+                    new PlantUmlCommonClassesDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlCommonClassesDiagram.generate(scoped, o);
+        
+    }
+
+    private static String generateLayoutDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            String key = request.getLayoutKey();
+            if (key == null || key.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Layout diagram requires layoutKey (select a layout file)");
+            }
+            if (analysis == null) {
+                throw new IllegalStateException(
+                        "Layout diagram requires Android project analysis");
+            }
+            AndroidLayoutInfo layout = analysis.findLayoutByKey(key);
+            if (layout == null) {
+                throw new IllegalArgumentException(
+                        "Layout not found for key: " + key);
+            }
+            PlantUmlLayoutDiagram.Options o = new PlantUmlLayoutDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlLayoutDiagram.generate(layout, o);
+        
+    }
+
+    private static String generateNavigationDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            String navKey = request.getNavigationGraphKey();
+            if (navKey == null || navKey.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Navigation diagram requires navigationGraphKey"
+                                + " (select a navigation file)");
+            }
+            if (analysis == null) {
+                throw new IllegalStateException(
+                        "Navigation diagram requires Android project analysis");
+            }
+            AndroidNavigationGraphInfo nav = analysis.findNavigationByKey(navKey);
+            if (nav == null) {
+                throw new IllegalArgumentException(
+                        "Navigation graph not found for key: " + navKey);
+            }
+            PlantUmlNavigationGraphDiagram.Options o =
+                    new PlantUmlNavigationGraphDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlNavigationGraphDiagram.generate(nav, o);
+        
+    }
+
+    private static String generateModuleDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            PlantUmlModuleDiagram.Options o = new PlantUmlModuleDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            return PlantUmlModuleDiagram.generate(classes, o);
+        
+    }
+
+    private static String generateInheritanceDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            List<JavaClassInfo> scoped = applyScope(classes, request.getScope(),
+                    index != null ? index.moduleMap() : null);
+            if (index != null) {
+                scoped = promoteToDetailed(scoped, index);
+            }
+            PlantUmlClassDiagram.Options o = new PlantUmlClassDiagram.Options();
+            // Setting から共通設定を先に適用し、その後 INHERITANCE 固定値で上書き
+            applyClassDiagramSettings(o);
+            applyScopeToClassOptions(request.getScope(), o);
+            // 継承図固有: 関係線のみ・クラス名のみ・上から下レイアウト
+            o.showFields = false;
+            o.showMethods = false;
+            o.showVisibility = false;
+            o.showInheritance = true;
+            o.showImplementations = true;
+            o.showUsageRelations = false;
+            o.showAnnotations = false;
+            o.showComments = false;
+            o.showEnumConstants = false;
+            o.showFinal = false;
+            o.showInlineFunctions = false;
+            // パッケージボックスを廃止: package ネストが横幅を膨らませるため
+            o.groupByPackage = false;
+            o.excludeExternalLibraries = false;
+            o.markAaosCategories = true;
+            o.topToBottomDirection = true;
+            // 兄弟ノードが 5 個を超えたら次の行に折り返す
+            o.maxSiblingsPerRow = 5;
+            o.includeLegend = request.isIncludeLegend();
+            o.interactiveLinks = request.isInteractiveLinks();
+            return PlantUmlClassDiagram.generate(scoped, o);
+        
+    }
+
+    private static String generateCallgraphDiagram(DiagramRequest request,
+                                  AndroidProjectAnalysis analysis,
+                                  List<JavaClassInfo> classes,
+                                  ClassIndex index,
+                                  DependencyJarIndex depIndex) {
+            String cls = request.getSequenceEntryClass();
+            String method = request.getSequenceEntryMethod();
+            if (cls == null || cls.isEmpty() || method == null || method.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Call graph diagram requires entry Class.method");
+            }
+            List<JavaClassInfo> source = classes != null
+                    ? promoteToDetailed(classes, index) : classes;
+            PlantUmlCallGraphDiagram.Options o = new PlantUmlCallGraphDiagram.Options();
+            o.includeLegend = request.isIncludeLegend();
+            applyCallGraphSettings(o);
+            return PlantUmlCallGraphDiagram.generate(source, cls, method, o);
+        
     }
 
     /**

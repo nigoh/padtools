@@ -369,11 +369,12 @@ public final class PlantUmlCommonClassesDiagram {
     }
 
     private static void emitLegend(StringBuilder out, int minRefs) {
-        out.append("legend right\n");
-        out.append("  Classes referenced by many others (fan-in).\n");
-        out.append("  Highlighted (yellow) boxes are common/shared classes.\n");
-        out.append("  Dashed arrows: referrer ..> common class (\"uses\").\n");
-        out.append("  Threshold: referenced ").append(minRefs).append("+ time(s).\n");
-        out.append("end legend\n");
+        out.append("legend top left\n");
+        out.append("== 共通クラス図 ==\n");
+        out.append("  多くのクラスから参照されるクラス (fan-in)\n");
+        out.append("  黄色ボックス: 共通/共有クラス\n");
+        out.append("  破線矢印: 参照元 ..> 共通クラス (\"uses\")\n");
+        out.append("  閾値: ").append(minRefs).append("+ 回参照されるクラス\n");
+        out.append("endlegend\n");
     }
 }

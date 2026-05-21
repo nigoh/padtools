@@ -972,7 +972,7 @@ public final class PlantUmlSequenceDiagram {
     private static void emitLegend(StringBuilder out, int participantCount,
                                     boolean colorize, String projectClassColor,
                                     boolean hasInlineParticipants) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== シーケンス図 ==\n");
         out.append("participant         関与クラス/オブジェクト\n");
         out.append("X →→ Y : Z.m()      X から Y への同期メッセージ (呼び出し先 Class.method)\n");

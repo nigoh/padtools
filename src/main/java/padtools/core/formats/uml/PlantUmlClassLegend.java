@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  * クラス図出力の凡例ブロックを生成する補助クラス。
  *
- * <p>{@link PlantUmlClassDiagram} の出力末尾に置く {@code legend right ... endlegend} を
+ * <p>{@link PlantUmlClassDiagram} の出力末尾に置く {@code legend top left ... endlegend} を
  * 構築する。実際にダイアグラムへ現れた要素 (可視性・修飾子・ステレオタイプ・関係線・
  * コメント等) だけを列挙して、不要な行を増やさないようにする。</p>
  */
@@ -41,7 +41,7 @@ final class PlantUmlClassLegend {
     static void emit(StringBuilder out, List<JavaClassInfo> classes,
                      PlantUmlClassDiagram.Options o) {
         Stats s = collect(classes, o);
-        out.append("legend right\n");
+        out.append("legend top left\n");
         emitVisibility(out, o);
         emitMemberModifiers(out, o, s);
         emitKinds(out, s);

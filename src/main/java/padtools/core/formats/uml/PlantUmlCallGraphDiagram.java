@@ -81,13 +81,13 @@ public final class PlantUmlCallGraphDiagram {
 
         if (opts.includeLegend) {
             sb.append("\n");
-            sb.append("legend right\n");
+            sb.append("legend top left\n");
             sb.append("  ").append(opts.entryColor).append(" 起点メソッド (entry)\n");
             sb.append("  ").append(opts.projectColor).append(" プロジェクト内クラス\n");
             sb.append("  (white) 外部 / 未解決クラス\n");
             sb.append("  [↩] 再帰 / 循環呼び出し\n");
             sb.append("  [C] クラス / [I] インタフェース\n");
-            sb.append("end legend\n");
+            sb.append("endlegend\n");
         }
 
         sb.append("@endwbs\n");

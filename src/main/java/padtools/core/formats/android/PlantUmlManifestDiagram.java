@@ -321,7 +321,7 @@ public final class PlantUmlManifestDiagram {
     }
 
     private static void emitLegend(StringBuilder out, Options o) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== AndroidManifest 図 ==\n");
         out.append("rectangle <<application>>       Application 要素\n");
         out.append("component <<Activity>>          Activity\n");

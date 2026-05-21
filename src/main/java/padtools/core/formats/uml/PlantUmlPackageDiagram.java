@@ -195,10 +195,11 @@ public final class PlantUmlPackageDiagram {
     }
 
     private static void emitLegend(StringBuilder out) {
-        out.append("legend right\n");
-        out.append("  Each box represents a Java package.\n");
-        out.append("  Arrows denote references between packages\n");
-        out.append("  (inheritance / implementation / field types).\n");
-        out.append("end legend\n");
+        out.append("legend top left\n");
+        out.append("== パッケージ依存グラフ ==\n");
+        out.append("  各ボックスは Java パッケージを表す\n");
+        out.append("  矢印はパッケージ間の参照を示す\n");
+        out.append("  (継承 / 実装 / フィールド型)\n");
+        out.append("endlegend\n");
     }
 }

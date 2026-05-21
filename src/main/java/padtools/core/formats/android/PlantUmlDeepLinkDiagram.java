@@ -233,7 +233,7 @@ public final class PlantUmlDeepLinkDiagram {
     }
 
     private static void emitLegend(StringBuilder out) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== Deep Link 図 ==\n");
         out.append("rectangle <<applink>>    http/https (App Links 候補)\n");
         out.append("rectangle <<deeplink>>   カスタムスキーム Deep Link\n");

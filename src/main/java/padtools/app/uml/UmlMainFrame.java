@@ -192,10 +192,23 @@ public class UmlMainFrame extends JFrame {
         pack();
         restoreWindowLocation(setting);
 
+        projectLoader = new ProjectLoader(
+                cache, refIndexCache, state, treePanel, manifestSummaryPanel,
+                loadProgress, cancelLoadingItem, status, this,
+                token -> loadingCancelToken = token,
+                root -> currentProjectRoot = root,
+                root -> {
+                    persistAndRestoreProjectSettings(root);
+                    updateManifestSummary();
+                    refreshDiagram();
+                });
+
         if (initialProject != null && initialProject.isDirectory()) {
             SwingUtilities.invokeLater(() -> loadProject(initialProject));
         }
     }
+
+    private ProjectLoader projectLoader;
 
     // --- メニュー -------------------------------------------------------------
 
@@ -867,97 +880,7 @@ public class UmlMainFrame extends JFrame {
     }
 
     private void loadProject(File root) {
-        status.setText("Analyzing " + root.getName() + " ...");
-        treePanel.clear();
-        manifestSummaryPanel.setText("");
-        loadProgress.setVisible(true);
-        loadProgress.setIndeterminate(true);
-        loadProgress.setString("Scanning...");
-        cancelLoadingItem.setEnabled(true);
-        final CancelToken cancel = new CancelToken();
-        loadingCancelToken = cancel;
-        // EDT に間引きながら進捗を流す。生のリスナーは複数スレッドから呼ばれる。
-        final ProgressListener prog = ProgressListener.throttled(
-                (done, total, message) -> SwingUtilities.invokeLater(
-                        () -> updateLoadProgress(done, total, message)),
-                150L);
-        new SwingWorker<Void, Void>() {
-            private Throwable error;
-            private boolean cancelled;
-
-            @Override
-            protected Void doInBackground() {
-                try {
-                    cache.clear();
-                    refIndexCache.invalidate();
-                    cache.load(root, ErrorListener.silent(), prog, cancel, null);
-                    cancelled = cancel.isCancelled();
-                } catch (Exception ex) {
-                    error = ex;
-                }
-                return null;
-            }
-
-            @Override
-            protected void done() {
-                loadingCancelToken = null;
-                cancelLoadingItem.setEnabled(false);
-                loadProgress.setVisible(false);
-                loadProgress.setIndeterminate(false);
-                loadProgress.setValue(0);
-                loadProgress.setString(null);
-                if (error != null) {
-                    JOptionPane.showMessageDialog(UmlMainFrame.this,
-                            "Failed to analyze project: " + error.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                    status.setText(" ");
-                    return;
-                }
-                if (cancelled) {
-                    status.setText("Cancelled.");
-                    return;
-                }
-                currentProjectRoot = root;
-                persistAndRestoreProjectSettings(root);
-                treePanel.populate(cache.getAnalysis(), cache.getClasses(),
-                        root.getName(), cache.getClassToModule());
-                state.sequenceEntry = null;
-                state.activityEntry = null;
-                state.callGraphEntry = null;
-                state.sequenceHiddenParticipants.clear();
-                state.currentScope = null;
-                updateManifestSummary();
-                StringBuilder st = new StringBuilder();
-                st.append("Analyzed ").append(cache.getClasses().size())
-                        .append(" class(es) from ").append(root.getAbsolutePath());
-                // 依存 JAR の未解決件数があれば追記 (図に <<missing>> ⚠ が出る理由を明示)
-                int missing = cache.getDependencyIndex().getMissingArtifacts().size();
-                if (missing > 0) {
-                    st.append(" — ").append(missing).append(" dependency(ies) not resolved");
-                }
-                status.setText(st.toString());
-                refreshDiagram();
-            }
-        }.execute();
-    }
-
-    private void updateLoadProgress(int done, int total, String message) {
-        if (total > 0) {
-            if (loadProgress.isIndeterminate()) {
-                loadProgress.setIndeterminate(false);
-            }
-            loadProgress.setMaximum(total);
-            loadProgress.setValue(Math.min(done, total));
-            loadProgress.setString(done + "/" + total);
-            status.setText("Analyzing " + done + "/" + total
-                    + (message != null && !message.isEmpty() ? " — " + message : ""));
-        } else {
-            loadProgress.setIndeterminate(true);
-            loadProgress.setString(message != null ? message : "Scanning...");
-            if (message != null) {
-                status.setText(message);
-            }
-        }
+        projectLoader.start(root);
     }
 
     private void onTreePackageSelected(String pkg) {

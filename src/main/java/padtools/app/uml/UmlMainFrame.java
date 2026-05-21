@@ -222,10 +222,7 @@ public class UmlMainFrame extends JFrame {
         diagramToggles = toolBarResult.diagramToggles;
         add(toolBarResult.toolBarPanel, BorderLayout.NORTH);
 
-        controller = new DiagramController(
-                state, () -> cache, diagramItems, diagramToggles,
-                treePanel, mainTabs, tabPane, status, this,
-                this::refreshDiagram, kind -> { this.currentKind = kind; });
+        controller = createDiagramController();
         add(buildStatusBar(), BorderLayout.SOUTH);
 
         Setting setting = Main.getSetting();
@@ -259,6 +256,23 @@ public class UmlMainFrame extends JFrame {
     private ProjectLoader projectLoader;
     private ProjectSettingsPersistor settingsPersistor;
     private DiagramController controller;
+
+    /** 図制御コントローラを必要な状態・UI 参照・コールバックを束ねて生成する。 */
+    private DiagramController createDiagramController() {
+        DiagramControllerDeps deps = new DiagramControllerDeps();
+        deps.state = state;
+        deps.cacheSupplier = () -> cache;
+        deps.diagramItems = diagramItems;
+        deps.diagramToggles = diagramToggles;
+        deps.treePanel = treePanel;
+        deps.mainTabs = mainTabs;
+        deps.tabPane = tabPane;
+        deps.statusLabel = status;
+        deps.parentFrame = this;
+        deps.refreshDiagram = this::refreshDiagram;
+        deps.onKindChanged = kind -> this.currentKind = kind;
+        return new DiagramController(deps);
+    }
 
     // --- スタイル / プリセット ------------------------------------------------
 

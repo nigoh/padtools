@@ -38,29 +38,18 @@ public final class DiagramController {
     /** package-private — UmlMainFrame がミラー同期するために読む。 */
     DiagramKind currentKind = DiagramKind.CLASS;
 
-    public DiagramController(
-            DiagramState state,
-            Supplier<ProjectAnalysisCache> cacheSupplier,
-            EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems,
-            EnumMap<DiagramKind, JToggleButton> diagramToggles,
-            ProjectTreePanel treePanel,
-            JTabbedPane mainTabs,
-            DiagramTabPane tabPane,
-            javax.swing.JLabel statusLabel,
-            java.awt.Frame parentFrame,
-            Runnable refreshDiagram,
-            Consumer<DiagramKind> onKindChanged) {
-        this.state = state;
-        this.cacheSupplier = cacheSupplier;
-        this.diagramItems = diagramItems;
-        this.diagramToggles = diagramToggles;
-        this.treePanel = treePanel;
-        this.mainTabs = mainTabs;
-        this.tabPane = tabPane;
-        this.statusLabel = statusLabel;
-        this.parentFrame = parentFrame;
-        this.refreshDiagram = refreshDiagram;
-        this.onKindChanged = onKindChanged;
+    public DiagramController(DiagramControllerDeps deps) {
+        this.state = deps.state;
+        this.cacheSupplier = deps.cacheSupplier;
+        this.diagramItems = deps.diagramItems;
+        this.diagramToggles = deps.diagramToggles;
+        this.treePanel = deps.treePanel;
+        this.mainTabs = deps.mainTabs;
+        this.tabPane = deps.tabPane;
+        this.statusLabel = deps.statusLabel;
+        this.parentFrame = deps.parentFrame;
+        this.refreshDiagram = deps.refreshDiagram;
+        this.onKindChanged = deps.onKindChanged;
     }
 
     private ProjectAnalysisCache cache() {

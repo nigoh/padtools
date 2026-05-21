@@ -1,6 +1,5 @@
 package padtools.app.cli;
 
-import padtools.UmlOverrides;
 import padtools.core.formats.android.AndroidManifestInfo;
 import padtools.core.formats.android.AndroidManifestParser;
 import padtools.core.formats.android.AndroidProjectAnalysis;

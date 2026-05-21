@@ -5,6 +5,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Set;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -191,8 +194,16 @@ public final class IndexDatabase implements AutoCloseable {
 
     private static void ensureParent(File dbFile) throws IOException {
         File parent = dbFile.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs()) {
-            throw new IOException("Failed to create cache directory: " + parent);
+        if (parent == null || parent.exists()) {
+            return;
+        }
+        Path parentPath = parent.toPath();
+        try {
+            Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------");
+            Files.createDirectories(parentPath,
+                    PosixFilePermissions.asFileAttribute(perms));
+        } catch (UnsupportedOperationException e) {
+            Files.createDirectories(parentPath);
         }
     }
 }

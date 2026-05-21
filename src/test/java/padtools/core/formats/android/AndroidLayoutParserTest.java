@@ -35,6 +35,17 @@ public class AndroidLayoutParserTest {
     }
 
     @Test
+    public void testDoctypeBlocked() {
+        List<String> errors = new ArrayList<>();
+        String xml = "<!DOCTYPE layout [<!ENTITY x \"y\">]>\n"
+                + "<LinearLayout " + NS + "/>";
+        AndroidLayoutInfo info = AndroidLayoutParser.parse(
+                xml, ErrorListener.collecting(errors));
+        assertNotNull(info);
+        assertFalse("expected doctype block error", errors.isEmpty());
+    }
+
+    @Test
     public void testMalformedXml() {
         List<String> errors = new ArrayList<>();
         AndroidLayoutInfo info = AndroidLayoutParser.parse(

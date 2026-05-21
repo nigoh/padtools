@@ -38,6 +38,18 @@ public class AndroidNavigationGraphParserTest {
     }
 
     @Test
+    public void testDoctypeBlocked() {
+        List<String> errors = new ArrayList<>();
+        String xml = "<!DOCTYPE nav [<!ENTITY x \"y\">]>\n"
+                + "<navigation " + ALL_NS + " app:startDestination=\"@id/home\"/>";
+        AndroidNavigationGraphInfo info = AndroidNavigationGraphParser.parse(
+                xml, ErrorListener.collecting(errors));
+        assertNotNull(info);
+        assertFalse("expected doctype block error", errors.isEmpty());
+    }
+
+
+    @Test
     public void testMalformedXml() {
         List<String> errors = new ArrayList<>();
         AndroidNavigationGraphInfo info = AndroidNavigationGraphParser.parse(

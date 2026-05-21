@@ -186,10 +186,6 @@ public final class JavaParseSupport {
         return i;
     }
 
-    static String normalizeType(String s) {
-        return s.replaceAll("\\s+", " ").trim();
-    }
-
     /**
      * Java の定数命名規約 {@code UPPER_CASE_WITH_UNDERSCORES} に従う識別子か。
      * 大文字始まりで、英大文字・数字・アンダースコアのみで構成され、長さ 2 以上。
@@ -209,26 +205,5 @@ public final class JavaParseSupport {
             }
         }
         return true;
-    }
-
-    static JavaFieldInfo findFieldByName(JavaClassInfo cls, String name) {
-        if (cls == null || name == null) {
-            return null;
-        }
-        for (JavaFieldInfo f : cls.getFields()) {
-            if (name.equals(f.getName())) {
-                return f;
-            }
-        }
-        return null;
-    }
-
-    static boolean isControlKeyword(String s) {
-        return "if".equals(s) || "while".equals(s) || "for".equals(s)
-                || "switch".equals(s) || "synchronized".equals(s)
-                || "catch".equals(s) || "return".equals(s)
-                || "throw".equals(s) || "new".equals(s)
-                || "do".equals(s) || "else".equals(s) || "try".equals(s)
-                || "finally".equals(s);
     }
 }

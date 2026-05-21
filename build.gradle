@@ -69,10 +69,6 @@ test {
     //   PlantUmlSvgPlaywrightTest は Assume.assumeNoException で skip となる。
     systemProperty 'java.awt.headless',
             (System.getenv('DISPLAY') != null ? 'false' : 'true')
-    // どちらの Java パーサー実装でテストするかをテスト JVM へ伝播する（既定は本番同様 javaparser）。
-    // 例: ./gradlew test -Dpadtools.java.parser=legacy
-    systemProperty 'padtools.java.parser',
-            System.getProperty('padtools.java.parser', 'javaparser')
 }
 
 jar {

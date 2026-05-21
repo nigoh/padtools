@@ -1,5 +1,7 @@
 package padtools;
 
+import padtools.app.cli.CliOutput;
+import padtools.app.cli.ProgressLogger;
 import padtools.app.uml.UmlApp;
 import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.android.AndroidProjectAnalyzer;
@@ -63,13 +65,9 @@ import padtools.util.OptionParser;
 import padtools.util.UnknownOptionException;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 /**
  * エントリポイントクラス
@@ -398,79 +396,6 @@ public class Main {
         UmlApp.launch(file_in);
     }
 
-    private static void writeText(File f, String content) throws IOException {
-        if (f == null) {
-            // System.out の既定エンコーディングに依存しないよう UTF-8 で明示出力
-            System.out.write(content.getBytes(StandardCharsets.UTF_8));
-            System.out.flush();
-            return;
-        }
-        try (Writer w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8)) {
-            w.write(content);
-        }
-    }
-
-    /**
-     * PlantUML 系出力の書き出し。{@code fileOut} の拡張子が {@code .svg} なら
-     * 同梱 PlantUML で SVG にレンダリングし、それ以外 (null や .puml/.txt) は
-     * PlantUML テキストをそのまま書き出す (標準出力可)。
-     */
-    private static void writeUmlOutput(File fileOut, String puml) throws IOException {
-        if (fileOut != null && fileOut.getName().toLowerCase().endsWith(".svg")) {
-            try {
-                PlantUmlRenderer.renderSvg(puml, fileOut);
-            } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
-                File pumlFallback = siblingPumlFor(fileOut);
-                writeText(pumlFallback, puml);
-                System.err.println("[padtools] " + fileOut.getName()
-                        + " FAILED: " + ex.getMessage());
-                System.err.println("[padtools]    Saved " + pumlFallback.getPath()
-                        + " -- render externally with: plantuml -tsvg "
-                        + pumlFallback.getName());
-                System.exit(2);
-            }
-        } else {
-            writeText(fileOut, puml);
-        }
-    }
-
-    /** 与えられた SVG ファイルと同じ親ディレクトリ・同じベース名で {@code .puml} を指す
-     * ファイル オブジェクトを返す。フォールバック保存先として使う。 */
-    private static File siblingPumlFor(File svgFile) {
-        String name = svgFile.getName();
-        int dot = name.lastIndexOf('.');
-        String base = dot >= 0 ? name.substring(0, dot) : name;
-        File parent = svgFile.getParentFile();
-        if (parent == null) {
-            return new File(base + ".puml");
-        }
-        return new File(parent, base + ".puml");
-    }
-
-    /** {@code --all} 内で 1 つの SVG をレンダリングする。失敗時はサイドカー puml に
-     * フォールバックして「FAILED」ログを出し、次の図に進む。
-     * @return レンダリングが成功したかどうか
-     */
-    private static boolean renderSvgOrFallback(String puml, File svgFile,
-                                                 ProgressLogger progress,
-                                                 ErrorListener listener) throws IOException {
-        try {
-            PlantUmlRenderer.renderSvg(puml, svgFile);
-            progress.wrote(svgFile);
-            listener.onError(null, -1, "wrote " + svgFile.getPath());
-            return true;
-        } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
-            File pumlFallback = siblingPumlFor(svgFile);
-            writeText(pumlFallback, puml);
-            System.err.println("[padtools]     -> " + svgFile.getName()
-                    + " FAILED: " + ex.getMessage());
-            System.err.println("[padtools]        Saved " + pumlFallback.getName()
-                    + " -- render externally with: plantuml -tsvg "
-                    + pumlFallback.getName());
-            return false;
-        }
-    }
-
     /**
      * Java/AIDL ソースから PlantUML (クラス図 / シーケンス図) を生成。
      * @param fileIn 入力ファイルまたはディレクトリ
@@ -566,7 +491,7 @@ public class Main {
             }
             output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
         }
-        writeUmlOutput(fileOut, output);
+        CliOutput.writeUmlOutput(fileOut, output);
     }
 
     /**
@@ -597,7 +522,7 @@ public class Main {
                     .append(c.callCount == 1 ? "" : "s")
                     .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
         }
-        writeText(fileOut, sb.toString());
+        CliOutput.writeText(fileOut, sb.toString());
     }
 
     /**
@@ -646,7 +571,7 @@ public class Main {
 
         String markdown = MarkdownImpactReport.render(graph);
         String puml = PlantUmlImpactDiagram.render(graph);
-        writeImpactOutput(fileOut, markdown, puml);
+        CliOutput.writeImpactOutput(fileOut, markdown, puml);
     }
 
     /**
@@ -698,7 +623,7 @@ public class Main {
         if (sb.length() == 0) {
             sb.append("(no references found for ").append(target).append(")\n");
         }
-        writeText(fileOut, sb.toString());
+        CliOutput.writeText(fileOut, sb.toString());
     }
 
     /**
@@ -735,7 +660,7 @@ public class Main {
         VehiclePropertyCatalog catalog = VehiclePropertyCatalog.scanProject(fileIn);
         String md = MarkdownVhalReport.render(accesses, catalog);
         String puml = PlantUmlVhalFlowDiagram.render(accesses);
-        writeImpactOutput(fileOut, md, puml);
+        CliOutput.writeImpactOutput(fileOut, md, puml);
     }
 
     /**
@@ -755,7 +680,7 @@ public class Main {
         java.util.Map<String, java.util.List<AidlBinding>> bindings =
                 new AidlBindingResolver().resolve(result.getClasses());
         String md = MarkdownAidlBindingReport.render(bindings);
-        writeText(fileOut, md);
+        CliOutput.writeText(fileOut, md);
     }
 
     /**
@@ -773,7 +698,7 @@ public class Main {
                         null, null, false, UmlGenerator.ParseMode.FULL);
         RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
         String puml = PlantUmlErDiagram.render(room);
-        writeUmlOutput(fileOut, puml);
+        CliOutput.writeUmlOutput(fileOut, puml);
     }
 
     /**
@@ -793,7 +718,7 @@ public class Main {
         RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
         String md = MarkdownDataFlowReport.render(room);
         String puml = PlantUmlErDiagram.render(room);
-        writeImpactOutput(fileOut, md, puml);
+        CliOutput.writeImpactOutput(fileOut, md, puml);
     }
 
     /**
@@ -810,7 +735,7 @@ public class Main {
         java.util.List<SelinuxRule> rules =
                 new SelinuxPolicyParser().analyzeProject(fileIn);
         String md = MarkdownSelinuxReport.render(rules);
-        writeText(fileOut, md);
+        CliOutput.writeText(fileOut, md);
     }
 
     /**
@@ -827,7 +752,7 @@ public class Main {
         java.util.List<RroOverlay> overlays =
                 new RroOverlayDetector().analyzeProject(fileIn);
         String md = MarkdownRroReport.render(overlays);
-        writeText(fileOut, md);
+        CliOutput.writeText(fileOut, md);
     }
 
     /**
@@ -848,7 +773,7 @@ public class Main {
                 : xmlParser.analyzeProject(fileIn)) {
             result.addXmlEntry(e);
         }
-        writeText(fileOut, MarkdownSettingsReport.render(result));
+        CliOutput.writeText(fileOut, MarkdownSettingsReport.render(result));
     }
 
     /**
@@ -906,7 +831,7 @@ public class Main {
         }
         java.util.List<UiActionEntry> entries =
                 new UiActionScanner().analyzeProject(fileIn);
-        writeText(fileOut, MarkdownActionReport.render(entries));
+        CliOutput.writeText(fileOut, MarkdownActionReport.render(entries));
     }
 
     /**
@@ -961,7 +886,7 @@ public class Main {
 
         padtools.core.funcdiff.MethodDiffAnalyzer.DiffResult result =
                 padtools.core.funcdiff.MethodDiffAnalyzer.analyze(methodA, specA, methodB, specB);
-        writeText(fileOut, padtools.core.funcdiff.MarkdownMethodDiffReport.render(result));
+        CliOutput.writeText(fileOut, padtools.core.funcdiff.MarkdownMethodDiffReport.render(result));
     }
 
     /**
@@ -979,7 +904,7 @@ public class Main {
                 new AndroidBpParser().analyzeProject(fileIn);
         String md = MarkdownSoongReport.render(modules);
         String puml = PlantUmlSoongDependencyDiagram.render(modules);
-        writeImpactOutput(fileOut, md, puml);
+        CliOutput.writeImpactOutput(fileOut, md, puml);
     }
 
     /**
@@ -998,40 +923,7 @@ public class Main {
                 new IntentNavigationDetector().analyzeProject(fileIn);
         String md = MarkdownScreenFlowReport.render(transitions);
         String puml = PlantUmlScreenFlowDiagram.render(transitions);
-        writeImpactOutput(fileOut, md, puml);
-    }
-
-    /**
-     * Impact レポートの書き出し。出力先の拡張子を見て .md / .puml / 両方を切り替える。
-     */
-    private static void writeImpactOutput(File fileOut, String markdown, String puml)
-            throws IOException {
-        if (fileOut == null) {
-            writeText(null, markdown);
-            return;
-        }
-        String name = fileOut.getName().toLowerCase();
-        if (name.endsWith(".md") || name.endsWith(".markdown")) {
-            writeText(fileOut, markdown);
-        } else if (name.endsWith(".puml") || name.endsWith(".plantuml")) {
-            writeText(fileOut, puml);
-        } else if (name.endsWith(".svg")) {
-            writeUmlOutput(fileOut, puml);
-        } else {
-            // 拡張子なし: 同じディレクトリ・同じベース名で .md と .puml を両方書く
-            File parent = fileOut.getParentFile();
-            String base = fileOut.getName();
-            int dot = base.lastIndexOf('.');
-            if (dot >= 0) {
-                base = base.substring(0, dot);
-            }
-            File mdFile = parent == null ? new File(base + ".md")
-                    : new File(parent, base + ".md");
-            File pumlFile = parent == null ? new File(base + ".puml")
-                    : new File(parent, base + ".puml");
-            writeText(mdFile, markdown);
-            writeText(pumlFile, puml);
-        }
+        CliOutput.writeImpactOutput(fileOut, md, puml);
     }
 
     /**
@@ -1139,13 +1031,13 @@ public class Main {
         }
         if (fileIn.isDirectory()) {
             AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-            writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
         } else {
             String content = AndroidProjectScanner.readFile(fileIn);
             GradleProjectInfo info = GradleScriptParser.parse(content, fileIn.getName(), listener);
             AndroidProjectAnalysis fake = new AndroidProjectAnalysis();
             fake.getGradleByModule().put(fileIn.getName(), info);
-            writeText(fileOut, TextSummaryReport.toMarkdown(fake));
+            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(fake));
         }
     }
 
@@ -1159,7 +1051,7 @@ public class Main {
         }
         if (fileIn.isDirectory()) {
             AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-            writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
         } else {
             String content = AndroidProjectScanner.readFile(fileIn);
             AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
@@ -1167,7 +1059,7 @@ public class Main {
             java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
             list.add(info);
             fake.getManifestsByModule().put(fileIn.getName(), list);
-            writeText(fileOut, TextSummaryReport.toMarkdown(fake));
+            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(fake));
         }
     }
 
@@ -1185,7 +1077,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeUmlOutput(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
+        CliOutput.writeUmlOutput(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
     }
 
     /**
@@ -1215,7 +1107,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeUmlOutput(fileOut, PlantUmlManifestDiagram.generate(analysis, o));
+        CliOutput.writeUmlOutput(fileOut, PlantUmlManifestDiagram.generate(analysis, o));
     }
 
     /**
@@ -1245,7 +1137,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeUmlOutput(fileOut, PlantUmlDeepLinkDiagram.generate(analysis, o));
+        CliOutput.writeUmlOutput(fileOut, PlantUmlDeepLinkDiagram.generate(analysis, o));
     }
 
     /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
@@ -1262,7 +1154,7 @@ public class Main {
         if (Boolean.FALSE.equals(legendOverride)) {
             o.includeLegend = false;
         }
-        writeUmlOutput(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
+        CliOutput.writeUmlOutput(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
     }
 
     /** {@code --summary}: プロジェクト全体の Markdown サマリーを生成。 */
@@ -1274,7 +1166,7 @@ public class Main {
             return;
         }
         AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
+        CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
     }
 
     /**
@@ -1333,7 +1225,7 @@ public class Main {
         // 1) Markdown サマリー
         progress.step("[1/8] Generating summary.md");
         File summaryFile = new File(fileOut, "summary.md");
-        writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
+        CliOutput.writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
         progress.wrote(summaryFile);
         listener.onError(null, -1, "wrote " + summaryFile.getPath());
 
@@ -1344,7 +1236,7 @@ public class Main {
             compOpts.includeLegend = false;
         }
         File compFile = new File(fileOut, "component-diagram.svg");
-        renderSvgOrFallback(PlantUmlComponentDiagram.generate(analysis, compOpts),
+        CliOutput.renderSvgOrFallback(PlantUmlComponentDiagram.generate(analysis, compOpts),
                 compFile, progress, listener);
 
         // 3) Manifest 図 (SVG) — Application + 配下コンポーネントを 1 枚で可視化
@@ -1354,7 +1246,7 @@ public class Main {
             manOpts.includeLegend = false;
         }
         File manFile = new File(fileOut, "manifest-diagram.svg");
-        renderSvgOrFallback(PlantUmlManifestDiagram.generate(analysis, manOpts),
+        CliOutput.renderSvgOrFallback(PlantUmlManifestDiagram.generate(analysis, manOpts),
                 manFile, progress, listener);
 
         // 4) Deep Link 図 (SVG) — VIEW + BROWSABLE intent-filter の URI 入口を可視化
@@ -1364,7 +1256,7 @@ public class Main {
             dlOpts.includeLegend = false;
         }
         File dlFile = new File(fileOut, "deeplink-diagram.svg");
-        renderSvgOrFallback(PlantUmlDeepLinkDiagram.generate(analysis, dlOpts),
+        CliOutput.renderSvgOrFallback(PlantUmlDeepLinkDiagram.generate(analysis, dlOpts),
                 dlFile, progress, listener);
 
         // 5) 依存グラフ (SVG)
@@ -1374,7 +1266,7 @@ public class Main {
             depOpts.includeLegend = false;
         }
         File depFile = new File(fileOut, "dependency-graph.svg");
-        renderSvgOrFallback(PlantUmlGradleDependencyGraph.generate(analysis, depOpts),
+        CliOutput.renderSvgOrFallback(PlantUmlGradleDependencyGraph.generate(analysis, depOpts),
                 depFile, progress, listener);
 
         // 6) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
@@ -1396,8 +1288,8 @@ public class Main {
             progress.wrote(clsFile, "(" + infos.size() + " class(es))");
             listener.onError(null, -1, "wrote " + clsFile.getPath());
         } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
-            File clsPumlFallback = siblingPumlFor(clsFile);
-            writeText(clsPumlFallback, clsPuml);
+            File clsPumlFallback = CliOutput.siblingPumlFor(clsFile);
+            CliOutput.writeText(clsPumlFallback, clsPuml);
             System.err.println("[padtools]     -> " + clsFile.getName()
                     + " FAILED: " + ex.getMessage());
             System.err.println("[padtools]        Saved " + clsPumlFallback.getName()
@@ -1417,7 +1309,7 @@ public class Main {
                     .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
         }
         File methodsFile = new File(fileOut, "methods.txt");
-        writeText(methodsFile, methodsBuf.toString());
+        CliOutput.writeText(methodsFile, methodsBuf.toString());
         progress.wrote(methodsFile, "(" + candidates.size() + " method(s))");
         listener.onError(null, -1, "wrote " + methodsFile.getPath());
 
@@ -1461,7 +1353,7 @@ public class Main {
         java.util.List<LifecycleSequenceDiagrams.Entry> entries =
                 LifecycleSequenceDiagrams.generateAll(infos, sqOpts);
         for (LifecycleSequenceDiagrams.Entry e : entries) {
-            writeText(new File(outDir, e.baseName() + ".puml"), e.puml);
+            CliOutput.writeText(new File(outDir, e.baseName() + ".puml"), e.puml);
             File svgFile = new File(outDir, e.baseName() + ".svg");
             try {
                 PlantUmlRenderer.renderSvg(e.puml, svgFile);
@@ -1528,44 +1420,6 @@ public class Main {
         copy.getAnnotations().addAll(src.getAnnotations());
         copy.getInterfaces().addAll(src.getInterfaces());
         return copy;
-    }
-
-    /**
-     * {@code --all} 専用の進捗ロガー。{@code -v} の有無に関わらず常に stderr に出力する。
-     */
-    private static final class ProgressLogger {
-        void step(String msg) {
-            System.err.println("[padtools] " + msg);
-        }
-
-        void wrote(File f) {
-            wrote(f, null);
-        }
-
-        void wrote(File f, String suffix) {
-            long size = f.exists() ? f.length() : 0L;
-            StringBuilder sb = new StringBuilder("[padtools]     -> ");
-            sb.append(f.getName()).append(" (").append(formatBytes(size)).append(')');
-            if (suffix != null && !suffix.isEmpty()) {
-                sb.append(' ').append(suffix);
-            }
-            System.err.println(sb.toString());
-        }
-
-        void done(File outDir, long elapsedMs) {
-            System.err.println("[padtools] Done in " + elapsedMs + " ms. "
-                    + "Output: " + outDir.getAbsolutePath());
-        }
-
-        private static String formatBytes(long n) {
-            if (n < 1024) {
-                return n + "B";
-            }
-            if (n < 1024 * 1024) {
-                return (n / 1024) + "KB";
-            }
-            return String.format("%.1fMB", n / 1024.0 / 1024.0);
-        }
     }
 
     private static void printUsage() {

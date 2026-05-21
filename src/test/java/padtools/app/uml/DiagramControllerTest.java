@@ -37,12 +37,19 @@ public class DiagramControllerTest {
         }
         refreshCount = new AtomicInteger(0);
         lastKind = new AtomicReference<>(DiagramKind.CLASS);
-        controller = new DiagramController(
-                state, () -> cache, diagramItems, diagramToggles,
-                new ProjectTreePanel(), new JTabbedPane(), null,
-                new JLabel(), null,
-                () -> refreshCount.incrementAndGet(),
-                kind -> lastKind.set(kind));
+        DiagramControllerDeps deps = new DiagramControllerDeps();
+        deps.state = state;
+        deps.cacheSupplier = () -> cache;
+        deps.diagramItems = diagramItems;
+        deps.diagramToggles = diagramToggles;
+        deps.treePanel = new ProjectTreePanel();
+        deps.mainTabs = new JTabbedPane();
+        deps.tabPane = null;
+        deps.statusLabel = new JLabel();
+        deps.parentFrame = null;
+        deps.refreshDiagram = () -> refreshCount.incrementAndGet();
+        deps.onKindChanged = kind -> lastKind.set(kind);
+        controller = new DiagramController(deps);
     }
 
     @Test

@@ -23,52 +23,44 @@ import java.util.function.Supplier;
  */
 public final class DiagramController {
 
-    private final DiagramState state;
+    // package-private: 補助クラス DiagramEntryDialogs が参照する。
+    final DiagramState state;
     private final Supplier<ProjectAnalysisCache> cacheSupplier;
-    private final EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems;
+    final EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems;
     private final EnumMap<DiagramKind, JToggleButton> diagramToggles;
     private final ProjectTreePanel treePanel;
     private final JTabbedPane mainTabs;
     private final DiagramTabPane tabPane;
-    private final javax.swing.JLabel statusLabel;
-    private final java.awt.Frame parentFrame;
-    private final Runnable refreshDiagram;
+    final javax.swing.JLabel statusLabel;
+    final java.awt.Frame parentFrame;
+    final Runnable refreshDiagram;
     private final Consumer<DiagramKind> onKindChanged;
+    private final DiagramEntryDialogs entryDialogs;
 
     /** package-private — UmlMainFrame がミラー同期するために読む。 */
     DiagramKind currentKind = DiagramKind.CLASS;
 
-    public DiagramController(
-            DiagramState state,
-            Supplier<ProjectAnalysisCache> cacheSupplier,
-            EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems,
-            EnumMap<DiagramKind, JToggleButton> diagramToggles,
-            ProjectTreePanel treePanel,
-            JTabbedPane mainTabs,
-            DiagramTabPane tabPane,
-            javax.swing.JLabel statusLabel,
-            java.awt.Frame parentFrame,
-            Runnable refreshDiagram,
-            Consumer<DiagramKind> onKindChanged) {
-        this.state = state;
-        this.cacheSupplier = cacheSupplier;
-        this.diagramItems = diagramItems;
-        this.diagramToggles = diagramToggles;
-        this.treePanel = treePanel;
-        this.mainTabs = mainTabs;
-        this.tabPane = tabPane;
-        this.statusLabel = statusLabel;
-        this.parentFrame = parentFrame;
-        this.refreshDiagram = refreshDiagram;
-        this.onKindChanged = onKindChanged;
+    public DiagramController(DiagramControllerDeps deps) {
+        this.state = deps.state;
+        this.cacheSupplier = deps.cacheSupplier;
+        this.diagramItems = deps.diagramItems;
+        this.diagramToggles = deps.diagramToggles;
+        this.treePanel = deps.treePanel;
+        this.mainTabs = deps.mainTabs;
+        this.tabPane = deps.tabPane;
+        this.statusLabel = deps.statusLabel;
+        this.parentFrame = deps.parentFrame;
+        this.refreshDiagram = deps.refreshDiagram;
+        this.onKindChanged = deps.onKindChanged;
+        this.entryDialogs = new DiagramEntryDialogs(this);
     }
 
-    private ProjectAnalysisCache cache() {
+    ProjectAnalysisCache cache() {
         return cacheSupplier.get();
     }
 
     /** currentKind への書き込みはすべてこのメソッド経由で行い、呼び出し元へ通知する。 */
-    private void setCurrentKind(DiagramKind kind) {
+    void setCurrentKind(DiagramKind kind) {
         currentKind = kind;
         onKindChanged.accept(kind);
     }
@@ -637,171 +629,31 @@ public final class DiagramController {
     // -------------------------------------------------------------------------
     // エントリ選択ダイアログ
     // -------------------------------------------------------------------------
+    // エントリ選択ダイアログ (DiagramEntryDialogs へ委譲)
+    // -------------------------------------------------------------------------
 
     public void pickSequenceEntry() {
-        if (!cache().isLoaded()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(parentFrame, cache().getClasses());
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "No methods found in this project.",
-                    "Sequence diagram", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            // 起点が変わったら participant フィルタはリセットする
-            // (旧起点の participant 名は新図に存在しない可能性があるため)
-            state.sequenceHiddenParticipants.clear();
-            state.sequenceEntry = picked;
-            setCurrentKind(DiagramKind.SEQUENCE);
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            syncTreeToMethodByEntry(picked);
-            refreshDiagram.run();
-        }
+        entryDialogs.pickSequenceEntry();
     }
 
-    /**
-     * 現在のシーケンス図起点に登場する participant をフィルタダイアログで選択できるようにする。
-     * 選択結果は {@code state.sequenceHiddenParticipants} に保存され、再描画時の
-     * {@link DiagramRequest#getSequenceHiddenParticipants()} に渡される。
-     */
     public void openParticipantFilterDialog() {
-        if (!cache().isLoaded()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        if (state.sequenceEntry == null || state.sequenceEntry.isEmpty()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "Choose a sequence entry first (Diagram → Choose Sequence Entry...).",
-                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        int dot = state.sequenceEntry.lastIndexOf('.');
-        if (dot < 0) {
-            return;
-        }
-        String cls = state.sequenceEntry.substring(0, dot);
-        String method = state.sequenceEntry.substring(dot + 1);
-        java.util.Set<String> all =
-                padtools.core.formats.uml.PlantUmlSequenceDiagram.collectParticipants(
-                        cache().getClasses(), cls, method, null);
-        if (all.isEmpty()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "No participants found for " + state.sequenceEntry,
-                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        java.util.Set<String> picked = SequenceParticipantFilterDialog.show(
-                parentFrame, state.sequenceEntry, all, state.sequenceHiddenParticipants);
-        if (picked != null) {
-            state.sequenceHiddenParticipants.clear();
-            state.sequenceHiddenParticipants.addAll(picked);
-            int total = all.size();
-            int hidden = state.sequenceHiddenParticipants.size();
-            statusLabel.setText("Sequence filter: showing " + (total - hidden) + "/" + total
-                    + " participants");
-            refreshDiagram.run();
-        }
+        entryDialogs.openParticipantFilterDialog();
     }
 
-    /**
-     * アクティビティ図用にメソッドを選択する。SequenceEntryDialog を流用し、
-     * タイトルだけ「Select activity method」に差し替える。
-     */
     public void pickActivityEntry() {
-        if (!cache().isLoaded()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(parentFrame, cache().getClasses());
-        dlg.setTitle("Select activity method");
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "No methods found in this project.",
-                    "Activity diagram", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            state.activityEntry = picked;
-            setCurrentKind(DiagramKind.ACTIVITY);
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            syncTreeToMethodByEntry(picked);
-            refreshDiagram.run();
-        }
+        entryDialogs.pickActivityEntry();
     }
 
     public void pickCallGraphEntry() {
-        if (!cache().isLoaded()) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(parentFrame, cache().getClasses());
-        dlg.setTitle("Select call graph entry method");
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(parentFrame,
-                    "No methods found in this project.",
-                    "Call graph", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            state.callGraphEntry = picked;
-            setCurrentKind(DiagramKind.CALLGRAPH);
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            refreshDiagram.run();
-        }
+        entryDialogs.pickCallGraphEntry();
     }
 
     public void pickLayoutFile() {
-        String picked = LayoutFileChooserDialog.chooseLayoutKey(parentFrame, cache());
-        if (picked == null) {
-            return;
-        }
-        state.currentLayoutKey = picked;
-        setCurrentKind(DiagramKind.LAYOUT);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.LAYOUT);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        refreshDiagram.run();
+        entryDialogs.pickLayoutFile();
     }
 
     public void pickNavigationGraph() {
-        String picked = NavigationFileChooserDialog.chooseNavigationKey(parentFrame, cache());
-        if (picked == null) {
-            return;
-        }
-        state.currentNavigationKey = picked;
-        setCurrentKind(DiagramKind.NAVIGATION);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.NAVIGATION);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        refreshDiagram.run();
+        entryDialogs.pickNavigationGraph();
     }
 
     // -------------------------------------------------------------------------

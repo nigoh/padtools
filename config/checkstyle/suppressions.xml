@@ -8,11 +8,6 @@
     <suppress checks="LocalVariableName" files="ViewListView\.java" />
     <suppress checks="MethodName" files="SwitchView\.java" />
 
-    <!-- UmlMainFrame は Swing メニュー / ファイル選択 / レンダリング / プロジェクトロード /
-         状態保持を 1 枚で抱える中心 GUI コントローラ。状態と Action リスナを安易に分割すると
-         Swing イベントの追跡が困難になるため、ファイル長は許可する。 -->
-    <suppress checks="FileLength" files="UmlMainFrame\.java" />
-
     <!-- PlantUmlSequenceDiagram の内部ヘルパは PlantUML テキスト・呼び出しスタック・visited
          セットなどを多数受け渡す必要があり、パラメータ数 8 を超える。外部 API は維持。
          注釈/コメント/フィルタ/再帰展開/制御構造ハンドラが集約された生成器であり、

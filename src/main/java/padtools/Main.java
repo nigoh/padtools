@@ -1,64 +1,13 @@
 package padtools;
 
-import padtools.app.cli.CliOutput;
-import padtools.app.cli.ProgressLogger;
+import padtools.app.cli.AnalysisCommands;
+import padtools.app.cli.AndroidCommands;
+import padtools.app.cli.AospCommands;
+import padtools.app.cli.CliContext;
+import padtools.app.cli.UmlCommands;
 import padtools.app.uml.UmlApp;
-import padtools.core.formats.android.AndroidProjectAnalysis;
-import padtools.core.formats.android.AndroidProjectAnalyzer;
-import padtools.core.formats.android.AndroidManifestInfo;
-import padtools.core.formats.android.AndroidManifestParser;
-import padtools.core.formats.android.GradleProjectInfo;
-import padtools.core.formats.android.GradleScriptParser;
-import padtools.core.formats.android.PlantUmlComponentDiagram;
-import padtools.core.formats.android.PlantUmlDeepLinkDiagram;
-import padtools.core.formats.android.PlantUmlGradleDependencyGraph;
-import padtools.core.formats.android.PlantUmlManifestDiagram;
-import padtools.core.formats.android.TextSummaryReport;
-import padtools.core.formats.android.settings.MarkdownSettingsReport;
-import padtools.core.formats.android.settings.PreferencesXmlParser;
-import padtools.core.formats.android.settings.SettingsAnalysisResult;
-import padtools.core.formats.android.settings.SharedPreferencesScanner;
-import padtools.core.formats.android.actions.MarkdownActionReport;
-import padtools.core.formats.android.actions.UiActionEntry;
-import padtools.core.formats.android.actions.UiActionScanner;
-import padtools.core.formats.java.AndroidProjectScanner;
-import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.GraphvizLocator;
 import padtools.core.formats.uml.PlantUmlRenderer;
-import padtools.core.formats.uml.UmlGenerator;
-import padtools.core.aaos.AidlBinding;
-import padtools.core.aaos.AidlBindingResolver;
-import padtools.core.aaos.MarkdownAidlBindingReport;
-import padtools.core.aaos.MarkdownVhalReport;
-import padtools.core.aaos.PlantUmlVhalFlowDiagram;
-import padtools.core.aaos.VehiclePropertyCatalog;
-import padtools.core.aaos.VhalAccess;
-import padtools.core.aaos.VhalAnalyzer;
-import padtools.core.aosp.AndroidBpModule;
-import padtools.core.aosp.AndroidBpParser;
-import padtools.core.aosp.MarkdownRroReport;
-import padtools.core.aosp.MarkdownSelinuxReport;
-import padtools.core.aosp.MarkdownSoongReport;
-import padtools.core.aosp.PlantUmlSoongDependencyDiagram;
-import padtools.core.aosp.RroOverlay;
-import padtools.core.aosp.RroOverlayDetector;
-import padtools.core.aosp.SelinuxPolicyParser;
-import padtools.core.aosp.SelinuxRule;
-import padtools.core.dataflow.MarkdownDataFlowReport;
-import padtools.core.dataflow.PlantUmlErDiagram;
-import padtools.core.dataflow.RoomAnalyzer;
-import padtools.core.screen.IntentNavigationDetector;
-import padtools.core.screen.MarkdownScreenFlowReport;
-import padtools.core.screen.PlantUmlScreenFlowDiagram;
-import padtools.core.screen.ScreenTransition;
-import padtools.core.impact.ImpactAnalyzer;
-import padtools.core.impact.ImpactGraph;
-import padtools.core.impact.MarkdownImpactReport;
-import padtools.core.impact.PlantUmlImpactDiagram;
-import padtools.core.refs.ReferenceIndex;
-import padtools.core.refs.ReferenceIndexBuilder;
-import padtools.core.refs.ReferenceKey;
-import padtools.core.refs.ReferenceSite;
 import padtools.util.ErrorListener;
 import padtools.util.Option;
 import padtools.util.OptionParser;
@@ -70,7 +19,11 @@ import java.net.URISyntaxException;
 import java.net.URL;
 
 /**
- * エントリポイントクラス
+ * エントリポイントクラス。
+ *
+ * <p>CLI 引数を解釈し、各出力モードを {@code padtools.app.cli} 配下のコマンドクラス
+ * ({@link UmlCommands} / {@link AndroidCommands} / {@link AospCommands} /
+ * {@link AnalysisCommands}) に委譲する。どのモードにも該当しなければ UML 専用 GUI を起動する。</p>
  */
 public class Main {
 
@@ -263,46 +216,47 @@ public class Main {
         if (umlOverrides == null) {
             return; // 引数エラー: UmlOverrides.build 内で System.exit 済み
         }
+        CliContext ctx = new CliContext(file_in, file_out, listener,
+                legendOverride, mergeManifest, umlOverrides);
+
         if (optListMethods.isSet()) {
-            handleListMethods(file_in, file_out, listener);
+            UmlCommands.handleListMethods(ctx);
             return;
         }
         if (optSequenceDiagrams.isSet()) {
-            handleSequenceDiagrams(file_in, file_out, listener,
-                    legendOverride, mergeManifest, umlOverrides);
+            UmlCommands.handleSequenceDiagrams(ctx);
             return;
         }
         if (optAll.isSet()) {
-            handleAll(file_in, file_out, listener, legendOverride, mergeManifest,
-                    umlOverrides);
+            AndroidCommands.handleAll(ctx);
             return;
         }
         if (optGradle.isSet()) {
-            handleGradleInput(file_in, file_out, listener);
+            AndroidCommands.handleGradleInput(ctx);
             return;
         }
         if (optManifest.isSet()) {
-            handleManifestInput(file_in, file_out, listener);
+            AndroidCommands.handleManifestInput(ctx);
             return;
         }
         if (optComponent.isSet()) {
-            handleComponentDiagram(file_in, file_out, listener, legendOverride);
+            AndroidCommands.handleComponentDiagram(ctx);
             return;
         }
         if (optManifestDiagram.isSet()) {
-            handleManifestDiagram(file_in, file_out, listener, legendOverride);
+            AndroidCommands.handleManifestDiagram(ctx);
             return;
         }
         if (optDeepLinkDiagram.isSet()) {
-            handleDeepLinkDiagram(file_in, file_out, listener, legendOverride);
+            AndroidCommands.handleDeepLinkDiagram(ctx);
             return;
         }
         if (optDepGraph.isSet()) {
-            handleDependencyGraph(file_in, file_out, listener, legendOverride);
+            AndroidCommands.handleDependencyGraph(ctx);
             return;
         }
         if (optSummary.isSet()) {
-            handleSummary(file_in, file_out, listener);
+            AndroidCommands.handleSummary(ctx);
             return;
         }
         if (optImpact.isSet()) {
@@ -315,74 +269,70 @@ public class Main {
                     System.exit(1);
                 }
             }
-            handleImpact(file_in, file_out, optImpact.getArguments().getLast(),
-                    depth, listener);
+            AnalysisCommands.handleImpact(ctx, optImpact.getArguments().getLast(), depth);
             return;
         }
         if (optRefFind.isSet()) {
-            handleRefFind(file_in, file_out, optRefFind.getArguments().getLast(),
-                    listener);
+            AnalysisCommands.handleRefFind(ctx, optRefFind.getArguments().getLast());
             return;
         }
         if (optVhalFlow.isSet()) {
-            handleVhalFlow(file_in, file_out, listener);
+            AospCommands.handleVhalFlow(ctx);
             return;
         }
         if (optAidlBinding.isSet()) {
-            handleAidlBinding(file_in, file_out, listener);
+            AospCommands.handleAidlBinding(ctx);
             return;
         }
         if (optErDiagram.isSet()) {
-            handleErDiagram(file_in, file_out, listener);
+            AnalysisCommands.handleErDiagram(ctx);
             return;
         }
         if (optDataFlow.isSet()) {
-            handleDataFlow(file_in, file_out, listener);
+            AnalysisCommands.handleDataFlow(ctx);
             return;
         }
         if (optScreenFlow.isSet()) {
-            handleScreenFlow(file_in, file_out, listener);
+            AnalysisCommands.handleScreenFlow(ctx);
             return;
         }
         if (optAndroidBp.isSet()) {
-            handleAndroidBp(file_in, file_out, listener);
+            AospCommands.handleAndroidBp(ctx);
             return;
         }
         if (optSelinux.isSet()) {
-            handleSelinux(file_in, file_out, listener);
+            AospCommands.handleSelinux(ctx);
             return;
         }
         if (optRro.isSet()) {
-            handleRroOverlays(file_in, file_out, listener);
+            AospCommands.handleRroOverlays(ctx);
             return;
         }
         if (optSettings.isSet()) {
-            handleSettings(file_in, file_out, listener);
+            AndroidCommands.handleSettings(ctx);
             return;
         }
         if (optInitFlow.isSet()) {
-            handleInitFlow(file_in, file_out, listener, legendOverride, umlOverrides);
+            UmlCommands.handleInitFlow(ctx);
             return;
         }
         if (optActionMap.isSet()) {
-            handleActionMap(file_in, file_out, listener);
+            AndroidCommands.handleActionMap(ctx);
             return;
         }
         if (optFuncDiff.isSet()) {
-            handleFuncDiff(file_out, optFuncDiff.getArguments().getLast(), listener);
+            AnalysisCommands.handleFuncDiff(ctx, optFuncDiff.getArguments().getLast());
             return;
         }
         if (optClassDiagram.isSet() && optPerFolder.isSet()) {
-            handleClassDiagramsPerFolder(file_in, file_out, listener,
-                    legendOverride, mergeManifest, umlOverrides);
+            UmlCommands.handleClassDiagramsPerFolder(ctx);
             return;
         }
         if (optClassDiagram.isSet() || optSequenceDiagram.isSet()) {
-            handleUmlInput(file_in, file_out,
+            UmlCommands.handleUmlInput(ctx,
                     optClassDiagram.isSet(),
                     optSequenceDiagram.isSet()
-                            ? optSequenceDiagram.getArguments().getLast() : null,
-                    listener, legendOverride, mergeManifest, umlOverrides);
+                            ? optSequenceDiagram.getArguments().getLast() : null);
             return;
         }
 
@@ -394,1032 +344,6 @@ public class Main {
         }
         // 既定: UML 専用 GUI を起動。引数があれば初期プロジェクトとして渡す。
         UmlApp.launch(file_in);
-    }
-
-    /**
-     * Java/AIDL ソースから PlantUML (クラス図 / シーケンス図) を生成。
-     * @param fileIn 入力ファイルまたはディレクトリ
-     * @param fileOut 出力ファイル (.puml/.plantuml/.txt)。null なら標準出力
-     * @param classDiagram true でクラス図モード
-     * @param sequenceEntry "Class.method" 形式のエントリ。null/空ならシーケンス図モードを無効化
-     */
-    private static void handleUmlInput(File fileIn, File fileOut,
-                                        boolean classDiagram,
-                                        String sequenceEntry,
-                                        ErrorListener listener,
-                                        Boolean legendOverride,
-                                        boolean mergeManifest,
-                                        UmlOverrides overrides) throws IOException {
-        if (fileIn == null) {
-            System.err.println("UML generation requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        String spec = sequenceEntry == null ? "" : sequenceEntry.trim();
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
-        UmlGenerator.ParseMode parseMode = overrides != null
-                ? overrides.parseMode : UmlGenerator.ParseMode.FULL;
-        if (fileIn.isDirectory()) {
-            if (parseMode == UmlGenerator.ParseMode.HEADERS_ONLY) {
-                infos = new java.util.ArrayList<>(UmlGenerator.extractFromProjectDetailed(
-                        fileIn, null, listener, null, null,
-                        mergeManifest, parseMode).getClasses());
-            } else {
-                infos = UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
-            }
-        } else {
-            String src = AndroidProjectScanner.readFile(fileIn);
-            if (parseMode == UmlGenerator.ParseMode.HEADERS_ONLY) {
-                infos = UmlGenerator.extractHeadersFromSource(src, fileIn.getName(), listener);
-            } else {
-                infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
-            }
-        }
-        // クラス図モードで --exclude-package が指定されていれば、ここで除外を効かせる。
-        if (classDiagram && overrides != null
-                && overrides.excludedPackages != null
-                && !overrides.excludedPackages.isEmpty()) {
-            java.util.List<padtools.core.formats.uml.JavaClassInfo> filtered =
-                    new java.util.ArrayList<>(infos.size());
-            for (padtools.core.formats.uml.JavaClassInfo c : infos) {
-                String pkg = c.getPackageName() == null ? "" : c.getPackageName();
-                boolean drop = false;
-                for (String ex : overrides.excludedPackages) {
-                    if (pkg.equals(ex) || pkg.startsWith(ex + ".")) {
-                        drop = true;
-                        break;
-                    }
-                }
-                if (!drop) {
-                    filtered.add(c);
-                }
-            }
-            infos = filtered;
-        }
-
-        String output;
-        if (sequenceEntry != null && !spec.isEmpty()) {
-            int dot = spec.lastIndexOf('.');
-            if (dot < 0) {
-                System.err.println("Sequence entry must be in 'Class.method' format: " + spec);
-                System.exit(1);
-                return;
-            }
-            String entryClass = spec.substring(0, dot);
-            String entryMethod = spec.substring(dot + 1);
-            padtools.core.formats.uml.PlantUmlSequenceDiagram.Options sqOpts
-                    = new padtools.core.formats.uml.PlantUmlSequenceDiagram.Options();
-            if (Boolean.FALSE.equals(legendOverride)) {
-                sqOpts.includeLegend = false;
-            }
-            if (overrides != null) {
-                overrides.applyTo(sqOpts);
-                if (overrides.seqDepth != null) {
-                    sqOpts.maxDepth = overrides.seqDepth;
-                }
-            }
-            output = padtools.core.formats.uml.PlantUmlSequenceDiagram.generate(
-                    infos, entryClass, entryMethod, sqOpts);
-        } else {
-            padtools.core.formats.uml.PlantUmlClassDiagram.Options clOpts
-                    = new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
-            if (Boolean.FALSE.equals(legendOverride)) {
-                clOpts.includeLegend = false;
-            }
-            if (overrides != null) {
-                overrides.applyTo(clOpts);
-            }
-            output = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clOpts);
-        }
-        CliOutput.writeUmlOutput(fileOut, output);
-    }
-
-    /**
-     * {@code --list-methods}: 入力ソース内のメソッドを列挙し、{@code Class.method} 形式で
-     * 1 行ずつ stdout (もしくは {@code -o} 指定先) に書き出す。シーケンス図の起点を
-     * シェルから選ぶ用途 (fzf, peco 等と組み合わせ) を想定。
-     */
-    private static void handleListMethods(File fileIn, File fileOut,
-                                            ErrorListener listener) throws IOException {
-        if (fileIn == null) {
-            System.err.println("--list-methods requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
-        if (fileIn.isDirectory()) {
-            infos = UmlGenerator.extractFromProject(fileIn, null, listener);
-        } else {
-            String src = AndroidProjectScanner.readFile(fileIn);
-            infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
-        }
-        java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
-                padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
-        StringBuilder sb = new StringBuilder();
-        for (padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate c : candidates) {
-            sb.append(c.getEntry())
-                    .append("\t(").append(c.callCount).append(" call")
-                    .append(c.callCount == 1 ? "" : "s")
-                    .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
-        }
-        CliOutput.writeText(fileOut, sb.toString());
-    }
-
-    /**
-     * {@code --impact <FQN[.method]>}: 指定シンボルを起点に逆参照を辿り、
-     * 影響を受けるクラスを推移閉包で列挙する。
-     *
-     * <p>出力先:</p>
-     * <ul>
-     *   <li>{@code -o foo.md}: Markdown レポート 1 ファイル</li>
-     *   <li>{@code -o foo.puml}: PlantUML 影響図 1 ファイル</li>
-     *   <li>{@code -o foo}: 拡張子なし → {@code foo.md} と {@code foo.puml} を両方書く</li>
-     *   <li>{@code -o} 省略: Markdown を標準出力</li>
-     * </ul>
-     */
-    private static void handleImpact(File fileIn, File fileOut, String target,
-                                       int depth, ErrorListener listener)
-            throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--impact requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        if (target == null || target.isEmpty()) {
-            System.err.println("--impact requires a symbol target (FQN or FQN.method).");
-            System.exit(1);
-            return;
-        }
-        ReferenceIndex refIndex = buildReferenceIndex(fileIn, listener);
-
-        ImpactGraph graph;
-        ImpactAnalyzer analyzer = new ImpactAnalyzer(refIndex);
-        // FQN.method の区別: 最後のドット以降が小文字始まりかつクラスが存在 → method
-        int lastDot = target.lastIndexOf('.');
-        if (lastDot > 0 && lastDot < target.length() - 1) {
-            String maybeOwner = target.substring(0, lastDot);
-            String maybeMember = target.substring(lastDot + 1);
-            if (!maybeMember.isEmpty()
-                    && Character.isLowerCase(maybeMember.charAt(0))) {
-                graph = analyzer.analyzeMethod(maybeOwner, maybeMember, depth);
-            } else {
-                graph = analyzer.analyzeClass(target, depth);
-            }
-        } else {
-            graph = analyzer.analyzeClass(target, depth);
-        }
-
-        String markdown = MarkdownImpactReport.render(graph);
-        String puml = PlantUmlImpactDiagram.render(graph);
-        CliOutput.writeImpactOutput(fileOut, markdown, puml);
-    }
-
-    /**
-     * {@code --ref-find <FQN[.member]>}: シンボルを参照している箇所を 1 行ずつ
-     * プレーンテキストで列挙する (grep 互換)。
-     */
-    private static void handleRefFind(File fileIn, File fileOut, String target,
-                                        ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--ref-find requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        if (target == null || target.isEmpty()) {
-            System.err.println("--ref-find requires a symbol target.");
-            System.exit(1);
-            return;
-        }
-        ReferenceIndex refIndex = buildReferenceIndex(fileIn, listener);
-
-        java.util.List<ReferenceSite> sites;
-        int lastDot = target.lastIndexOf('.');
-        if (lastDot > 0 && lastDot < target.length() - 1) {
-            String maybeOwner = target.substring(0, lastDot);
-            String maybeMember = target.substring(lastDot + 1);
-            if (!maybeMember.isEmpty()
-                    && Character.isLowerCase(maybeMember.charAt(0))) {
-                sites = refIndex.sites(
-                        ReferenceKey.ofMethod(maybeOwner, maybeMember));
-            } else {
-                sites = refIndex.sitesForClass(target);
-            }
-        } else {
-            sites = refIndex.sitesForClass(target);
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (ReferenceSite s : sites) {
-            sb.append(s.getCallerFqn());
-            if (!s.getCallerMethod().isEmpty()) {
-                sb.append('.').append(s.getCallerMethod());
-            }
-            sb.append('\t').append(s.getKind().name());
-            if (!s.getFile().isEmpty()) {
-                sb.append('\t').append(s.getFile());
-            }
-            sb.append('\n');
-        }
-        if (sb.length() == 0) {
-            sb.append("(no references found for ").append(target).append(")\n");
-        }
-        CliOutput.writeText(fileOut, sb.toString());
-    }
-
-    /**
-     * プロジェクトをパースして {@link ReferenceIndex} を構築する。
-     * Stage B 化されたクラスをすべて {@link ReferenceIndexBuilder} に流す。
-     */
-    private static ReferenceIndex buildReferenceIndex(File projectDir,
-                                                        ErrorListener listener)
-            throws IOException {
-        UmlGenerator.ProjectParseResult result =
-                UmlGenerator.extractFromProjectDetailed(projectDir, null, listener,
-                        null, null, false, UmlGenerator.ParseMode.FULL);
-        ReferenceIndex idx = new ReferenceIndex();
-        ReferenceIndexBuilder builder = new ReferenceIndexBuilder(idx,
-                result.getIndex(), result.getDependencyIndex(), listener);
-        builder.addAll(result.getClasses());
-        return idx;
-    }
-
-    /**
-     * {@code --vhal-flow}: プロジェクトを走査して
-     * {@link padtools.core.aaos.CarPropertyManager} 系呼び出しを検出し、
-     * Property 別 GET/SET/SUBSCRIBE フローを Markdown + PlantUML で出力する。
-     */
-    private static void handleVhalFlow(File fileIn, File fileOut,
-                                          ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--vhal-flow requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        VhalAnalyzer analyzer = new VhalAnalyzer();
-        java.util.List<VhalAccess> accesses = analyzer.analyzeProject(fileIn);
-        VehiclePropertyCatalog catalog = VehiclePropertyCatalog.scanProject(fileIn);
-        String md = MarkdownVhalReport.render(accesses, catalog);
-        String puml = PlantUmlVhalFlowDiagram.render(accesses);
-        CliOutput.writeImpactOutput(fileOut, md, puml);
-    }
-
-    /**
-     * {@code --aidl-binding}: プロジェクト内の AIDL インタフェースと、その
-     * {@code Stub} を継承する実装クラスとの対応表を Markdown で出力する。
-     */
-    private static void handleAidlBinding(File fileIn, File fileOut,
-                                            ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--aidl-binding requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        UmlGenerator.ProjectParseResult result =
-                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
-                        null, null, false, UmlGenerator.ParseMode.FULL);
-        java.util.Map<String, java.util.List<AidlBinding>> bindings =
-                new AidlBindingResolver().resolve(result.getClasses());
-        String md = MarkdownAidlBindingReport.render(bindings);
-        CliOutput.writeText(fileOut, md);
-    }
-
-    /**
-     * {@code --er-diagram}: プロジェクト内 Room {@code @Entity} の ER 図を出力する。
-     */
-    private static void handleErDiagram(File fileIn, File fileOut,
-                                          ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--er-diagram requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        UmlGenerator.ProjectParseResult result =
-                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
-                        null, null, false, UmlGenerator.ParseMode.FULL);
-        RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
-        String puml = PlantUmlErDiagram.render(room);
-        CliOutput.writeUmlOutput(fileOut, puml);
-    }
-
-    /**
-     * {@code --data-flow}: Room の Entity / DAO / Database を集計した
-     * Markdown レポートと ER PlantUML を一括出力する。
-     */
-    private static void handleDataFlow(File fileIn, File fileOut,
-                                         ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--data-flow requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        UmlGenerator.ProjectParseResult result =
-                UmlGenerator.extractFromProjectDetailed(fileIn, null, listener,
-                        null, null, false, UmlGenerator.ParseMode.FULL);
-        RoomAnalyzer.Result room = new RoomAnalyzer().analyze(result.getClasses());
-        String md = MarkdownDataFlowReport.render(room);
-        String puml = PlantUmlErDiagram.render(room);
-        CliOutput.writeImpactOutput(fileOut, md, puml);
-    }
-
-    /**
-     * {@code --selinux}: プロジェクト下の {@code *.te} を再帰走査し、
-     * type 宣言と allow/neverallow ルールを Markdown レポートにまとめる。
-     */
-    private static void handleSelinux(File fileIn, File fileOut,
-                                         ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--selinux requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<SelinuxRule> rules =
-                new SelinuxPolicyParser().analyzeProject(fileIn);
-        String md = MarkdownSelinuxReport.render(rules);
-        CliOutput.writeText(fileOut, md);
-    }
-
-    /**
-     * {@code --rro-overlays}: プロジェクト下の {@code AndroidManifest.xml} から
-     * {@code &lt;overlay targetPackage="..."&gt;} を検出し、RRO 一覧を Markdown 出力する。
-     */
-    private static void handleRroOverlays(File fileIn, File fileOut,
-                                             ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--rro-overlays requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<RroOverlay> overlays =
-                new RroOverlayDetector().analyzeProject(fileIn);
-        String md = MarkdownRroReport.render(overlays);
-        CliOutput.writeText(fileOut, md);
-    }
-
-    /**
-     * {@code --settings}: プロジェクト全体の SharedPreferences / DataStore 読み書きと
-     * res/xml/ の Preference XML 定義を Markdown レポートとして出力する。
-     */
-    private static void handleSettings(File fileIn, File fileOut,
-                                         ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--settings requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        SharedPreferencesScanner scanner = new SharedPreferencesScanner();
-        SettingsAnalysisResult result = scanner.analyzeProject(fileIn);
-        PreferencesXmlParser xmlParser = new PreferencesXmlParser();
-        for (padtools.core.formats.android.settings.PreferenceXmlEntry e
-                : xmlParser.analyzeProject(fileIn)) {
-            result.addXmlEntry(e);
-        }
-        CliOutput.writeText(fileOut, MarkdownSettingsReport.render(result));
-    }
-
-    /**
-     * {@code --init-flow}: Application サブクラスの {@code onCreate()} を起点とした
-     * 初期化シーケンス図を出力する。既存のライフサイクルシーケンス図生成を Application にも適用する。
-     */
-    private static void handleInitFlow(File fileIn, File fileOut,
-                                         ErrorListener listener,
-                                         Boolean legendOverride,
-                                         UmlOverrides overrides) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--init-flow requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        if (fileOut == null) {
-            System.err.println("--init-flow requires an output directory via -o.");
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.exists() && !fileOut.mkdirs()) {
-            System.err.println("Failed to create output directory: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.isDirectory()) {
-            System.err.println("-o must point to a directory for --init-flow: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        ProgressLogger progress = new ProgressLogger();
-        long startMs = System.currentTimeMillis();
-        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
-                UmlGenerator.extractFromProject(fileIn, null, listener, false);
-        progress.step("Generating Application init-flow sequence diagrams");
-        int count = generateInitFlowSequenceDiagrams(infos, fileOut, legendOverride,
-                overrides, progress, listener);
-        if (count == 0) {
-            System.err.println("[padtools] No Application subclass found with onCreate().");
-        }
-        progress.done(fileOut, System.currentTimeMillis() - startMs);
-    }
-
-    /**
-     * {@code --action-map}: プロジェクト内の onClick ハンドラ・Compose クリックイベント・
-     * XML android:onClick を検出して Markdown レポートを出力する。
-     */
-    private static void handleActionMap(File fileIn, File fileOut,
-                                          ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--action-map requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<UiActionEntry> entries =
-                new UiActionScanner().analyzeProject(fileIn);
-        CliOutput.writeText(fileOut, MarkdownActionReport.render(entries));
-    }
-
-    /**
-     * {@code --func-diff "FileA.java::ClassName.methodA,FileB.java::ClassName.methodB"}:
-     * 2つのメソッドの呼び出し列を比較し、LCS/Levenshtein/Jaccard の3指標と
-     * 行ごとの信頼度スコアを Markdown レポートとして出力する。
-     */
-    private static void handleFuncDiff(File fileOut, String spec,
-                                         ErrorListener listener) throws IOException {
-        if (spec == null || !spec.contains(",")) {
-            System.err.println(
-                    "--func-diff requires \"SpecA,SpecB\" format where each spec is"
-                    + " \"filePath::ClassName.methodName\".");
-            System.exit(1);
-            return;
-        }
-        int comma = spec.indexOf(',');
-        String rawA = spec.substring(0, comma).trim();
-        String rawB = spec.substring(comma + 1).trim();
-
-        padtools.core.funcdiff.MethodDiffAnalyzer.MethodSpec specA;
-        padtools.core.funcdiff.MethodDiffAnalyzer.MethodSpec specB;
-        try {
-            specA = padtools.core.funcdiff.MethodDiffAnalyzer.parseSpec(rawA);
-            specB = padtools.core.funcdiff.MethodDiffAnalyzer.parseSpec(rawB);
-        } catch (IllegalArgumentException e) {
-            System.err.println("--func-diff: " + e.getMessage());
-            System.exit(1);
-            return;
-        }
-
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> classesA =
-                UmlGenerator.extractFromSource(
-                        AndroidProjectScanner.readFile(new java.io.File(specA.filePath)),
-                        new java.io.File(specA.filePath).getName(), listener);
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> classesB =
-                UmlGenerator.extractFromSource(
-                        AndroidProjectScanner.readFile(new java.io.File(specB.filePath)),
-                        new java.io.File(specB.filePath).getName(), listener);
-
-        padtools.core.formats.uml.JavaMethodInfo methodA =
-                padtools.core.funcdiff.MethodDiffAnalyzer.findMethod(classesA, specA);
-        padtools.core.formats.uml.JavaMethodInfo methodB =
-                padtools.core.funcdiff.MethodDiffAnalyzer.findMethod(classesB, specB);
-
-        if (methodA == null) {
-            System.err.println("--func-diff: method not found: " + rawA);
-        }
-        if (methodB == null) {
-            System.err.println("--func-diff: method not found: " + rawB);
-        }
-
-        padtools.core.funcdiff.MethodDiffAnalyzer.DiffResult result =
-                padtools.core.funcdiff.MethodDiffAnalyzer.analyze(methodA, specA, methodB, specB);
-        CliOutput.writeText(fileOut, padtools.core.funcdiff.MarkdownMethodDiffReport.render(result));
-    }
-
-    /**
-     * {@code --android-bp}: プロジェクト下を再帰的に走査して {@code Android.bp}
-     * (Soong Blueprint) を解析し、モジュール依存図 (PlantUML) と Markdown レポートを出力する。
-     */
-    private static void handleAndroidBp(File fileIn, File fileOut,
-                                          ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--android-bp requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<AndroidBpModule> modules =
-                new AndroidBpParser().analyzeProject(fileIn);
-        String md = MarkdownSoongReport.render(modules);
-        String puml = PlantUmlSoongDependencyDiagram.render(modules);
-        CliOutput.writeImpactOutput(fileOut, md, puml);
-    }
-
-    /**
-     * {@code --screen-flow}: プロジェクト内 Java ソースから Intent ベースの画面遷移
-     * (startActivity / setClass / setClassName) を検出し、Markdown + PlantUML
-     * 状態遷移図で出力する。NavGraph XML は別系統 (DiagramService NAVIGATION) で処理。
-     */
-    private static void handleScreenFlow(File fileIn, File fileOut,
-                                            ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--screen-flow requires a project directory as input.");
-            System.exit(1);
-            return;
-        }
-        java.util.List<ScreenTransition> transitions =
-                new IntentNavigationDetector().analyzeProject(fileIn);
-        String md = MarkdownScreenFlowReport.render(transitions);
-        String puml = PlantUmlScreenFlowDiagram.render(transitions);
-        CliOutput.writeImpactOutput(fileOut, md, puml);
-    }
-
-    /**
-     * {@code --sequence-diagrams} / {@code -Q}: Android プロジェクトを入力に、
-     * Activity/Service/Receiver/Provider のライフサイクルメソッドを起点とする
-     * PlantUML シーケンス図を {@code -o} で指定されたディレクトリへ一括出力する。
-     * 各起点について {@code Class.method.puml} と {@code Class.method.svg} の両方を書き出す。
-     */
-    private static void handleSequenceDiagrams(File fileIn, File fileOut,
-                                                 ErrorListener listener,
-                                                 Boolean legendOverride,
-                                                 boolean mergeManifest,
-                                                 UmlOverrides overrides) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--sequence-diagrams requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        if (fileOut == null) {
-            System.err.println("--sequence-diagrams requires an output directory via -o.");
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.exists() && !fileOut.mkdirs()) {
-            System.err.println("Failed to create output directory: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.isDirectory()) {
-            System.err.println("-o must point to a directory for --sequence-diagrams: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        ProgressLogger progress = new ProgressLogger();
-        long startMs = System.currentTimeMillis();
-        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
-                UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
-        progress.step("Generating sequence diagrams (.puml + .svg)");
-        int count = generateLifecycleSequenceDiagrams(infos, fileOut, legendOverride,
-                overrides, progress, listener);
-        progress.wrote(fileOut, "(" + count + " diagram(s))");
-        progress.done(fileOut, System.currentTimeMillis() - startMs);
-    }
-
-    /**
-     * {@code -c --per-folder}: プロジェクトを再帰スキャンし、ソースファイルを直接含む
-     * 各フォルダごとに 1 枚ずつ PlantUML クラス図 ({@code classes.puml} + {@code classes.svg})
-     * を {@code -o} で指定されたディレクトリ配下にサブフォルダ構造を維持して出力する。
-     */
-    private static void handleClassDiagramsPerFolder(File fileIn, File fileOut,
-                                                       ErrorListener listener,
-                                                       Boolean legendOverride,
-                                                       boolean mergeManifest,
-                                                       UmlOverrides overrides) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--per-folder requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        if (fileOut == null) {
-            System.err.println("--per-folder requires an output directory via -o.");
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.exists() && !fileOut.mkdirs()) {
-            System.err.println("Failed to create output directory: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.isDirectory()) {
-            System.err.println("-o must point to a directory for --per-folder: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
-                new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            clsOpts.includeLegend = false;
-        }
-        if (overrides != null) {
-            overrides.applyTo(clsOpts);
-        }
-
-        ProgressLogger progress = new ProgressLogger();
-        long startMs = System.currentTimeMillis();
-        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
-        progress.step("Generating per-folder class diagrams (.puml + .svg)");
-        padtools.core.formats.uml.PerFolderClassDiagrams.Result result =
-                padtools.core.formats.uml.PerFolderClassDiagrams.generate(
-                        fileIn, fileOut, null, clsOpts, mergeManifest, null, listener);
-        progress.wrote(fileOut,
-                "(" + result.getFolderCount() + " folder(s), "
-                        + result.getClassCount() + " class(es))");
-        progress.done(fileOut, System.currentTimeMillis() - startMs);
-    }
-
-    /** {@code --gradle}: 単一 build.gradle (もしくはディレクトリ) を Markdown サマリーに変換。 */
-    private static void handleGradleInput(File fileIn, File fileOut,
-                                            ErrorListener listener) throws IOException {
-        if (fileIn == null) {
-            System.err.println("Gradle mode requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        if (fileIn.isDirectory()) {
-            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
-        } else {
-            String content = AndroidProjectScanner.readFile(fileIn);
-            GradleProjectInfo info = GradleScriptParser.parse(content, fileIn.getName(), listener);
-            AndroidProjectAnalysis fake = new AndroidProjectAnalysis();
-            fake.getGradleByModule().put(fileIn.getName(), info);
-            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(fake));
-        }
-    }
-
-    /** {@code --manifest}: 単一 AndroidManifest.xml (もしくはディレクトリ) を Markdown サマリーに変換。 */
-    private static void handleManifestInput(File fileIn, File fileOut,
-                                              ErrorListener listener) throws IOException {
-        if (fileIn == null) {
-            System.err.println("Manifest mode requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        if (fileIn.isDirectory()) {
-            AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
-        } else {
-            String content = AndroidProjectScanner.readFile(fileIn);
-            AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
-            AndroidProjectAnalysis fake = new AndroidProjectAnalysis();
-            java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
-            list.add(info);
-            fake.getManifestsByModule().put(fileIn.getName(), list);
-            CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(fake));
-        }
-    }
-
-    /** {@code --component-diagram}: コンポーネント図 PlantUML を生成。 */
-    private static void handleComponentDiagram(File fileIn, File fileOut,
-                                                 ErrorListener listener,
-                                                 Boolean legendOverride) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("Component diagram requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            o.includeLegend = false;
-        }
-        CliOutput.writeUmlOutput(fileOut, PlantUmlComponentDiagram.generate(analysis, o));
-    }
-
-    /**
-     * {@code --manifest-diagram}: AndroidManifest.xml の構造 (Application + 配下コンポーネント
-     * + permissions + features) を 1 枚にまとめた PlantUML 図を生成する。
-     */
-    private static void handleManifestDiagram(File fileIn, File fileOut,
-                                                ErrorListener listener,
-                                                Boolean legendOverride) throws IOException {
-        if (fileIn == null) {
-            System.err.println("Manifest diagram requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        AndroidProjectAnalysis analysis;
-        if (fileIn.isDirectory()) {
-            analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        } else {
-            String content = AndroidProjectScanner.readFile(fileIn);
-            AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
-            analysis = new AndroidProjectAnalysis();
-            java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
-            list.add(info);
-            analysis.getManifestsByModule().put(fileIn.getName(), list);
-        }
-        PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            o.includeLegend = false;
-        }
-        CliOutput.writeUmlOutput(fileOut, PlantUmlManifestDiagram.generate(analysis, o));
-    }
-
-    /**
-     * {@code --deeplink-diagram} / {@code -D}: VIEW + BROWSABLE を持つ Activity の
-     * Deep Link / App Links を可視化する PlantUML 図を生成する。
-     */
-    private static void handleDeepLinkDiagram(File fileIn, File fileOut,
-                                                ErrorListener listener,
-                                                Boolean legendOverride) throws IOException {
-        if (fileIn == null) {
-            System.err.println("Deep link diagram requires an input file or directory.");
-            System.exit(1);
-            return;
-        }
-        AndroidProjectAnalysis analysis;
-        if (fileIn.isDirectory()) {
-            analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        } else {
-            String content = AndroidProjectScanner.readFile(fileIn);
-            AndroidManifestInfo info = AndroidManifestParser.parse(content, listener);
-            analysis = new AndroidProjectAnalysis();
-            java.util.List<AndroidManifestInfo> list = new java.util.ArrayList<>();
-            list.add(info);
-            analysis.getManifestsByModule().put(fileIn.getName(), list);
-        }
-        PlantUmlDeepLinkDiagram.Options o = new PlantUmlDeepLinkDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            o.includeLegend = false;
-        }
-        CliOutput.writeUmlOutput(fileOut, PlantUmlDeepLinkDiagram.generate(analysis, o));
-    }
-
-    /** {@code --dependency-graph}: Gradle 依存グラフ PlantUML を生成。 */
-    private static void handleDependencyGraph(File fileIn, File fileOut,
-                                                ErrorListener listener,
-                                                Boolean legendOverride) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("Dependency graph requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            o.includeLegend = false;
-        }
-        CliOutput.writeUmlOutput(fileOut, PlantUmlGradleDependencyGraph.generate(analysis, o));
-    }
-
-    /** {@code --summary}: プロジェクト全体の Markdown サマリーを生成。 */
-    private static void handleSummary(File fileIn, File fileOut,
-                                        ErrorListener listener) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("Summary requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-        CliOutput.writeText(fileOut, TextSummaryReport.toMarkdown(analysis));
-    }
-
-    /**
-     * {@code --all}: プロジェクトディレクトリを入力に、複数種類の成果物を出力ディレクトリへ一括書き出し。
-     * <ul>
-     *   <li>{@code summary.md} - Markdown プロジェクトサマリー</li>
-     *   <li>{@code class-diagram.svg} - PlantUML クラス図 (manifest 自動マージ)</li>
-     *   <li>{@code component-diagram.svg} - PlantUML Android コンポーネント図</li>
-     *   <li>{@code manifest-diagram.svg} - PlantUML AndroidManifest 図 (Application + 配下コンポーネント)</li>
-     *   <li>{@code deeplink-diagram.svg} - PlantUML Deep Link / App Links 図</li>
-     *   <li>{@code dependency-graph.svg} - PlantUML Gradle 依存グラフ</li>
-     *   <li>{@code methods.txt} - シーケンス図の起点候補一覧 ({@code Class.method}) </li>
-     *   <li>{@code sequence-diagrams/}{@code <Class.method>.svg} - Android ライフサイクル
-     *       (Activity/Service の {@code onCreate} 等) を起点に自動生成したシーケンス図</li>
-     * </ul>
-     * <p>すべて同梱ライブラリのみで完結するため、PlantUML/dot のインストールは不要。
-     * ライフサイクル外のメソッドからシーケンス図を作る場合は {@code methods.txt} を
-     * 参考に {@code -q Class.method -o seq.svg} で個別生成する。</p>
-     */
-    private static void handleAll(File fileIn, File fileOut,
-                                    ErrorListener listener,
-                                    Boolean legendOverride,
-                                    boolean mergeManifest,
-                                    UmlOverrides overrides) throws IOException {
-        if (fileIn == null || !fileIn.isDirectory()) {
-            System.err.println("--all requires a project directory.");
-            System.exit(1);
-            return;
-        }
-        if (fileOut == null) {
-            System.err.println("--all requires an output directory via -o.");
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.exists() && !fileOut.mkdirs()) {
-            System.err.println("Failed to create output directory: " + fileOut);
-            System.exit(1);
-            return;
-        }
-        if (!fileOut.isDirectory()) {
-            System.err.println("-o must point to a directory when --all is set: " + fileOut);
-            System.exit(1);
-            return;
-        }
-
-        // --all は時間がかかる複合処理なので、-v の有無に関わらず進捗ログを stderr に
-        // 出す。ユーザが渡したリスナー (verbose なら stderr / silent なら no-op) は
-        // パース警告等の付随情報として残しつつ、進捗ログは別経路で確実に表示する。
-        ProgressLogger progress = new ProgressLogger();
-        long startMs = System.currentTimeMillis();
-        progress.step("Analyzing project: " + fileIn.getAbsolutePath());
-
-        // プロジェクト解析を 1 回だけ実行して再利用する
-        AndroidProjectAnalysis analysis = AndroidProjectAnalyzer.analyze(fileIn, listener);
-
-        // 1) Markdown サマリー
-        progress.step("[1/8] Generating summary.md");
-        File summaryFile = new File(fileOut, "summary.md");
-        CliOutput.writeText(summaryFile, TextSummaryReport.toMarkdown(analysis));
-        progress.wrote(summaryFile);
-        listener.onError(null, -1, "wrote " + summaryFile.getPath());
-
-        // 2) コンポーネント図 (SVG)
-        progress.step("[2/8] Generating component-diagram.svg");
-        PlantUmlComponentDiagram.Options compOpts = new PlantUmlComponentDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            compOpts.includeLegend = false;
-        }
-        File compFile = new File(fileOut, "component-diagram.svg");
-        CliOutput.renderSvgOrFallback(PlantUmlComponentDiagram.generate(analysis, compOpts),
-                compFile, progress, listener);
-
-        // 3) Manifest 図 (SVG) — Application + 配下コンポーネントを 1 枚で可視化
-        progress.step("[3/8] Generating manifest-diagram.svg");
-        PlantUmlManifestDiagram.Options manOpts = new PlantUmlManifestDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            manOpts.includeLegend = false;
-        }
-        File manFile = new File(fileOut, "manifest-diagram.svg");
-        CliOutput.renderSvgOrFallback(PlantUmlManifestDiagram.generate(analysis, manOpts),
-                manFile, progress, listener);
-
-        // 4) Deep Link 図 (SVG) — VIEW + BROWSABLE intent-filter の URI 入口を可視化
-        progress.step("[4/8] Generating deeplink-diagram.svg");
-        PlantUmlDeepLinkDiagram.Options dlOpts = new PlantUmlDeepLinkDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            dlOpts.includeLegend = false;
-        }
-        File dlFile = new File(fileOut, "deeplink-diagram.svg");
-        CliOutput.renderSvgOrFallback(PlantUmlDeepLinkDiagram.generate(analysis, dlOpts),
-                dlFile, progress, listener);
-
-        // 5) 依存グラフ (SVG)
-        progress.step("[5/8] Generating dependency-graph.svg");
-        PlantUmlGradleDependencyGraph.Options depOpts = new PlantUmlGradleDependencyGraph.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            depOpts.includeLegend = false;
-        }
-        File depFile = new File(fileOut, "dependency-graph.svg");
-        CliOutput.renderSvgOrFallback(PlantUmlGradleDependencyGraph.generate(analysis, depOpts),
-                depFile, progress, listener);
-
-        // 6) クラス図 (SVG)。UmlGenerator は内部で再走査するが、manifest 連携のため別経路。
-        progress.step("[6/8] Generating class-diagram.svg (scanning Java/AIDL)");
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos =
-                UmlGenerator.extractFromProject(fileIn, null, listener, mergeManifest);
-        padtools.core.formats.uml.PlantUmlClassDiagram.Options clsOpts =
-                new padtools.core.formats.uml.PlantUmlClassDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            clsOpts.includeLegend = false;
-        }
-        if (overrides != null) {
-            overrides.applyTo(clsOpts);
-        }
-        File clsFile = new File(fileOut, "class-diagram.svg");
-        String clsPuml = padtools.core.formats.uml.PlantUmlClassDiagram.generate(infos, clsOpts);
-        try {
-            PlantUmlRenderer.renderSvg(clsPuml, clsFile);
-            progress.wrote(clsFile, "(" + infos.size() + " class(es))");
-            listener.onError(null, -1, "wrote " + clsFile.getPath());
-        } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
-            File clsPumlFallback = CliOutput.siblingPumlFor(clsFile);
-            CliOutput.writeText(clsPumlFallback, clsPuml);
-            System.err.println("[padtools]     -> " + clsFile.getName()
-                    + " FAILED: " + ex.getMessage());
-            System.err.println("[padtools]        Saved " + clsPumlFallback.getName()
-                    + " -- render externally with: plantuml -tsvg "
-                    + clsPumlFallback.getName());
-        }
-
-        // 7) シーケンス図の起点候補一覧
-        progress.step("[7/8] Generating methods.txt (sequence diagram entry candidates)");
-        java.util.List<padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate> candidates =
-                padtools.core.formats.uml.PlantUmlSequenceDiagram.listCandidates(infos);
-        StringBuilder methodsBuf = new StringBuilder();
-        for (padtools.core.formats.uml.PlantUmlSequenceDiagram.Candidate c : candidates) {
-            methodsBuf.append(c.getEntry())
-                    .append("\t(").append(c.callCount).append(" call")
-                    .append(c.callCount == 1 ? "" : "s")
-                    .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
-        }
-        File methodsFile = new File(fileOut, "methods.txt");
-        CliOutput.writeText(methodsFile, methodsBuf.toString());
-        progress.wrote(methodsFile, "(" + candidates.size() + " method(s))");
-        listener.onError(null, -1, "wrote " + methodsFile.getPath());
-
-        // 8) Android ライフサイクルメソッドを自動的に起点としたシーケンス図
-        progress.step("[8/8] Generating sequence-diagrams/ (Android lifecycle entry points)");
-        File seqDir = new File(fileOut, "sequence-diagrams");
-        if (!seqDir.exists() && !seqDir.mkdirs()) {
-            System.err.println("[padtools]     Skipping sequence-diagrams (cannot create dir)");
-        } else {
-            int seqCount = generateLifecycleSequenceDiagrams(infos, seqDir, legendOverride,
-                    overrides, progress, listener);
-            progress.wrote(seqDir, "(" + seqCount + " diagram(s), .puml + .svg)");
-        }
-
-        long elapsedMs = System.currentTimeMillis() - startMs;
-        progress.done(fileOut, elapsedMs);
-    }
-
-    /**
-     * Activity/Service のライフサイクルメソッドを起点にシーケンス図を一括生成し、
-     * 各起点ごとに {@code Class.method.puml} と {@code Class.method.svg} の両方を出力する。
-     */
-    private static int generateLifecycleSequenceDiagrams(
-            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos,
-            File outDir,
-            Boolean legendOverride,
-            UmlOverrides overrides,
-            ProgressLogger progress,
-            ErrorListener listener) throws IOException {
-        padtools.core.formats.uml.PlantUmlSequenceDiagram.Options sqOpts
-                = new padtools.core.formats.uml.PlantUmlSequenceDiagram.Options();
-        if (Boolean.FALSE.equals(legendOverride)) {
-            sqOpts.includeLegend = false;
-        }
-        if (overrides != null) {
-            overrides.applyTo(sqOpts);
-            if (overrides.seqDepth != null) {
-                sqOpts.maxDepth = overrides.seqDepth;
-            }
-        }
-        java.util.List<LifecycleSequenceDiagrams.Entry> entries =
-                LifecycleSequenceDiagrams.generateAll(infos, sqOpts);
-        for (LifecycleSequenceDiagrams.Entry e : entries) {
-            CliOutput.writeText(new File(outDir, e.baseName() + ".puml"), e.puml);
-            File svgFile = new File(outDir, e.baseName() + ".svg");
-            try {
-                PlantUmlRenderer.renderSvg(e.puml, svgFile);
-            } catch (padtools.core.formats.uml.PlantUmlRenderFailedException ex) {
-                System.err.println("[padtools]     -> " + svgFile.getName()
-                        + " FAILED: " + ex.getMessage()
-                        + " (.puml is preserved)");
-            }
-        }
-        return entries.size();
-    }
-
-    /** Application の基底クラス名セット (FQN + 単純名)。 */
-    private static final java.util.Set<String> APPLICATION_BASES;
-    static {
-        java.util.Set<String> s = new java.util.HashSet<>(java.util.Arrays.asList(
-                "Application", "android.app.Application",
-                "MultiDexApplication", "androidx.multidex.MultiDexApplication"));
-        APPLICATION_BASES = java.util.Collections.unmodifiableSet(s);
-    }
-
-    /**
-     * {@code --init-flow} 専用: Application サブクラスのみを対象に
-     * onCreate / onConfigurationChanged / onLowMemory のシーケンス図を生成する。
-     *
-     * <p>{@code androidComponentType} の設定有無によらず、スーパークラス名で直接判定する。</p>
-     */
-    private static int generateInitFlowSequenceDiagrams(
-            java.util.List<padtools.core.formats.uml.JavaClassInfo> infos,
-            File outDir,
-            Boolean legendOverride,
-            UmlOverrides overrides,
-            ProgressLogger progress,
-            ErrorListener listener) throws IOException {
-        // Application サブクラスにマークを付ける (元のリストを変更しない)
-        java.util.List<padtools.core.formats.uml.JavaClassInfo> marked =
-                new java.util.ArrayList<>();
-        for (padtools.core.formats.uml.JavaClassInfo c : infos) {
-            String superClass = c.getSuperClass();
-            if (superClass != null && APPLICATION_BASES.contains(superClass)) {
-                // androidComponentType を一時的に設定したコピーを作成
-                padtools.core.formats.uml.JavaClassInfo copy =
-                        copyWithComponentType(c, "Application");
-                marked.add(copy);
-            } else {
-                marked.add(c);
-            }
-        }
-        return generateLifecycleSequenceDiagrams(marked, outDir, legendOverride,
-                overrides, progress, listener);
-    }
-
-    /** 指定の androidComponentType を持つシャローコピーを返す。 */
-    private static padtools.core.formats.uml.JavaClassInfo copyWithComponentType(
-            padtools.core.formats.uml.JavaClassInfo src, String type) {
-        padtools.core.formats.uml.JavaClassInfo copy =
-                new padtools.core.formats.uml.JavaClassInfo();
-        copy.setPackageName(src.getPackageName());
-        copy.setSimpleName(src.getSimpleName());
-        copy.setSuperClass(src.getSuperClass());
-        copy.setAndroidComponentType(type);
-        copy.getMethods().addAll(src.getMethods());
-        copy.getFields().addAll(src.getFields());
-        copy.getAnnotations().addAll(src.getAnnotations());
-        copy.getInterfaces().addAll(src.getInterfaces());
-        return copy;
     }
 
     private static void printUsage() {

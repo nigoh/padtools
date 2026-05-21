@@ -191,6 +191,8 @@ public class UmlMainFrame extends JFrame {
         // [動的ダイアグラムタブ…] [Manifest] [Impact] [References] [Func Diff] [Functions]
         // 特別扱いの「Home タブ」は持たない。
         mainTabs = new JTabbedPane(JTabbedPane.TOP);
+        // タブ多数でも 1 段スクロール表示にし、多段折り返しで図領域が潰れるのを防ぐ。
+        mainTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 
         // ユーティリティタブ (固定・末尾 5 本)
         mainTabs.addTab("Manifest", manifestSummaryPanel);

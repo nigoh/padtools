@@ -78,17 +78,31 @@ public final class IndexCommand {
         public final long elapsedMs;
         public final File dbFile;
 
+        /** 増分スキャンのファイル増減カウント (added/modified/unchanged/deleted) を束ねる。 */
+        public static final class FileDelta {
+            public final int added;
+            public final int modified;
+            public final int unchanged;
+            public final int deleted;
+
+            public FileDelta(int added, int modified, int unchanged, int deleted) {
+                this.added = added;
+                this.modified = modified;
+                this.unchanged = unchanged;
+                this.deleted = deleted;
+            }
+        }
+
         Result(int javaScanned, int aidlScanned, int manifestScanned,
-                int filesAdded, int filesModified, int filesUnchanged,
-                int filesDeleted, long elapsedMs, File dbFile) {
+                FileDelta delta, long elapsedMs, File dbFile) {
             this.javaScanned = javaScanned;
             this.aidlScanned = aidlScanned;
             this.manifestScanned = manifestScanned;
             this.filesScanned = javaScanned + aidlScanned + manifestScanned;
-            this.filesAdded = filesAdded;
-            this.filesModified = filesModified;
-            this.filesUnchanged = filesUnchanged;
-            this.filesDeleted = filesDeleted;
+            this.filesAdded = delta.added;
+            this.filesModified = delta.modified;
+            this.filesUnchanged = delta.unchanged;
+            this.filesDeleted = delta.deleted;
             this.elapsedMs = elapsedMs;
             this.dbFile = dbFile;
         }
@@ -194,7 +208,7 @@ public final class IndexCommand {
         long elapsed = System.currentTimeMillis() - start;
         return new Result(
                 targets.javaFiles.size(), targets.aidlFiles.size(), targets.manifestFiles.size(),
-                added, modified, unchanged, deleted, elapsed, dbFile);
+                new Result.FileDelta(added, modified, unchanged, deleted), elapsed, dbFile);
     }
 
     // ---- target listing ----

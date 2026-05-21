@@ -457,6 +457,22 @@ public final class DiagramController {
             default:
                 break;
         }
+        // ツールバー/メニューの図種選択をフォーカス中タブの図種に合わせる (見た目のみ)。
+        DiagramKind tabKind = req.target == TreeNodeOpenRequest.Target.METHOD
+                ? req.kind : DiagramKind.CLASS;
+        reflectKindInToolbar(tabKind);
+    }
+
+    /**
+     * メニューラジオ/ツールバートグルの選択を {@code kind} に合わせる (見た目のみ)。
+     * {@code currentKind} (Home の描画図種) は変更しないため Home に副作用を与えない。
+     */
+    void reflectKindInToolbar(DiagramKind kind) {
+        JRadioButtonMenuItem item = diagramItems.get(kind);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        syncDiagramToggle(kind);
     }
 
     /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
@@ -471,6 +487,20 @@ public final class DiagramController {
      * 図種に応じて必要な追加入力ダイアログを開く (シーケンス起点未指定など)。
      */
     public void selectDiagramKind(DiagramKind kind) {
+        // VS Code 風: 動的タブにフォーカス中はツールバーがそのタブの題材に作用する。
+        // メソッドタブなら同じ Class.method の別図種 (Sequence/Activity/CallGraph) を
+        // 新規 or 既存タブとして開く。適用外の図種は Home に切り替えて従来処理に委ねる。
+        if (tabPane != null && tabPane.dynamicTabFocused()) {
+            TreeNodeOpenRequest focused = tabPane.focusedTabRequest();
+            if (focused != null
+                    && focused.target == TreeNodeOpenRequest.Target.METHOD
+                    && ToolBarBuilder.DIAGRAMS_METHOD.contains(kind)) {
+                tabPane.addOrFocusTab(TreeNodeOpenRequest.method(
+                        focused.classInfo, focused.methodInfo, kind));
+                return;
+            }
+            showHomeTab();
+        }
         DiagramKind previousKind = currentKind;
         setCurrentKind(kind);
         JRadioButtonMenuItem item = diagramItems.get(kind);

@@ -228,6 +228,10 @@ public class UmlMainFrame extends JFrame {
             if (mainTabs.getSelectedIndex() == 0) {
                 javax.swing.SwingUtilities.invokeLater(
                         () -> homeSplit.setDividerLocation(0.85));
+                // 動的タブから Home へ戻ったら、ツールバー選択を Home の図種に復元する。
+                if (controller != null) {
+                    controller.reflectKindInToolbar(currentKind);
+                }
             } else if (mainTabs.getSelectedComponent() == methodListPanel) {
                 updateFunctionList();
             }

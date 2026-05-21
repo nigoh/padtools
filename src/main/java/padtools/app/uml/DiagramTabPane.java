@@ -76,6 +76,17 @@ public final class DiagramTabPane {
         this.onTabFocused = listener;
     }
 
+    /** いま選択中のタブが動的ダイアグラムタブか (Home / ユーティリティタブなら false)。 */
+    public boolean dynamicTabFocused() {
+        return tabs.getSelectedComponent() instanceof DiagramTab;
+    }
+
+    /** フォーカス中の動的タブの由来ノード。動的タブでなければ null。 */
+    public TreeNodeOpenRequest focusedTabRequest() {
+        java.awt.Component sel = tabs.getSelectedComponent();
+        return (sel instanceof DiagramTab) ? ((DiagramTab) sel).req : null;
+    }
+
     /** 現在選択中のタブが動的ダイアグラムタブなら、その由来ノードを通知しステータスを更新する。 */
     private void handleTabSelectionChanged() {
         java.awt.Component sel = tabs.getSelectedComponent();
@@ -337,6 +348,10 @@ public final class DiagramTabPane {
             case METHOD:
                 if (req.kind == DiagramKind.ACTIVITY) {
                     return DiagramRequest.forActivity(
+                            req.classInfo.getSimpleName(), req.methodInfo.getName(), true);
+                }
+                if (req.kind == DiagramKind.CALLGRAPH) {
+                    return DiagramRequest.forCallGraph(
                             req.classInfo.getSimpleName(), req.methodInfo.getName(), true);
                 }
                 return new DiagramRequest(DiagramKind.SEQUENCE,

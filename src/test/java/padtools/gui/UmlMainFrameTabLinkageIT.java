@@ -8,9 +8,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import padtools.SettingManager;
+import padtools.app.uml.DiagramKind;
 import padtools.app.uml.TreeNodeOpenRequest;
 import padtools.app.uml.UmlMainFrame;
 import padtools.core.formats.uml.JavaClassInfo;
+import padtools.core.formats.uml.JavaMethodInfo;
 
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
@@ -111,6 +113,25 @@ public class UmlMainFrameTabLinkageIT {
         });
     }
 
+    private void selectKind(Object controller, DiagramKind kind) throws Exception {
+        Method m = controller.getClass().getMethod("selectDiagramKind", DiagramKind.class);
+        GuiActionRunner.execute(() -> {
+            try {
+                m.invoke(controller, kind);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return null;
+        });
+    }
+
+    private static String focusedTitle(JTabbedPane tabs) {
+        return GuiActionRunner.execute(() -> {
+            int i = tabs.getSelectedIndex();
+            return i < 0 ? "(none)" : tabs.getTitleAt(i);
+        });
+    }
+
     @Test
     public void tabFocusHighlightsSourceNodeAndDedupes() throws Exception {
         File project = buildProject();
@@ -170,5 +191,61 @@ public class UmlMainFrameTabLinkageIT {
         assertEquals("reopening Foo must not create a new tab", 2, openTabs.size());
         assertTrue("re-focusing Foo tab should highlight Foo node, got " + selectionLabel(tree),
                 selectionLabel(tree).contains("Foo"));
+    }
+
+    @Test
+    public void toolbarActsOnFocusedMethodTab() throws Exception {
+        File project = buildProject();
+        frame = GuiActionRunner.execute(() -> {
+            UmlMainFrame f = new UmlMainFrame(project);
+            f.setSize(1200, 800);
+            f.setVisible(true);
+            return f;
+        });
+
+        Object cache = field(frame, "cache");
+        Method isLoaded = cache.getClass().getMethod("isLoaded");
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (System.currentTimeMillis() < deadline && !(Boolean) isLoaded.invoke(cache)) {
+            Thread.sleep(150);
+        }
+        assertTrue((Boolean) isLoaded.invoke(cache));
+        Thread.sleep(500);
+
+        Object controller = field(frame, "controller");
+        JTabbedPane mainTabs = field(frame, "mainTabs");
+        Object tabPane = field(frame, "tabPane");
+        Map<?, ?> openTabs = field(tabPane, "openTabs");
+
+        @SuppressWarnings("unchecked")
+        List<JavaClassInfo> classes = (List<JavaClassInfo>) cache.getClass()
+                .getMethod("getClasses").invoke(cache);
+        JavaClassInfo foo = classes.stream()
+                .filter(c -> "Foo".equals(c.getSimpleName())).findFirst().orElseThrow();
+        JavaMethodInfo hello = foo.getMethods().get(0);
+
+        // open Foo.hello as a sequence tab
+        openInNewTab(controller, TreeNodeOpenRequest.method(foo, hello, DiagramKind.SEQUENCE));
+        Thread.sleep(800);
+        assertEquals(1, openTabs.size());
+
+        // with the method tab focused, the toolbar opens the same method's other diagrams
+        selectKind(controller, DiagramKind.ACTIVITY);
+        Thread.sleep(800);
+        assertEquals("Activity should open as a new tab", 2, openTabs.size());
+        assertTrue("focused tab should be the activity view, got " + focusedTitle(mainTabs),
+                focusedTitle(mainTabs).contains("(act)"));
+
+        selectKind(controller, DiagramKind.CALLGRAPH);
+        Thread.sleep(800);
+        assertEquals("Call graph should open as a new tab", 3, openTabs.size());
+        assertTrue("focused tab should be the call-graph view, got " + focusedTitle(mainTabs),
+                focusedTitle(mainTabs).contains("(cg)"));
+
+        // re-selecting an already-open kind just focuses the existing tab (dedupe)
+        selectKind(controller, DiagramKind.ACTIVITY);
+        Thread.sleep(600);
+        assertEquals("re-selecting Activity must not create a new tab", 3, openTabs.size());
+        assertTrue(focusedTitle(mainTabs).contains("(act)"));
     }
 }

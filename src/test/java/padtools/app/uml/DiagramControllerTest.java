@@ -142,4 +142,67 @@ public class DiagramControllerTest {
         assertTrue(diagramToggles.get(DiagramKind.SEQUENCE).isVisible());
         assertTrue(diagramToggles.get(DiagramKind.ACTIVITY).isVisible());
     }
+
+    @Test
+    public void entryMissingFor_trueWhenUnsetFalseWhenSet() {
+        assertTrue(controller.entryMissingFor(DiagramKind.SEQUENCE));
+        assertTrue(controller.entryMissingFor(DiagramKind.ACTIVITY));
+        assertTrue(controller.entryMissingFor(DiagramKind.CALLGRAPH));
+        assertTrue(controller.entryMissingFor(DiagramKind.LAYOUT));
+        assertTrue(controller.entryMissingFor(DiagramKind.NAVIGATION));
+        // 起点不要の図種は常に false
+        assertFalse(controller.entryMissingFor(DiagramKind.CLASS));
+        assertFalse(controller.entryMissingFor(DiagramKind.PACKAGE));
+        assertFalse(controller.entryMissingFor(DiagramKind.MANIFEST));
+
+        state.sequenceEntry = "Foo.bar";
+        state.activityEntry = "Foo.bar";
+        state.callGraphEntry = "Foo.bar";
+        state.currentLayoutKey = "m::main::::a.xml";
+        state.currentNavigationKey = "m::main::nav.xml";
+        assertFalse(controller.entryMissingFor(DiagramKind.SEQUENCE));
+        assertFalse(controller.entryMissingFor(DiagramKind.ACTIVITY));
+        assertFalse(controller.entryMissingFor(DiagramKind.CALLGRAPH));
+        assertFalse(controller.entryMissingFor(DiagramKind.LAYOUT));
+        assertFalse(controller.entryMissingFor(DiagramKind.NAVIGATION));
+    }
+
+    @Test
+    public void revertKindSelection_restoresPreviousKindMenuAndToggle() {
+        // SEQUENCE に切り替わった状態を作る (トグル/メニューも SEQUENCE 選択)
+        controller.setCurrentKind(DiagramKind.SEQUENCE);
+        diagramItems.get(DiagramKind.SEQUENCE).setSelected(true);
+        diagramToggles.get(DiagramKind.SEQUENCE).setSelected(true);
+
+        controller.revertKindSelection(DiagramKind.CLASS);
+
+        assertEquals(DiagramKind.CLASS, controller.currentKind);
+        assertEquals(DiagramKind.CLASS, lastKind.get());
+        assertTrue(diagramItems.get(DiagramKind.CLASS).isSelected());
+        assertTrue(diagramToggles.get(DiagramKind.CLASS).isSelected());
+    }
+
+    @Test
+    public void selectDiagramKind_nonEntryKind_commitsAndRefreshes() {
+        controller.selectDiagramKind(DiagramKind.PACKAGE);
+        assertEquals(DiagramKind.PACKAGE, controller.currentKind);
+        assertTrue(diagramItems.get(DiagramKind.PACKAGE).isSelected());
+        assertEquals(1, refreshCount.get());
+    }
+
+    @Test
+    public void selectDiagramKind_entryKindWithEntryPreset_commitsWithoutDialog() {
+        state.sequenceEntry = "Foo.bar";
+        controller.selectDiagramKind(DiagramKind.SEQUENCE);
+        assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
+        assertEquals(1, refreshCount.get());
+    }
+
+    @Test
+    public void selectDiagramKind_entryKindMissingEntryUnloadedCache_refreshesWithoutDialog() {
+        // cache 未ロードなのでダイアログは開かず refresh のみ (既存挙動を維持)
+        controller.selectDiagramKind(DiagramKind.SEQUENCE);
+        assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
+        assertEquals(1, refreshCount.get());
+    }
 }

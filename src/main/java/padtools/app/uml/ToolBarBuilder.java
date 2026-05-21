@@ -124,6 +124,8 @@ public final class ToolBarBuilder {
             case DEPENDENCY: return "Dependency";
             case MANIFEST: return "Manifest";
             case LAYOUT: return "Layout";
+            case NAVIGATION: return "Navigation";
+            case MODULE: return "Module";
             case INHERITANCE: return "Inherit";
             default: return k.getDisplayName();
         }

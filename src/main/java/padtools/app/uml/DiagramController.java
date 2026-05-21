@@ -439,58 +439,70 @@ public final class DiagramController {
      * 図種に応じて必要な追加入力ダイアログを開く (シーケンス起点未指定など)。
      */
     public void selectDiagramKind(DiagramKind kind) {
+        DiagramKind previousKind = currentKind;
         setCurrentKind(kind);
         JRadioButtonMenuItem item = diagramItems.get(kind);
         if (item != null) {
             item.setSelected(true);
         }
-        // SEQUENCE/ACTIVITY/LAYOUT は追加入力が必要。未指定なら入力ダイアログを誘導する。
-        if (kind == DiagramKind.SEQUENCE
-                && (state.sequenceEntry == null || state.sequenceEntry.isEmpty())) {
+        // SEQUENCE/ACTIVITY/CALLGRAPH/LAYOUT/NAVIGATION は追加入力 (起点・対象キー) が必要。
+        // 未指定なら入力ダイアログを誘導する。
+        if (entryMissingFor(kind)) {
             if (cache().isLoaded()) {
-                pickSequenceEntry();
-            } else {
-                refreshDiagram.run();
-            }
-            return;
-        }
-        if (kind == DiagramKind.ACTIVITY
-                && (state.activityEntry == null || state.activityEntry.isEmpty())) {
-            if (cache().isLoaded()) {
-                pickActivityEntry();
-            } else {
-                refreshDiagram.run();
-            }
-            return;
-        }
-        if (kind == DiagramKind.CALLGRAPH
-                && (state.callGraphEntry == null || state.callGraphEntry.isEmpty())) {
-            if (cache().isLoaded()) {
-                pickCallGraphEntry();
-            } else {
-                refreshDiagram.run();
-            }
-            return;
-        }
-        if (kind == DiagramKind.LAYOUT
-                && (state.currentLayoutKey == null || state.currentLayoutKey.isEmpty())) {
-            if (cache().isLoaded()) {
-                pickLayoutFile();
-            } else {
-                refreshDiagram.run();
-            }
-            return;
-        }
-        if (kind == DiagramKind.NAVIGATION
-                && (state.currentNavigationKey == null || state.currentNavigationKey.isEmpty())) {
-            if (cache().isLoaded()) {
-                pickNavigationGraph();
+                promptForEntry(kind);
+                // 起点未指定のままダイアログがキャンセルされたら図種選択を元に戻す。
+                // そうしないとツールバー/メニューだけ新図種に固定され、表示は旧図のまま、
+                // という不整合な状態 (新図種で表示すべき図が無いのに選択済み) が残る。
+                if (currentKind == kind && entryMissingFor(kind)) {
+                    revertKindSelection(previousKind);
+                }
             } else {
                 refreshDiagram.run();
             }
             return;
         }
         refreshDiagram.run();
+    }
+
+    /** kind が起点/対象キーを必要とし、かつそれが未指定かどうか。 */
+    boolean entryMissingFor(DiagramKind kind) {
+        switch (kind) {
+            case SEQUENCE:   return isBlank(state.sequenceEntry);
+            case ACTIVITY:   return isBlank(state.activityEntry);
+            case CALLGRAPH:  return isBlank(state.callGraphEntry);
+            case LAYOUT:     return isBlank(state.currentLayoutKey);
+            case NAVIGATION: return isBlank(state.currentNavigationKey);
+            default:         return false;
+        }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isEmpty();
+    }
+
+    /** 図種に応じた起点/対象選択ダイアログを開く。成功時は各 pick* が状態を確定する。 */
+    private void promptForEntry(DiagramKind kind) {
+        switch (kind) {
+            case SEQUENCE:   pickSequenceEntry(); break;
+            case ACTIVITY:   pickActivityEntry(); break;
+            case CALLGRAPH:  pickCallGraphEntry(); break;
+            case LAYOUT:     pickLayoutFile(); break;
+            case NAVIGATION: pickNavigationGraph(); break;
+            default: break;
+        }
+    }
+
+    /**
+     * 図種選択を {@code previous} に戻す (currentKind・メニューラジオ・ツールバートグルを同期)。
+     * 表示中の図は前回のまま据え置かれているため再描画は行わない。
+     */
+    void revertKindSelection(DiagramKind previous) {
+        setCurrentKind(previous);
+        JRadioButtonMenuItem item = diagramItems.get(previous);
+        if (item != null) {
+            item.setSelected(true);
+        }
+        syncDiagramToggle(previous);
     }
 
     /**

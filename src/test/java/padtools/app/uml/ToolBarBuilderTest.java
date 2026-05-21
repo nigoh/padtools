@@ -54,4 +54,30 @@ public class ToolBarBuilderTest {
         assertTrue(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.CALLGRAPH));
         assertFalse(ToolBarBuilder.DIAGRAMS_METHOD.contains(DiagramKind.CLASS));
     }
+
+    /**
+     * すべての図種で短く一貫したトグルラベルが付くこと。
+     * 以前は NAVIGATION / MODULE だけ {@code switch} の case 漏れで
+     * {@code getDisplayName()} の長いラベル ("Navigation Graph" / "Module Diagram")
+     * になり、他のボタン ("Class" 等) と不揃いだった。
+     */
+    @Test
+    public void toolbarLabel_isNonEmptyForEveryKind() {
+        for (DiagramKind k : DiagramKind.values()) {
+            String label = ToolBarBuilder.toolbarLabel(k);
+            assertNotNull("label for " + k, label);
+            assertFalse(k + " label should not be empty", label.isEmpty());
+        }
+    }
+
+    /**
+     * NAVIGATION / MODULE は以前 {@code switch} の case 漏れで
+     * {@code getDisplayName()} の長いラベル ("Navigation Graph" / "Module Diagram")
+     * になり、他のボタン ("Class" 等) と不揃いだった。短いラベルを付ける。
+     */
+    @Test
+    public void toolbarLabel_navigationAndModuleAreShort() {
+        assertEquals("Navigation", ToolBarBuilder.toolbarLabel(DiagramKind.NAVIGATION));
+        assertEquals("Module", ToolBarBuilder.toolbarLabel(DiagramKind.MODULE));
+    }
 }

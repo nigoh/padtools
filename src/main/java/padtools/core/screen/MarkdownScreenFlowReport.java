@@ -25,9 +25,9 @@ public final class MarkdownScreenFlowReport {
 
     public static String render(List<ScreenTransition> transitions) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# Screen Flow Report (Intent-based)\n\n");
+        sb.append("# Screen Flow Report (Intent + Screen.push)\n\n");
         if (transitions == null || transitions.isEmpty()) {
-            sb.append("(no Intent-based transitions detected)\n");
+            sb.append("(no screen transitions detected)\n");
             return sb.toString();
         }
 
@@ -76,7 +76,21 @@ public final class MarkdownScreenFlowReport {
                     .append(" | `").append(t.getTargetSimpleName()).append("`")
                     .append(" | ").append(loc).append(" |\n");
         }
+        appendRoutes(sb, transitions);
         return sb.toString();
+    }
+
+    /** 起点からの多段遷移ルートを列挙して追記する。 */
+    private static void appendRoutes(StringBuilder sb, List<ScreenTransition> transitions) {
+        List<List<String>> routes = ScreenRouteBuilder.routes(transitions);
+        sb.append("\n## Routes (entry → ...)\n\n");
+        if (routes.isEmpty()) {
+            sb.append("(no multi-step routes; transitions form isolated edges or cycles)\n");
+            return;
+        }
+        for (List<String> route : routes) {
+            sb.append("- ").append(String.join(" → ", route)).append('\n');
+        }
     }
 
     private static String joinOrDash(Set<String> set) {

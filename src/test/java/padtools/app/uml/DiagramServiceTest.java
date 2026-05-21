@@ -1,6 +1,8 @@
 package padtools.app.uml;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import padtools.core.formats.android.AndroidComponentInfo;
 import padtools.core.formats.android.AndroidLayoutInfo;
 import padtools.core.formats.android.AndroidLayoutParser;
@@ -11,6 +13,7 @@ import padtools.core.formats.android.GradleProjectInfo;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaStructureExtractor;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +27,41 @@ import static org.junit.Assert.fail;
  * {@code @startuml} / {@code @enduml} が含まれることを検証する。
  */
 public class DiagramServiceTest {
+
+    @Rule
+    public TemporaryFolder tmp = new TemporaryFolder();
+
+    @Test
+    public void testScreenFlowDiagramFromCache() throws java.io.IOException {
+        File pkg = new File(tmp.getRoot(), "src/x");
+        assertTrue(pkg.mkdirs());
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(new File(pkg, "StartScreen.java")),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write("package x; public class StartScreen {"
+                    + " void onClickItem() {"
+                    + " getScreenManager().push(new DetailScreen(getCarContext())); } }");
+        }
+        // Fragment トランザクションも同じ GUI 経路で検出されることを確認
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(new File(pkg, "MainActivity.java")),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write("package x; public class MainActivity {"
+                    + " void open() { getSupportFragmentManager().beginTransaction()"
+                    + " .replace(R.id.container, new ProfileFragment()).commit(); } }");
+        }
+        ProjectAnalysisCache cache = new ProjectAnalysisCache();
+        cache.load(tmp.getRoot(), padtools.util.ErrorListener.silent());
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.SCREEN_FLOW), cache);
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("StartScreen"));
+        assertTrue(puml, puml.contains("DetailScreen"));
+        // 新検出 (Fragment トランザクション) も GUI 経路に反映される
+        assertTrue(puml, puml.contains("ProfileFragment"));
+    }
 
     private List<JavaClassInfo> sampleClasses() {
         List<JavaClassInfo> infos = new ArrayList<>();

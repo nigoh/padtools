@@ -24,7 +24,7 @@ public final class PlantUmlScreenFlowDiagram {
     public static String render(List<ScreenTransition> transitions) {
         StringBuilder sb = new StringBuilder();
         sb.append("@startuml\n");
-        sb.append("title Screen Flow (Intent-based)\n");
+        sb.append("title Screen Flow (Intent + Screen.push)\n");
         sb.append("skinparam shadowing false\n");
         sb.append("skinparam state {\n");
         sb.append("  BackgroundColor #F0F8FF\n");
@@ -71,10 +71,15 @@ public final class PlantUmlScreenFlowDiagram {
         return sb.toString();
     }
 
+    // State 図で有効な矢印のみ使う（双方向 <--> や ..> は state 図では構文エラーになる）。
     private static String arrowFor(ScreenTransition.Kind kind) {
         switch (kind) {
-            case START_FOR_RESULT: return "<-->";
-            case SET_CLASS: return "..>";
+            case START_FOR_RESULT: return "-[#1f6fb0]->";
+            case SET_CLASS: return "-[#888888,dashed]->";
+            case SCREEN_PUSH: return "-[#2e8b57]->";
+            case FRAGMENT_TXN: return "-[#b8860b]->";
+            case NAV_ACTION: return "-[#8a2be2]->";
+            case COMPOSE_NAVIGATE: return "-[#d2691e]->";
             default: return "-->";
         }
     }

@@ -185,8 +185,9 @@ public final class CliOptions {
                 + " @Entity classes grouped by @Database.");
         System.err.println("  --data-flow: Markdown report + ER diagram covering Room"
                 + " @Entity / @Dao / @Database in the project.");
-        System.err.println("  --screen-flow: Intent-based screen transitions"
-                + " (startActivity / setClass) as Markdown + PlantUML state diagram.");
+        System.err.println("  --screen-flow: Screen transitions (Intent startActivity/setClass"
+                + " + Car App Library ScreenManager.push) as Markdown (with multi-step routes)"
+                + " + PlantUML state diagram.");
         System.err.println("  --android-bp: Parse all Android.bp (Soong) files under"
                 + " the project and emit module inventory + dependency graph"
                 + " (Markdown + PlantUML).");

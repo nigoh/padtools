@@ -50,6 +50,26 @@ public class ComposeNavScannerTest {
         ScreenTransition t = r.getTransitions().get(0);
         assertEquals("home", t.getFromMethod());
         assertEquals("detail", t.getTargetSimpleName());
+        assertEquals(ScreenTransition.Kind.COMPOSE_NAVIGATE, t.getKind());
+    }
+
+    @Test
+    public void detectsNonStringRouteNavigate() {
+        String src = "package com.x\n"
+                + "@Composable\n"
+                + "fun AppNav() {\n"
+                + "  NavHost(navController, startDestination = \"home\") {\n"
+                + "    composable(\"home\") {\n"
+                + "      Button(onClick = { navController.navigate(Screen.Detail.route) }) { }\n"
+                + "    }\n"
+                + "  }\n"
+                + "}\n";
+        ComposeNavScanner.Result r = new ComposeNavScanner()
+                .analyzeSource(src, "Nav.kt");
+        assertEquals(1, r.getTransitions().size());
+        ScreenTransition t = r.getTransitions().get(0);
+        assertEquals("Detail", t.getTargetSimpleName());
+        assertEquals(ScreenTransition.Kind.COMPOSE_NAVIGATE, t.getKind());
     }
 
     @Test

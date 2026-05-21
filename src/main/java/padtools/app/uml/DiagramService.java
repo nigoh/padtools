@@ -58,8 +58,30 @@ public final class DiagramService {
         if (cache == null || !cache.isLoaded()) {
             throw new IllegalStateException("ProjectAnalysisCache is not loaded");
         }
+        // 画面遷移図はソースを再走査するためプロジェクトルートが要る。
+        // ルートを持つこの入口でだけ処理し、ルート非依存の switch には渡さない。
+        if (request != null && request.getKind() == DiagramKind.SCREEN_FLOW) {
+            return generateScreenFlowPuml(cache.getProjectRoot());
+        }
         return generatePuml(request, cache.getAnalysis(), cache.getClasses(),
                 cache.getIndex(), cache.getDependencyIndex());
+    }
+
+    private static String generateScreenFlowPuml(java.io.File projectRoot) {
+        if (projectRoot == null || !projectRoot.isDirectory()) {
+            return "@startuml\ntitle Screen Flow\n"
+                    + "note as N\nOpen a project directory to detect screen transitions.\nend note\n"
+                    + "@enduml\n";
+        }
+        try {
+            java.util.List<padtools.core.screen.ScreenTransition> transitions =
+                    new padtools.core.screen.IntentNavigationDetector()
+                            .analyzeProject(projectRoot);
+            return padtools.core.screen.PlantUmlScreenFlowDiagram.render(transitions);
+        } catch (java.io.IOException ex) {
+            return "@startuml\ntitle Screen Flow\nnote as N\nScan failed: "
+                    + ex.getMessage().replace("\n", " ") + "\nend note\n@enduml\n";
+        }
     }
 
     /**

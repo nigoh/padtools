@@ -33,7 +33,7 @@ public final class ToolBarBuilder {
     public static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
             DiagramKind.SEQUENCE, DiagramKind.ACTIVITY, DiagramKind.CALLGRAPH);
     public static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
-            DiagramKind.MANIFEST, DiagramKind.COMPONENT);
+            DiagramKind.MANIFEST, DiagramKind.COMPONENT, DiagramKind.SCREEN_FLOW);
 
     /** ツールバーアクションのコールバック群。 */
     public static final class Callbacks {

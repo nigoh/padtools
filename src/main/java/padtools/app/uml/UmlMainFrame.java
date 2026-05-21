@@ -6,8 +6,6 @@ import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.uml.DiagramStyle;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.CancelToken;
-import padtools.util.ErrorListener;
-import padtools.util.ProgressListener;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -38,12 +36,8 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.util.EnumSet;
-import java.util.List;
-
 import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
-import padtools.core.formats.uml.JavaClassInfo;
 
 /**
  * UML 専用のメインウィンドウ。
@@ -123,16 +117,16 @@ public class UmlMainFrame extends JFrame {
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
-        previewPanel.setOnLinkClick(this::onPreviewLinkClick);
+        previewPanel.setOnLinkClick((link, ev) -> controller.onPreviewLinkClick(link, ev));
         previewPanel.setCopyFeedbackListener(msg -> status.setText(msg));
-        treePanel.setOnMethodSelected(this::onTreeMethodSelected);
-        treePanel.setOnActivityMethodSelected(this::onTreeActivityMethodSelected);
-        treePanel.setOnClassSelected(this::onTreeClassSelected);
-        treePanel.setOnPackageSelected(this::onTreePackageSelected);
-        treePanel.setOnModuleSelected(this::onTreeModuleSelected);
-        treePanel.setOnManifestSelected(this::onTreeManifestSelected);
-        treePanel.setOnComponentSelected(this::onTreeComponentSelected);
-        treePanel.setOnOpenInNewTab(this::onTreeOpenInNewTab);
+        treePanel.setOnMethodSelected(sel -> controller.onTreeMethodSelected(sel));
+        treePanel.setOnActivityMethodSelected(sel -> controller.onTreeActivityMethodSelected(sel));
+        treePanel.setOnClassSelected(cls -> controller.onTreeClassSelected(cls));
+        treePanel.setOnPackageSelected(pkg -> controller.onTreePackageSelected(pkg));
+        treePanel.setOnModuleSelected(mod -> controller.onTreeModuleSelected(mod));
+        treePanel.setOnManifestSelected(m -> controller.onTreeManifestSelected(m));
+        treePanel.setOnComponentSelected(c -> controller.onTreeComponentSelected(c));
+        treePanel.setOnOpenInNewTab(req -> controller.onTreeOpenInNewTab(req));
 
         loadProgress.setStringPainted(true);
         loadProgress.setVisible(false);
@@ -151,9 +145,9 @@ public class UmlMainFrame extends JFrame {
         };
         mcb.exitApp = () -> { saveWindowState(); dispose(); };
         mcb.loadProject = this::loadProject;
-        mcb.openEntitySearch = this::openEntitySearch;
-        mcb.pickSequenceEntry = this::pickSequenceEntry;
-        mcb.openParticipantFilterDialog = this::openParticipantFilterDialog;
+        mcb.openEntitySearch = () -> controller.openEntitySearch();
+        mcb.pickSequenceEntry = () -> controller.pickSequenceEntry();
+        mcb.openParticipantFilterDialog = () -> controller.openParticipantFilterDialog();
         mcb.clearSequenceParticipants = () -> {
             if (!state.sequenceHiddenParticipants.isEmpty()) {
                 state.sequenceHiddenParticipants.clear();
@@ -161,14 +155,14 @@ public class UmlMainFrame extends JFrame {
                 refreshDiagram();
             }
         };
-        mcb.pickActivityEntry = this::pickActivityEntry;
-        mcb.pickLayoutFile = this::pickLayoutFile;
-        mcb.pickNavigationGraph = this::pickNavigationGraph;
+        mcb.pickActivityEntry = () -> controller.pickActivityEntry();
+        mcb.pickLayoutFile = () -> controller.pickLayoutFile();
+        mcb.pickNavigationGraph = () -> controller.pickNavigationGraph();
         mcb.applyPreset = this::applyPreset;
-        mcb.openScopeDialog = this::openScopeDialog;
+        mcb.openScopeDialog = () -> controller.openScopeDialog();
         mcb.clearScope = () -> { state.currentScope = null; refreshDiagram(); };
-        mcb.selectDiagramKindFromMenu = k -> { currentKind = k; refreshDiagram(); };
-        mcb.syncDiagramToggle = this::syncDiagramToggle;
+        mcb.selectDiagramKindFromMenu = k -> controller.selectDiagramKind(k);
+        mcb.syncDiagramToggle = k -> controller.syncDiagramToggle(k);
         mcb.applyTheme = this::applyTheme;
         mcb.openStyleSettings = this::openStyleSettings;
         mcb.zoomIn = previewPanel::zoomIn;
@@ -221,12 +215,17 @@ public class UmlMainFrame extends JFrame {
         tcb.chooseProject = this::chooseProject;
         tcb.chooseAndExport = this::chooseAndExport;
         tcb.refreshDiagram = this::refreshDiagram;
-        tcb.openEntitySearch = this::openEntitySearch;
-        tcb.selectDiagramKind = this::selectDiagramKind;
+        tcb.openEntitySearch = () -> controller.openEntitySearch();
+        tcb.selectDiagramKind = k -> controller.selectDiagramKind(k);
         ToolBarBuilder.Result toolBarResult =
                 new ToolBarBuilder(DiagramKind.CLASS, tcb).build();
         diagramToggles = toolBarResult.diagramToggles;
         add(toolBarResult.toolBarPanel, BorderLayout.NORTH);
+
+        controller = new DiagramController(
+                state, () -> cache, diagramItems, diagramToggles,
+                treePanel, mainTabs, tabPane, status, this,
+                this::refreshDiagram, kind -> { this.currentKind = kind; });
         add(buildStatusBar(), BorderLayout.SOUTH);
 
         Setting setting = Main.getSetting();
@@ -259,6 +258,7 @@ public class UmlMainFrame extends JFrame {
 
     private ProjectLoader projectLoader;
     private ProjectSettingsPersistor settingsPersistor;
+    private DiagramController controller;
 
     // --- スタイル / プリセット ------------------------------------------------
 
@@ -380,110 +380,6 @@ public class UmlMainFrame extends JFrame {
         return bar;
     }
 
-    /**
-     * ノード選択に応じてツールバーの図種ボタンを有効/無効化する。
-     *
-     * <p>{@code allowed} に含まれない図種のボタンは押下不可になる。
-     * 現在の選択図種が無効になった場合、{@code allowed} の先頭図種に自動切替する。</p>
-     */
-    private void updateAvailableDiagrams(EnumSet<DiagramKind> allowed) {
-        for (java.util.Map.Entry<DiagramKind, JToggleButton> e : diagramToggles.entrySet()) {
-            e.getValue().setVisible(allowed.contains(e.getKey()));
-        }
-        if (!allowed.contains(currentKind)) {
-            DiagramKind fallback = allowed.iterator().next();
-            currentKind = fallback;
-            JToggleButton btn = diagramToggles.get(fallback);
-            if (btn != null) {
-                btn.setSelected(true);
-            }
-            JRadioButtonMenuItem item = diagramItems.get(fallback);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            refreshDiagram();
-        }
-    }
-
-    /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
-    private void showHomeTab() {
-        if (mainTabs != null && mainTabs.getSelectedIndex() != 0) {
-            mainTabs.setSelectedIndex(0);
-        }
-    }
-
-    /**
-     * ツールバーの図種ボタンが押されたときのハンドラ。
-     * 図種に応じて必要な追加入力ダイアログを開く (シーケンス起点未指定など)。
-     */
-    private void selectDiagramKind(DiagramKind kind) {
-        currentKind = kind;
-        JRadioButtonMenuItem item = diagramItems.get(kind);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        // SEQUENCE/ACTIVITY/LAYOUT は追加入力が必要。未指定なら入力ダイアログを誘導する。
-        if (kind == DiagramKind.SEQUENCE
-                && (state.sequenceEntry == null || state.sequenceEntry.isEmpty())) {
-            if (cache.isLoaded()) {
-                pickSequenceEntry();
-            } else {
-                refreshDiagram();
-            }
-            return;
-        }
-        if (kind == DiagramKind.ACTIVITY
-                && (state.activityEntry == null || state.activityEntry.isEmpty())) {
-            if (cache.isLoaded()) {
-                pickActivityEntry();
-            } else {
-                refreshDiagram();
-            }
-            return;
-        }
-        if (kind == DiagramKind.CALLGRAPH
-                && (state.callGraphEntry == null || state.callGraphEntry.isEmpty())) {
-            if (cache.isLoaded()) {
-                pickCallGraphEntry();
-            } else {
-                refreshDiagram();
-            }
-            return;
-        }
-        if (kind == DiagramKind.LAYOUT
-                && (state.currentLayoutKey == null || state.currentLayoutKey.isEmpty())) {
-            if (cache.isLoaded()) {
-                pickLayoutFile();
-            } else {
-                refreshDiagram();
-            }
-            return;
-        }
-        if (kind == DiagramKind.NAVIGATION
-                && (state.currentNavigationKey == null || state.currentNavigationKey.isEmpty())) {
-            if (cache.isLoaded()) {
-                pickNavigationGraph();
-            } else {
-                refreshDiagram();
-            }
-            return;
-        }
-        refreshDiagram();
-    }
-
-    /**
-     * ツールバーのトグルボタン側で現在の図種を反映する。メニュー (ラジオボタン) と
-     * 双方向に同期するため、各 onTree*Selected / drillDown 等で
-     * {@link #diagramItems} を更新する場所で同時に呼ぶ。
-     */
-    private void syncDiagramToggle(DiagramKind kind) {
-        JToggleButton b = diagramToggles.get(kind);
-        if (b != null && !b.isSelected()) {
-            b.setSelected(true);
-        }
-    }
-
-
     // --- イベント処理 ---------------------------------------------------------
 
     private void chooseProject() {
@@ -501,96 +397,6 @@ public class UmlMainFrame extends JFrame {
 
     private void loadProject(File root) {
         projectLoader.start(root);
-    }
-
-    private void onTreePackageSelected(String pkg) {
-        if (pkg == null || pkg.isEmpty() || "(default)".equals(pkg)) {
-            return;
-        }
-        state.currentScope = DiagramScope.builder().includePackage(pkg).build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        status.setText("Scope: package " + pkg);
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_PACKAGE);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    /**
-     * 左ペインのツリーでクラスノードが選択された際のハンドラ。
-     * クラス図モードへ切り替え、当該クラスを seed として 1 ホップ近傍に絞ったスコープで再描画する。
-     */
-    private void onTreeClassSelected(JavaClassInfo cls) {
-        if (cls == null) {
-            updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ALL);
-            return;
-        }
-        String fqn = cls.getQualifiedName();
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        state.currentScope = DiagramScope.builder()
-                .seed(fqn)
-                .neighborHops(1)
-                .build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_JAVA_TYPE);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    /**
-     * 左ペインのツリーでモジュールノードが選択された際のハンドラ。
-     * クラス図モードへ切り替え、当該モジュールに含まれるクラスだけに絞って再描画する。
-     * <p>"(other)" のようなプレースホルダ名は無視する。</p>
-     */
-    private void onTreeModuleSelected(String module) {
-        if (module == null || module.isEmpty() || "(other)".equals(module)) {
-            return;
-        }
-        state.currentScope = DiagramScope.builder().includeModule(module).build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        status.setText("Scope: module " + module);
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_MODULE);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    private void openScopeDialog() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        java.util.Set<String> packages = new java.util.TreeSet<>();
-        java.util.Set<String> modules = new java.util.TreeSet<>(cache.getClassToModule().values());
-        for (padtools.core.formats.uml.JavaClassInfo c : cache.getClasses()) {
-            String p = c.getPackageName();
-            if (p != null && !p.isEmpty()) {
-                packages.add(p);
-            }
-        }
-        DiagramScopeDialog dlg = new DiagramScopeDialog(this,
-                List.copyOf(packages), List.copyOf(modules), state.currentScope);
-        dlg.setVisible(true);
-        DiagramScope picked = dlg.getResult();
-        if (picked != null) {
-            state.currentScope = picked.isEmpty() ? null : picked;
-            refreshDiagram();
-        }
     }
 
     /**
@@ -625,242 +431,6 @@ public class UmlMainFrame extends JFrame {
         } else {
             manifestSummaryPanel.setText("");
         }
-    }
-
-    /**
-     * 左ペインのツリーで Manifest ノード (または配下の Permissions / Features
-     * グループ) が選択されたら Manifest 図モードへ切り替える。
-     */
-    private void onTreeManifestSelected(padtools.core.formats.android.AndroidManifestInfo m) {
-        switchToManifestDiagram();
-    }
-
-    /**
-     * 左ペインのツリーで Manifest 配下の個別コンポーネントが選択されたら
-     * Manifest 図モードへ切り替える (将来的に該当ノードへ強調表示を入れる余地)。
-     */
-    private void onTreeComponentSelected(
-            padtools.core.formats.android.AndroidComponentInfo c) {
-        switchToManifestDiagram();
-    }
-
-    private void switchToManifestDiagram() {
-        currentKind = DiagramKind.MANIFEST;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.MANIFEST);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ANDROID);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-
-    /**
-     * 左ペインのツリーでメソッドが選択された際のハンドラ。
-     * シーケンス図モードへ切り替え、かつ Activity / CallGraph 起点も同じメソッドに同期する。
-     * これにより、ツールバーの Sequence / Activity / Call Graph ボタンを押すだけで
-     * ダイアログを開かずに切り替えられる。
-     */
-    private void onTreeMethodSelected(ProjectTreePanel.MethodSelection sel) {
-        if (sel == null) {
-            return;
-        }
-        String entry = sel.getEntry();
-        state.activityEntry = entry;
-        state.callGraphEntry = entry;
-        switchToSequenceDiagram(entry);
-    }
-
-    /**
-     * sequence / activity / callgraph の 3 エントリを同じメソッドに揃える。
-     * これによりツールバーボタンでどの図種へ切り替えても再入力ダイアログが出ない。
-     */
-    private void setAllMethodEntries(String entry) {
-        state.setAllMethodEntries(entry);
-    }
-
-    /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
-    private void switchToSequenceDiagram(String entry) {
-        state.sequenceEntry = entry;
-        currentKind = DiagramKind.SEQUENCE;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    /**
-     * 左ペインで中クリックされたノードを「新しいタブ」として開くハンドラ。
-     * 機能 2 (動的タブ) で {@link DiagramTabPane} に委譲するが、現状は単に
-     * その図種に切り替える (タブ追加は別実装)。
-     */
-    private void onTreeOpenInNewTab(TreeNodeOpenRequest req) {
-        if (req == null) {
-            return;
-        }
-        if (tabPane != null) {
-            tabPane.addOrFocusTab(req);
-            return;
-        }
-        applyOpenRequest(req);
-    }
-
-    /** タブ未配線時の挙動: 現在ビューを差し替える。 */
-    private void applyOpenRequest(TreeNodeOpenRequest req) {
-        switch (req.target) {
-            case METHOD:
-                String entry = req.classInfo.getSimpleName() + "." + req.methodInfo.getName();
-                if (req.kind == DiagramKind.ACTIVITY) {
-                    switchToActivityDiagram(entry);
-                } else {
-                    switchToSequenceDiagram(entry);
-                }
-                break;
-            case CLASS:
-                onTreeClassSelected(req.classInfo);
-                break;
-            case PACKAGE:
-                onTreePackageSelected(req.name);
-                break;
-            case MODULE:
-                onTreeModuleSelected(req.name);
-                break;
-            default:
-                break;
-        }
-    }
-
-    /**
-     * 左ペインのアクティビティ図リーフが選択された際のハンドラ (後方互換)。
-     * 現在はツリーからこのハンドラを呼ぶ経路はないが、中クリック等の内部処理で
-     * 引き続き利用するため残している。
-     */
-    private void onTreeActivityMethodSelected(ProjectTreePanel.MethodSelection sel) {
-        if (sel == null) {
-            return;
-        }
-        String entry = sel.getEntry();
-        state.sequenceEntry = entry;
-        state.callGraphEntry = entry;
-        switchToActivityDiagram(entry);
-    }
-
-    /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
-    private void switchToActivityDiagram(String entry) {
-        state.activityEntry = entry;
-        currentKind = DiagramKind.ACTIVITY;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    /** {@code Class.method} 起点をセットしてコールグラフモードへ切り替える。 */
-    private void switchToCallGraphDiagram(String entry) {
-        state.callGraphEntry = entry;
-        currentKind = DiagramKind.CALLGRAPH;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram();
-    }
-
-    /**
-     * クラス図プレビュー上で左クリックされたとき:
-     * - {@code padtools://method/<FQN>#<method>} リンクならシーケンス/アクティビティ図選択メニュー
-     * - {@code padtools://class/<FQN>} リンクならドリルダウン
-     */
-    private void onPreviewLinkClick(LinkArea link, MouseEvent event) {
-        if (link == null) {
-            return;
-        }
-        String href = link.getHref();
-        if (href != null && href.startsWith("padtools://method/")) {
-            showMethodDiagramMenu(href, event);
-            return;
-        }
-        String fqn = parseClassFqnFromHref(href);
-        if (fqn == null) {
-            return;
-        }
-        drillDownToClass(fqn);
-    }
-
-    /**
-     * メソッドリンク ({@code padtools://method/<FQN>#<methodName>}) がクリックされたとき、
-     * シーケンス図またはアクティビティ図へ遷移するサブメニューを表示する。
-     */
-    private void showMethodDiagramMenu(String href, MouseEvent event) {
-        String path = href.substring("padtools://method/".length());
-        int hash = path.lastIndexOf('#');
-        if (hash < 0) {
-            return;
-        }
-        String classFqn = path.substring(0, hash);
-        String methodName = path.substring(hash + 1);
-        if (classFqn.isEmpty() || methodName.isEmpty()) {
-            return;
-        }
-        String simpleName = extractSimpleClass(classFqn);
-        String entry = simpleName + "." + methodName;
-        JPopupMenu menu = new JPopupMenu();
-        JMenuItem seqItem = new JMenuItem("Sequence Diagram");
-        seqItem.addActionListener(e -> {
-            setAllMethodEntries(entry);
-            switchToSequenceDiagram(entry);
-            treePanel.selectMethodNode(classFqn, methodName);
-        });
-        menu.add(seqItem);
-        JMenuItem actItem = new JMenuItem("Activity Diagram");
-        actItem.addActionListener(e -> {
-            setAllMethodEntries(entry);
-            switchToActivityDiagram(entry);
-            treePanel.selectMethodNode(classFqn, methodName);
-        });
-        menu.add(actItem);
-        menu.show(event.getComponent(), event.getX(), event.getY());
-    }
-
-    /** 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。 */
-    private void drillDownToClass(String fqn) {
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        DiagramScope.Builder b = DiagramScope.builder()
-                .seed(fqn).neighborHops(1);
-        DiagramPreset.DETAILED.applyTo(b);
-        state.currentScope = b.build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        status.setText("Drill-down: " + fqn);
-        treePanel.selectClassNode(fqn);
-        refreshDiagram();
-    }
-
-    /** href 文字列から {@code padtools://class/<FQN>} の FQN 部分を取り出す。 */
-    private static String parseClassFqnFromHref(String href) {
-        if (href == null) {
-            return null;
-        }
-        final String prefix = "padtools://class/";
-        if (href.startsWith(prefix)) {
-            String s = href.substring(prefix.length()).trim();
-            return s.isEmpty() ? null : s;
-        }
-        return null;
     }
 
     /**
@@ -974,289 +544,6 @@ public class UmlMainFrame extends JFrame {
         return oneLine.substring(0, Math.max(0, max - 1)) + "…";
     }
 
-    /**
-     * クラス・メソッド・フィールドの横断検索ダイアログを開き、結果に応じて
-     * クラス図 / シーケンス図に切り替える。
-     *
-     * <ul>
-     *   <li>CLASS 選択 → クラス図モードへ切り替え、当該クラスを seed に 1 ホップでスコープ</li>
-     *   <li>METHOD 選択 → 当該メソッドを起点とするシーケンス図モード</li>
-     *   <li>FIELD 選択 → 所属クラスを seed に 1 ホップしたクラス図 (フィールド型まで含む)</li>
-     * </ul>
-     */
-    private void openEntitySearch() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        EntitySearchDialog dlg = new EntitySearchDialog(this, cache.getClasses());
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(this,
-                    "No entities found in this project.",
-                    "Search", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        EntitySearchDialog.Entry result = dlg.getResult();
-        if (result == null) {
-            return;
-        }
-        if (dlg.isDrillDownRequested()) {
-            // Drill-down ボタンを押された場合は kind に関係なく ownerQn のクラスへ
-            // DETAILED プリセットで遷移する。
-            drillDownToClass(result.ownerQn);
-            return;
-        }
-        switch (result.kind) {
-            case CLASS:
-                scopeToClass(result.ownerQn, result.simpleName);
-                break;
-            case METHOD: {
-                String simple = extractSimpleClass(result.ownerQn);
-                String methodEntry = simple + "." + result.simpleName;
-                String ownerFqn = result.ownerQn;
-                String methodName = result.simpleName;
-                JPopupMenu menu = new JPopupMenu();
-                JMenuItem seqItem = new JMenuItem("Sequence Diagram");
-                seqItem.addActionListener(e -> {
-                    setAllMethodEntries(methodEntry);
-                    switchToSequenceDiagram(methodEntry);
-                    treePanel.selectMethodNode(ownerFqn, methodName);
-                });
-                menu.add(seqItem);
-                JMenuItem actItem = new JMenuItem("Activity Diagram");
-                actItem.addActionListener(e -> {
-                    setAllMethodEntries(methodEntry);
-                    switchToActivityDiagram(methodEntry);
-                    treePanel.selectMethodNode(ownerFqn, methodName);
-                });
-                menu.add(actItem);
-                menu.show(this, getWidth() / 2, getHeight() / 2);
-                break;
-            }
-            case FIELD:
-                scopeToClass(result.ownerQn,
-                        extractSimpleClass(result.ownerQn) + "." + result.simpleName);
-                break;
-            default:
-                break;
-        }
-    }
-
-    /** クラス図モードへ切り替え、FQN を seed として 1 ホップ近傍でスコープする。 */
-    private void scopeToClass(String fqn, String statusLabel) {
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        state.currentScope = DiagramScope.builder().seed(fqn).neighborHops(1).build();
-        currentKind = DiagramKind.CLASS;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        status.setText("Scope: " + statusLabel + " (+1 hop)");
-        treePanel.selectClassNode(fqn);
-        refreshDiagram();
-    }
-
-    /**
-     * "SimpleClass.method" 形式のエントリからクラスの FQN を検索し、
-     * 左ツリーパネルの対応するメソッドノードを選択する。
-     */
-    private void syncTreeToMethodByEntry(String entry) {
-        if (entry == null || !cache.isLoaded()) {
-            return;
-        }
-        int dot = entry.lastIndexOf('.');
-        if (dot < 0) {
-            return;
-        }
-        String simpleName = entry.substring(0, dot);
-        String methodName = entry.substring(dot + 1);
-        for (padtools.core.formats.uml.JavaClassInfo c : cache.getClasses()) {
-            if (simpleName.equals(c.getSimpleName())) {
-                treePanel.selectMethodNode(c.getQualifiedName(), methodName);
-                return;
-            }
-        }
-    }
-
-    private static String extractSimpleClass(String qn) {
-        if (qn == null || qn.isEmpty()) {
-            return "";
-        }
-        int dot = qn.lastIndexOf('.');
-        return dot < 0 ? qn : qn.substring(dot + 1);
-    }
-
-    private void pickSequenceEntry() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(this,
-                    "No methods found in this project.",
-                    "Sequence diagram", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            // 起点が変わったら participant フィルタはリセットする
-            // (旧起点の participant 名は新図に存在しない可能性があるため)
-            state.sequenceHiddenParticipants.clear();
-            state.sequenceEntry = picked;
-            currentKind = DiagramKind.SEQUENCE;
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            syncTreeToMethodByEntry(picked);
-            refreshDiagram();
-        }
-    }
-
-    /**
-     * 現在のシーケンス図起点に登場する participant をフィルタダイアログで選択できるようにする。
-     * 選択結果は {@link #state.sequenceHiddenParticipants} に保存され、再描画時の
-     * {@link DiagramRequest#getSequenceHiddenParticipants()} に渡される。
-     */
-    private void openParticipantFilterDialog() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        if (state.sequenceEntry == null || state.sequenceEntry.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "Choose a sequence entry first (Diagram → Choose Sequence Entry...).",
-                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        int dot = state.sequenceEntry.lastIndexOf('.');
-        if (dot < 0) {
-            return;
-        }
-        String cls = state.sequenceEntry.substring(0, dot);
-        String method = state.sequenceEntry.substring(dot + 1);
-        java.util.Set<String> all =
-                padtools.core.formats.uml.PlantUmlSequenceDiagram.collectParticipants(
-                        cache.getClasses(), cls, method, null);
-        if (all.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "No participants found for " + state.sequenceEntry,
-                    "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        java.util.Set<String> picked = SequenceParticipantFilterDialog.show(
-                this, state.sequenceEntry, all, state.sequenceHiddenParticipants);
-        if (picked != null) {
-            state.sequenceHiddenParticipants.clear();
-            state.sequenceHiddenParticipants.addAll(picked);
-            int total = all.size();
-            int hidden = state.sequenceHiddenParticipants.size();
-            status.setText("Sequence filter: showing " + (total - hidden) + "/" + total
-                    + " participants");
-            refreshDiagram();
-        }
-    }
-
-    /**
-     * アクティビティ図用にメソッドを選択する。SequenceEntryDialog を流用し、
-     * タイトルだけ「Select activity method」に差し替える。
-     */
-    private void pickActivityEntry() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
-        dlg.setTitle("Select activity method");
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(this,
-                    "No methods found in this project.",
-                    "Activity diagram", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            state.activityEntry = picked;
-            currentKind = DiagramKind.ACTIVITY;
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            syncTreeToMethodByEntry(picked);
-            refreshDiagram();
-        }
-    }
-
-    private void pickCallGraphEntry() {
-        if (!cache.isLoaded()) {
-            JOptionPane.showMessageDialog(this,
-                    "Open a project first.",
-                    "No project", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        SequenceEntryDialog dlg = new SequenceEntryDialog(this, cache.getClasses());
-        dlg.setTitle("Select call graph entry method");
-        if (dlg.getCandidateCount() == 0) {
-            JOptionPane.showMessageDialog(this,
-                    "No methods found in this project.",
-                    "Call graph", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-        dlg.setVisible(true);
-        String picked = dlg.getSelectedEntry();
-        if (picked != null) {
-            state.callGraphEntry = picked;
-            currentKind = DiagramKind.CALLGRAPH;
-            JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            refreshDiagram();
-        }
-    }
-
-    private void pickLayoutFile() {
-        String picked = LayoutFileChooserDialog.chooseLayoutKey(this, cache);
-        if (picked == null) {
-            return;
-        }
-        state.currentLayoutKey = picked;
-        currentKind = DiagramKind.LAYOUT;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.LAYOUT);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        refreshDiagram();
-    }
-
-    private void pickNavigationGraph() {
-        String picked = NavigationFileChooserDialog.chooseNavigationKey(this, cache);
-        if (picked == null) {
-            return;
-        }
-        state.currentNavigationKey = picked;
-        currentKind = DiagramKind.NAVIGATION;
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.NAVIGATION);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        refreshDiagram();
-    }
-
     private void refreshDiagram() {
         refreshTimer.restart();
     }
@@ -1324,11 +611,11 @@ public class UmlMainFrame extends JFrame {
                             || kind == DiagramKind.INHERITANCE);
                     DiagramRequest req;
                     if (kind == DiagramKind.SEQUENCE && entry != null) {
-                        req = buildSequenceRequest(entry);
+                        req = controller.buildSequenceRequest(entry);
                     } else if (kind == DiagramKind.ACTIVITY && activity != null) {
-                        req = buildActivityRequest(activity);
+                        req = controller.buildActivityRequest(activity);
                     } else if (kind == DiagramKind.CALLGRAPH && callGraph != null) {
-                        req = buildCallGraphRequest(callGraph);
+                        req = controller.buildCallGraphRequest(callGraph);
                     } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
                         req = DiagramRequest.forLayout(layoutKey, true);
                     } else if (kind == DiagramKind.NAVIGATION && navigationKey != null) {
@@ -1399,40 +686,6 @@ public class UmlMainFrame extends JFrame {
                 }
             }
         }.execute();
-    }
-
-    private DiagramRequest buildSequenceRequest(String entry) {
-        int dot = entry.lastIndexOf('.');
-        if (dot < 0) {
-            throw new IllegalArgumentException(
-                    "Sequence entry must be in 'Class.method' format: " + entry);
-        }
-        // 隠す participant の集合をスナップショットして DiagramRequest に渡す
-        java.util.Set<String> hidden = state.sequenceHiddenParticipants.isEmpty()
-                ? null : new java.util.LinkedHashSet<>(state.sequenceHiddenParticipants);
-        return new DiagramRequest(DiagramKind.SEQUENCE,
-                entry.substring(0, dot), entry.substring(dot + 1), true,
-                null, false, null, hidden);
-    }
-
-    private DiagramRequest buildActivityRequest(String entry) {
-        int dot = entry.lastIndexOf('.');
-        if (dot < 0) {
-            throw new IllegalArgumentException(
-                    "Activity entry must be in 'Class.method' format: " + entry);
-        }
-        return DiagramRequest.forActivity(
-                entry.substring(0, dot), entry.substring(dot + 1), true);
-    }
-
-    private DiagramRequest buildCallGraphRequest(String entry) {
-        int dot = entry.lastIndexOf('.');
-        if (dot < 0) {
-            throw new IllegalArgumentException(
-                    "Call graph entry must be in 'Class.method' format: " + entry);
-        }
-        return DiagramRequest.forCallGraph(
-                entry.substring(0, dot), entry.substring(dot + 1), true);
     }
 
     private void chooseAndExport() {

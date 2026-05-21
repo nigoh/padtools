@@ -19,6 +19,8 @@ public final class ScreenTransition {
         START_FOR_RESULT,
         /** {@code Intent.setClass(...)} 経由 (後で startActivity される想定)。 */
         SET_CLASS,
+        /** Car App Library の {@code getScreenManager().push(new XxxScreen(...))} 等。 */
+        SCREEN_PUSH,
         /** その他の Intent 構築。 */
         OTHER
     }

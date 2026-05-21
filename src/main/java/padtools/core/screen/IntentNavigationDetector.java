@@ -61,6 +61,14 @@ public final class IntentNavigationDetector {
             "\\.\\s*setClass\\s*\\(\\s*[^,]+,\\s*"
                     + "([A-Za-z_$][A-Za-z0-9_$.]*)::class\\.java\\s*\\)");
 
+    /**
+     * Car App Library の {@code .push(new XxxScreen(...))} / {@code .pushForResult(new XxxScreen(...))}。
+     * グループ 1: push される Screen クラス。Java/Kotlin 共通 ({@code new} の有無を許容)。
+     */
+    private static final Pattern SCREEN_PUSH_NEW = Pattern.compile(
+            "\\.\\s*push(?:ForResult)?\\s*\\(\\s*(?:new\\s+)?"
+                    + "([A-Z][A-Za-z0-9_$.]*)\\s*\\(");
+
     /** メソッド開始位置検出パターン (大まかな抽出)。 */
     private static final Pattern METHOD_DECL_PATTERN = Pattern.compile(
             "(?:public|protected|private|static|final|synchronized|abstract|@\\w+\\s*)*\\s*"
@@ -106,9 +114,12 @@ public final class IntentNavigationDetector {
     }
 
     /** 単一ソースから画面遷移を抽出する (テスト用)。 */
-    public List<ScreenTransition> analyzeSource(String src, String filePath) {
+    public List<ScreenTransition> analyzeSource(String rawSrc, String filePath) {
         List<ScreenTransition> out = new ArrayList<>();
-        if (src == null || src.isEmpty()) return out;
+        if (rawSrc == null || rawSrc.isEmpty()) return out;
+        // コメントを空白化（長さ・改行は保持）してから走査する。
+        // コメント中の "class" 等がクラス名/メソッド検出を誤らせるのを防ぐ。
+        String src = blankComments(rawSrc);
         String packageName = readPackage(src);
         String className = readPrimaryClassName(src);
         String fqn = packageName.isEmpty() ? className : packageName + "." + className;
@@ -146,10 +157,71 @@ public final class IntentNavigationDetector {
                 KOTLIN_NEW_INTENT, ScreenTransition.Kind.START_ACTIVITY);
         addMatches(src, filePath, fqn, methodSpans, methodNames, out,
                 KOTLIN_SET_CLASS, ScreenTransition.Kind.SET_CLASS);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                SCREEN_PUSH_NEW, ScreenTransition.Kind.SCREEN_PUSH);
 
         // startActivityForResult が同一メソッド内にあれば Kind を昇格
         promoteForResultTransitions(src, out, methodSpans);
         return out;
+    }
+
+    /**
+     * Java/Kotlin のコメント（{@code //}, {@code /* *​/}）を同じ長さの空白に置き換える。
+     * 改行は保持するので、後続の {@code lineOf} による行番号計算はそのまま使える。
+     * 文字列・文字リテラルの中身は保持する（{@code setClassName(ctx, "X")} 等を壊さない）。
+     */
+    static String blankComments(String src) {
+        char[] a = src.toCharArray();
+        int n = a.length;
+        boolean inLine = false;
+        boolean inBlock = false;
+        boolean inStr = false;
+        boolean inChar = false;
+        for (int i = 0; i < n; i++) {
+            char c = a[i];
+            char next = i + 1 < n ? a[i + 1] : '\0';
+            if (inLine) {
+                if (c == '\n') {
+                    inLine = false;
+                } else {
+                    a[i] = ' ';
+                }
+            } else if (inBlock) {
+                if (c == '*' && next == '/') {
+                    a[i] = ' ';
+                    a[i + 1] = ' ';
+                    i++;
+                    inBlock = false;
+                } else if (c != '\n' && c != '\r') {
+                    a[i] = ' ';
+                }
+            } else if (inStr) {
+                if (c == '\\' && next != '\0') {
+                    i++;
+                } else if (c == '"') {
+                    inStr = false;
+                }
+            } else if (inChar) {
+                if (c == '\\' && next != '\0') {
+                    i++;
+                } else if (c == '\'') {
+                    inChar = false;
+                }
+            } else if (c == '/' && next == '/') {
+                a[i] = ' ';
+                inLine = true;
+            } else if (c == '/' && next == '*') {
+                a[i] = ' ';
+                a[i + 1] = ' ';
+                i++;
+                inBlock = true;
+            } else if (c == '"') {
+                inStr = true;
+            } else if (c == '\'') {
+                inChar = true;
+            }
+        }
+        return new String(a);
     }
 
     private static void addMatches(String src, String filePath, String fromFqn,

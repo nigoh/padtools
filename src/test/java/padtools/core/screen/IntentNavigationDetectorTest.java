@@ -124,6 +124,52 @@ public class IntentNavigationDetectorTest {
     }
 
     @Test
+    public void detectsScreenManagerPushNewScreen() {
+        String src = "package com.x;\n"
+                + "public class StartScreen {\n"
+                + "  void onClickItem() {\n"
+                + "    getScreenManager().push(new DetailScreen(getCarContext()));\n"
+                + "  }\n"
+                + "}\n";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "StartScreen.java");
+        assertEquals(1, hits.size());
+        ScreenTransition t = hits.get(0);
+        assertEquals("com.x.StartScreen", t.getFromFqn());
+        assertEquals("DetailScreen", t.getTargetSimpleName());
+        assertEquals(ScreenTransition.Kind.SCREEN_PUSH, t.getKind());
+        assertEquals("onClickItem", t.getFromMethod());
+    }
+
+    @Test
+    public void ignoresClassKeywordInsideJavadocComment() {
+        // "Session class for the ... app." の "class for" を誤ってクラス名 "for" にしない
+        String src = "package com.x;\n"
+                + "/** Session class for the sample app. */\n"
+                + "public class NavigationSession {\n"
+                + "  void onStart() {\n"
+                + "    startActivity(new Intent(this, NavigationService.class));\n"
+                + "  }\n"
+                + "}\n";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "NavigationSession.java");
+        assertEquals(1, hits.size());
+        assertEquals("com.x.NavigationSession", hits.get(0).getFromFqn());
+        assertEquals("NavigationSession", hits.get(0).getFromSimpleName());
+    }
+
+    @Test
+    public void doesNotMatchLowercaseMethodCallInPush() {
+        String src = "package com.x;\n"
+                + "public class A {\n"
+                + "  void go() { stack.push(buildItem()); }\n"
+                + "}\n";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "A.java");
+        assertTrue("push(lowercaseCall()) は遷移として拾わない", hits.isEmpty());
+    }
+
+    @Test
     public void emptyReportRendersPlaceholder() {
         String md = MarkdownScreenFlowReport.render(new java.util.ArrayList<>());
         assertNotNull(md);

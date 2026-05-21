@@ -37,25 +37,25 @@ public final class ProjectTreeCellRenderer extends DefaultTreeCellRenderer {
         }
         Object user = ((DefaultMutableTreeNode) value).getUserObject();
 
-        if (user instanceof ProjectTreePanel.ModuleEntry) {
+        if (user instanceof ModuleEntry) {
             setIcon(TreeNodeIcon.MODULE);
-        } else if (user instanceof ProjectTreePanel.PackageEntry) {
+        } else if (user instanceof PackageEntry) {
             setIcon(TreeNodeIcon.PACKAGE);
-        } else if (user instanceof ProjectTreePanel.ClassEntry) {
-            setIcon(classIcon(((ProjectTreePanel.ClassEntry) user).info));
-        } else if (user instanceof ProjectTreePanel.MethodEntry) {
+        } else if (user instanceof ClassEntry) {
+            setIcon(classIcon(((ClassEntry) user).info));
+        } else if (user instanceof MethodEntry) {
             setIcon(TreeNodeIcon.METHOD);
-        } else if (user instanceof ProjectTreePanel.MethodDiagramEntry) {
-            setIcon(diagramIcon(((ProjectTreePanel.MethodDiagramEntry) user).kind));
-        } else if (user instanceof ProjectTreePanel.ManifestEntry) {
+        } else if (user instanceof MethodDiagramEntry) {
+            setIcon(diagramIcon(((MethodDiagramEntry) user).kind));
+        } else if (user instanceof ManifestEntry) {
             setIcon(TreeNodeIcon.MANIFEST);
-        } else if (user instanceof ProjectTreePanel.ComponentGroupEntry) {
+        } else if (user instanceof ComponentGroupEntry) {
             setIcon(TreeNodeIcon.COMPONENT_GROUP);
-        } else if (user instanceof ProjectTreePanel.ComponentEntry) {
-            setIcon(componentIcon(((ProjectTreePanel.ComponentEntry) user).info.getKind()));
-        } else if (user instanceof ProjectTreePanel.PermissionEntry) {
+        } else if (user instanceof ComponentEntry) {
+            setIcon(componentIcon(((ComponentEntry) user).info.getKind()));
+        } else if (user instanceof PermissionEntry) {
             setIcon(TreeNodeIcon.PERMISSION);
-        } else if (user instanceof ProjectTreePanel.FeatureEntry) {
+        } else if (user instanceof FeatureEntry) {
             setIcon(TreeNodeIcon.FEATURE);
         }
 

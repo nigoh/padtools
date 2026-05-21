@@ -19,19 +19,20 @@ public class ProjectLoaderTest {
     public void setUp() {
         progressBar = new JProgressBar();
         statusLabel = new JLabel();
-        loader = new ProjectLoader(
-                new ProjectAnalysisCache(),
-                new ReferenceIndexCache(new ProjectAnalysisCache()),
-                new DiagramState(),
-                new ProjectTreePanel(),
-                new ManifestSummaryPanel(),
-                progressBar,
-                new JMenuItem(),
-                statusLabel,
-                null,
-                token -> { },
-                root -> { },
-                root -> { });
+        ProjectLoaderDeps deps = new ProjectLoaderDeps();
+        deps.cache = new ProjectAnalysisCache();
+        deps.refIndexCache = new ReferenceIndexCache(new ProjectAnalysisCache());
+        deps.state = new DiagramState();
+        deps.treePanel = new ProjectTreePanel();
+        deps.manifestSummaryPanel = new ManifestSummaryPanel();
+        deps.loadProgress = progressBar;
+        deps.cancelLoadingItem = new JMenuItem();
+        deps.statusLabel = statusLabel;
+        deps.parentFrame = null;
+        deps.cancelTokenSetter = token -> { };
+        deps.projectRootSetter = root -> { };
+        deps.onLoadSuccess = root -> { };
+        loader = new ProjectLoader(deps);
     }
 
     @Test

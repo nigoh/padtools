@@ -114,6 +114,22 @@ public class UmlMainFrame extends JFrame {
             }
         });
 
+        wirePanelListeners();
+        buildMenuBar();
+        buildCenterTabs();
+        buildToolBar();
+        controller = createDiagramController();
+        add(buildStatusBar(), BorderLayout.SOUTH);
+        applyInitialWindowSize();
+        initPersistorsAndLoader();
+
+        if (initialProject != null && initialProject.isDirectory()) {
+            SwingUtilities.invokeLater(() -> loadProject(initialProject));
+        }
+    }
+
+    /** previewPanel / treePanel / 進捗バー等のイベントリスナを配線する。 */
+    private void wirePanelListeners() {
         refreshTimer.setRepeats(false);
         previewPanel.setZoomChangeListener(this::updateZoomLabel);
         previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
@@ -131,7 +147,10 @@ public class UmlMainFrame extends JFrame {
         loadProgress.setStringPainted(true);
         loadProgress.setVisible(false);
         loadProgress.setPreferredSize(new Dimension(200, 16));
+    }
 
+    /** メニューバーを構築して各メニュー項目フィールドへ反映する。 */
+    private void buildMenuBar() {
         MenuBarBuilder.Callbacks mcb = new MenuBarBuilder.Callbacks();
         mcb.chooseProject = this::chooseProject;
         mcb.chooseAndExport = this::chooseAndExport;
@@ -177,7 +196,10 @@ public class UmlMainFrame extends JFrame {
         themeItems = menuResult.themeItems;
         themeGroup = menuResult.themeGroup;
         setJMenuBar(menuResult.menuBar);
+    }
 
+    /** 中央のツリー + タブ (Home/Manifest/Impact/References/Func Diff) を構築する。 */
+    private void buildCenterTabs() {
         // 右側: 1 層のフラットタブバー
         // [Home] [動的タブ…] [Manifest] [Impact] [References]
         mainTabs = new JTabbedPane(JTabbedPane.TOP);
@@ -210,7 +232,10 @@ public class UmlMainFrame extends JFrame {
         split.setResizeWeight(0.22);
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
+    }
 
+    /** 上部ツールバーを構築する。 */
+    private void buildToolBar() {
         ToolBarBuilder.Callbacks tcb = new ToolBarBuilder.Callbacks();
         tcb.chooseProject = this::chooseProject;
         tcb.chooseAndExport = this::chooseAndExport;
@@ -221,17 +246,20 @@ public class UmlMainFrame extends JFrame {
                 new ToolBarBuilder(DiagramKind.CLASS, tcb).build();
         diagramToggles = toolBarResult.diagramToggles;
         add(toolBarResult.toolBarPanel, BorderLayout.NORTH);
+    }
 
-        controller = createDiagramController();
-        add(buildStatusBar(), BorderLayout.SOUTH);
-
+    /** 保存済みウィンドウサイズ・位置を適用して pack する。 */
+    private void applyInitialWindowSize() {
         Setting setting = Main.getSetting();
         int w = setting.getWindowWidth() > 0 ? setting.getWindowWidth() : 1200;
         int h = setting.getWindowHeight() > 0 ? setting.getWindowHeight() : 800;
         setPreferredSize(new Dimension(w, h));
         pack();
         restoreWindowLocation(setting);
+    }
 
+    /** プロジェクト設定の永続化担当とプロジェクトローダを生成する。 */
+    private void initPersistorsAndLoader() {
         settingsPersistor = new ProjectSettingsPersistor(
                 Main::getSetting,
                 Main::saveSetting,
@@ -247,10 +275,6 @@ public class UmlMainFrame extends JFrame {
                     updateManifestSummary();
                     refreshDiagram();
                 });
-
-        if (initialProject != null && initialProject.isDirectory()) {
-            SwingUtilities.invokeLater(() -> loadProject(initialProject));
-        }
     }
 
     private ProjectLoader projectLoader;

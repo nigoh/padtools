@@ -9,17 +9,12 @@ import padtools.util.CancelToken;
 import padtools.util.ErrorListener;
 import padtools.util.ProgressListener;
 
-import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
-import javax.swing.JButton;
 import javax.swing.JComponent;
-import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -30,8 +25,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
-import javax.swing.JToolBar;
-import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
@@ -40,7 +33,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -90,17 +82,13 @@ public class UmlMainFrame extends JFrame {
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
-    private final JMenuItem cancelLoadingItem = new JMenuItem("Cancel Loading");
-    private final ButtonGroup diagramGroup = new ButtonGroup();
-    private final java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems
-            = new java.util.EnumMap<>(DiagramKind.class);
+    private JMenuItem cancelLoadingItem;
+    private ButtonGroup diagramGroup;
+    private java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems;
     /** ツールバー上の「図種切替」トグルボタン。メニュー側ラジオと選択状態を同期する。 */
-    private final java.util.EnumMap<DiagramKind, JToggleButton> diagramToggles
-            = new java.util.EnumMap<>(DiagramKind.class);
-    private final ButtonGroup diagramToolbarGroup = new ButtonGroup();
-    private final ButtonGroup themeGroup = new ButtonGroup();
-    private final java.util.Map<String, JRadioButtonMenuItem> themeItems
-            = new java.util.LinkedHashMap<>();
+    private java.util.EnumMap<DiagramKind, JToggleButton> diagramToggles;
+    private ButtonGroup themeGroup;
+    private java.util.Map<String, JRadioButtonMenuItem> themeItems;
 
     private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
 
@@ -148,7 +136,51 @@ public class UmlMainFrame extends JFrame {
         loadProgress.setVisible(false);
         loadProgress.setPreferredSize(new Dimension(200, 16));
 
-        setJMenuBar(buildMenuBar());
+        MenuBarBuilder.Callbacks mcb = new MenuBarBuilder.Callbacks();
+        mcb.chooseProject = this::chooseProject;
+        mcb.chooseAndExport = this::chooseAndExport;
+        mcb.exportClassDiagramsPerFolder = this::exportClassDiagramsPerFolder;
+        mcb.refreshDiagram = this::refreshDiagram;
+        mcb.cancelLoading = () -> {
+            if (loadingCancelToken != null) {
+                loadingCancelToken.cancel();
+                status.setText("Cancelling...");
+            }
+        };
+        mcb.exitApp = () -> { saveWindowState(); dispose(); };
+        mcb.loadProject = this::loadProject;
+        mcb.openEntitySearch = this::openEntitySearch;
+        mcb.pickSequenceEntry = this::pickSequenceEntry;
+        mcb.openParticipantFilterDialog = this::openParticipantFilterDialog;
+        mcb.clearSequenceParticipants = () -> {
+            if (!state.sequenceHiddenParticipants.isEmpty()) {
+                state.sequenceHiddenParticipants.clear();
+                status.setText("Cleared sequence participant filter.");
+                refreshDiagram();
+            }
+        };
+        mcb.pickActivityEntry = this::pickActivityEntry;
+        mcb.pickLayoutFile = this::pickLayoutFile;
+        mcb.pickNavigationGraph = this::pickNavigationGraph;
+        mcb.applyPreset = this::applyPreset;
+        mcb.openScopeDialog = this::openScopeDialog;
+        mcb.clearScope = () -> { state.currentScope = null; refreshDiagram(); };
+        mcb.selectDiagramKindFromMenu = k -> { currentKind = k; refreshDiagram(); };
+        mcb.syncDiagramToggle = this::syncDiagramToggle;
+        mcb.applyTheme = this::applyTheme;
+        mcb.openStyleSettings = this::openStyleSettings;
+        mcb.zoomIn = previewPanel::zoomIn;
+        mcb.zoomOut = previewPanel::zoomOut;
+        mcb.zoomReset = previewPanel::zoomReset;
+        mcb.zoomToFit = previewPanel::zoomToFit;
+        MenuBarBuilder.Result menuResult =
+                new MenuBarBuilder(DiagramKind.CLASS, MENU_MASK, mcb, this).build();
+        cancelLoadingItem = menuResult.cancelLoadingItem;
+        diagramItems = menuResult.diagramItems;
+        diagramGroup = menuResult.diagramGroup;
+        themeItems = menuResult.themeItems;
+        themeGroup = menuResult.themeGroup;
+        setJMenuBar(menuResult.menuBar);
 
         // 右側: 1 層のフラットタブバー
         // [Home] [動的タブ…] [Manifest] [Impact] [References]
@@ -182,7 +214,16 @@ public class UmlMainFrame extends JFrame {
         split.setDividerLocation(280);
         add(split, BorderLayout.CENTER);
 
-        add(buildToolBarPanel(), BorderLayout.NORTH);
+        ToolBarBuilder.Callbacks tcb = new ToolBarBuilder.Callbacks();
+        tcb.chooseProject = this::chooseProject;
+        tcb.chooseAndExport = this::chooseAndExport;
+        tcb.refreshDiagram = this::refreshDiagram;
+        tcb.openEntitySearch = this::openEntitySearch;
+        tcb.selectDiagramKind = this::selectDiagramKind;
+        ToolBarBuilder.Result toolBarResult =
+                new ToolBarBuilder(DiagramKind.CLASS, tcb).build();
+        diagramToggles = toolBarResult.diagramToggles;
+        add(toolBarResult.toolBarPanel, BorderLayout.NORTH);
         add(buildStatusBar(), BorderLayout.SOUTH);
 
         Setting setting = Main.getSetting();
@@ -216,187 +257,7 @@ public class UmlMainFrame extends JFrame {
     private ProjectLoader projectLoader;
     private ProjectSettingsPersistor settingsPersistor;
 
-    // --- メニュー -------------------------------------------------------------
-
-    private JMenuBar buildMenuBar() {
-        JMenuBar bar = new JMenuBar();
-        bar.add(buildFileMenu());
-        bar.add(buildDiagramMenu());
-        bar.add(buildViewMenu());
-        bar.add(buildStyleMenu());
-        bar.add(buildHelpMenu());
-        return bar;
-    }
-
-    private JMenu buildFileMenu() {
-        JMenu m = new JMenu("File");
-        m.setMnemonic(KeyEvent.VK_F);
-        JMenuItem open = new JMenuItem("Open Project...");
-        open.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, MENU_MASK));
-        open.addActionListener(e -> chooseProject());
-        JMenu recent = new JMenu("Open Recent");
-        m.addMenuListener(new javax.swing.event.MenuListener() {
-            @Override public void menuSelected(javax.swing.event.MenuEvent e) {
-                rebuildRecentMenu(recent);
-            }
-            @Override public void menuDeselected(javax.swing.event.MenuEvent e) {}
-            @Override public void menuCanceled(javax.swing.event.MenuEvent e) {}
-        });
-        JMenuItem save = new JMenuItem("Save Diagram As...");
-        save.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_MASK));
-        save.addActionListener(e -> chooseAndExport());
-        JMenuItem perFolder = new JMenuItem("Export Class Diagrams Per Folder...");
-        perFolder.addActionListener(e -> exportClassDiagramsPerFolder());
-        JMenuItem refresh = new JMenuItem("Refresh");
-        refresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
-        refresh.addActionListener(e -> refreshDiagram());
-        cancelLoadingItem.addActionListener(e -> {
-            if (loadingCancelToken != null) {
-                loadingCancelToken.cancel();
-                status.setText("Cancelling...");
-            }
-        });
-        cancelLoadingItem.setEnabled(false);
-        JMenuItem exit = new JMenuItem("Exit");
-        exit.addActionListener(e -> {
-            saveWindowState();
-            dispose();
-        });
-        m.add(open);
-        m.add(recent);
-        m.add(save);
-        m.add(perFolder);
-        m.addSeparator();
-        m.add(refresh);
-        m.add(cancelLoadingItem);
-        m.addSeparator();
-        m.add(exit);
-        return m;
-    }
-
-    private void rebuildRecentMenu(JMenu recent) {
-        recent.removeAll();
-        java.util.List<padtools.ProjectRecord> records;
-        try {
-            records = padtools.ProjectRepository.getInstance().listRecent(10);
-        } catch (RuntimeException ex) {
-            records = java.util.Collections.emptyList();
-        }
-        if (records.isEmpty()) {
-            JMenuItem none = new JMenuItem("(No recent projects)");
-            none.setEnabled(false);
-            recent.add(none);
-            return;
-        }
-        for (padtools.ProjectRecord rec : records) {
-            File root = rec.root();
-            JMenuItem item = new JMenuItem(rec.getName() + "  — " + rec.getPath());
-            item.setEnabled(root.isDirectory());
-            item.addActionListener(e -> loadProject(root));
-            recent.add(item);
-        }
-    }
-
-    private JMenu buildDiagramMenu() {
-        JMenu m = new JMenu("Diagram");
-        m.setMnemonic(KeyEvent.VK_D);
-        for (DiagramKind k : DiagramKind.values()) {
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(k.getDisplayName());
-            if (k == DiagramKind.CLASS) {
-                item.setSelected(true);
-            }
-            item.addActionListener(e -> {
-                currentKind = k;
-                refreshDiagram();
-            });
-            // メニュー側で選択された時に、ツールバーのトグルボタンも同じ状態に揃える。
-            // ActionListener ではなく PropertyChangeListener にしておくと、API 経由で
-            // setSelected された場合 (左ペインや drill-down) も同期される。
-            final DiagramKind kind = k;
-            item.addItemListener(ev -> {
-                if (((AbstractButton) ev.getSource()).isSelected()) {
-                    syncDiagramToggle(kind);
-                }
-            });
-            diagramGroup.add(item);
-            diagramItems.put(k, item);
-            m.add(item);
-        }
-        m.addSeparator();
-        JMenuItem search = new JMenuItem("Search Entities...");
-        // Ctrl+F は Zoom to Fit が既に使っているため Ctrl+Shift+F に割り当て
-        search.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F,
-                MENU_MASK | InputEvent.SHIFT_DOWN_MASK));
-        search.addActionListener(e -> openEntitySearch());
-        m.add(search);
-        JMenuItem pickEntry = new JMenuItem("Choose Sequence Entry...");
-        pickEntry.addActionListener(e -> pickSequenceEntry());
-        m.add(pickEntry);
-        JMenuItem filterParticipants = new JMenuItem("Filter Sequence Participants...");
-        filterParticipants.addActionListener(e -> openParticipantFilterDialog());
-        m.add(filterParticipants);
-        JMenuItem clearParticipantFilter =
-                new JMenuItem("Clear Sequence Participant Filter");
-        clearParticipantFilter.addActionListener(e -> {
-            if (!state.sequenceHiddenParticipants.isEmpty()) {
-                state.sequenceHiddenParticipants.clear();
-                status.setText("Cleared sequence participant filter.");
-                refreshDiagram();
-            }
-        });
-        m.add(clearParticipantFilter);
-        JMenuItem pickActivity = new JMenuItem("Choose Activity Method...");
-        pickActivity.addActionListener(e -> pickActivityEntry());
-        m.add(pickActivity);
-        JMenuItem pickLayout = new JMenuItem("Choose Layout File...");
-        pickLayout.addActionListener(e -> pickLayoutFile());
-        m.add(pickLayout);
-        JMenuItem pickNavigation = new JMenuItem("Choose Navigation Graph...");
-        pickNavigation.addActionListener(e -> pickNavigationGraph());
-        m.add(pickNavigation);
-        m.addSeparator();
-        m.add(buildPresetSubMenu());
-        JMenuItem scope = new JMenuItem("Scope...");
-        scope.addActionListener(e -> openScopeDialog());
-        m.add(scope);
-        JMenuItem clearScope = new JMenuItem("Clear Scope");
-        clearScope.addActionListener(e -> {
-            state.currentScope = null;
-            refreshDiagram();
-        });
-        m.add(clearScope);
-        return m;
-    }
-
-    /** クラス図の表示密度プリセット ({@link DiagramPreset}) を切り替えるサブメニュー。 */
-    private JMenu buildPresetSubMenu() {
-        JMenu sub = new JMenu("Preset");
-        sub.setToolTipText("Switch class diagram density "
-                + "(Minimal / Balanced / Detailed)");
-        int seq = 1;
-        for (DiagramPreset p : DiagramPreset.values()) {
-            if (p == DiagramPreset.CUSTOM) {
-                continue;
-            }
-            JMenuItem mi = new JMenuItem(p.getDisplayName());
-            // Ctrl+1 = Minimal, Ctrl+2 = Balanced, Ctrl+3 = Detailed
-            int keyCode;
-            switch (seq) {
-                case 1: keyCode = KeyEvent.VK_1; break;
-                case 2: keyCode = KeyEvent.VK_2; break;
-                case 3: keyCode = KeyEvent.VK_3; break;
-                default: keyCode = KeyEvent.VK_UNDEFINED;
-            }
-            if (keyCode != KeyEvent.VK_UNDEFINED) {
-                mi.setAccelerator(KeyStroke.getKeyStroke(keyCode, MENU_MASK));
-            }
-            seq++;
-            final DiagramPreset preset = p;
-            mi.addActionListener(e -> applyPreset(preset));
-            sub.add(mi);
-        }
-        return sub;
-    }
+    // --- スタイル / プリセット ------------------------------------------------
 
     /**
      * 指定された {@link DiagramPreset} を現在のスコープに適用して再描画する。
@@ -411,50 +272,6 @@ public class UmlMainFrame extends JFrame {
         state.currentScope = b.build();
         status.setText("Preset: " + p.getDisplayName());
         refreshDiagram();
-    }
-
-    private JMenu buildViewMenu() {
-        JMenu m = new JMenu("View");
-        m.setMnemonic(KeyEvent.VK_V);
-        JMenuItem zoomIn = new JMenuItem("Zoom In");
-        zoomIn.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, MENU_MASK));
-        zoomIn.addActionListener(e -> previewPanel.zoomIn());
-        JMenuItem zoomOut = new JMenuItem("Zoom Out");
-        zoomOut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, MENU_MASK));
-        zoomOut.addActionListener(e -> previewPanel.zoomOut());
-        JMenuItem zoomReset = new JMenuItem("Zoom 100%");
-        zoomReset.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0, MENU_MASK));
-        zoomReset.addActionListener(e -> previewPanel.zoomReset());
-        JMenuItem zoomFit = new JMenuItem("Zoom to Fit");
-        zoomFit.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, MENU_MASK));
-        zoomFit.addActionListener(e -> previewPanel.zoomToFit());
-        m.add(zoomIn);
-        m.add(zoomOut);
-        m.add(zoomReset);
-        m.add(zoomFit);
-        return m;
-    }
-
-    private JMenu buildStyleMenu() {
-        JMenu m = new JMenu("Style");
-        m.setMnemonic(KeyEvent.VK_S);
-        DiagramStyle current = PlantUmlRenderer.getStyle();
-        for (String theme : StyleSettingsDialog.THEMES) {
-            String label = theme.isEmpty() ? "(None)" : theme;
-            JRadioButtonMenuItem item = new JRadioButtonMenuItem(label);
-            if (theme.equals(current.getTheme() == null ? "" : current.getTheme())) {
-                item.setSelected(true);
-            }
-            item.addActionListener(e -> applyTheme(theme));
-            themeGroup.add(item);
-            themeItems.put(theme, item);
-            m.add(item);
-        }
-        m.addSeparator();
-        JMenuItem advanced = new JMenuItem("Style Settings...");
-        advanced.addActionListener(e -> openStyleSettings());
-        m.add(advanced);
-        return m;
     }
 
     private void applyTheme(String theme) {
@@ -549,94 +366,6 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
-    private JMenu buildHelpMenu() {
-        JMenu m = new JMenu("Help");
-        m.setMnemonic(KeyEvent.VK_H);
-        JMenuItem usage = new JMenuItem("Usage");
-        usage.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0));
-        usage.addActionListener(e -> showUsageDialog());
-        JMenuItem about = new JMenuItem("About");
-        about.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "PadTools UML\n\n"
-                        + "Java + Android + Gradle UML diagram generator.\n"
-                        + "Bundled PlantUML for rendering.",
-                "About PadTools UML",
-                JOptionPane.INFORMATION_MESSAGE));
-        m.add(usage);
-        m.addSeparator();
-        m.add(about);
-        return m;
-    }
-
-    /** 使い方ダイアログを表示する (Help > Usage / F1)。 */
-    private void showUsageDialog() {
-        String mod = MENU_MASK == InputEvent.META_DOWN_MASK ? "Cmd" : "Ctrl";
-        String text =
-                "PadTools UML — 使い方 (Usage)\n"
-                        + "\n"
-                        + "■ プロジェクトを開く (Open Project)\n"
-                        + "  File > Open Project... (" + mod + "+O)\n"
-                        + "    Gradle / Java プロジェクトのルートディレクトリを指定すると、\n"
-                        + "    左ペインのツリーにモジュール・パッケージ・クラスが表示されます。\n"
-                        + "\n"
-                        + "■ 図種を切り替える (Diagram)\n"
-                        + "  Diagram メニューから Class / Sequence / Activity / Common / Layout などを選択。\n"
-                        + "  ウィンドウ上部のツールバーのトグルボタンでも同じ切替ができます。\n"
-                        + "  Common (共通クラス図) は他クラスから参照される回数 (fan-in) が多い\n"
-                        + "  「使い回されているクラス」上位 N 件をハイライト表示します。\n"
-                        + "  シーケンス図やアクティビティ図は起点メソッドの指定が必要です\n"
-                        + "  (Diagram > Choose Sequence Entry... / Choose Activity Method...)。\n"
-                        + "\n"
-                        + "■ 左ペインのツリー操作\n"
-                        + "  - クラスやメソッドを選択すると、対応する図に絞り込み表示します。\n"
-                        + "  - パッケージ / モジュール選択でスコープを切り替えられます。\n"
-                        + "\n"
-                        + "■ プレビュー (右ペイン) の操作\n"
-                        + "  - 左ドラッグ / 中ボタンドラッグ: パン (画面移動)\n"
-                        + "  - " + mod + " + マウスホイール: ポインタ位置を基点にズームイン/アウト\n"
-                        + "  - マウスホイールのみ: 縦スクロール\n"
-                        + "  - View > Zoom In / Out / 100% / Fit (" + mod + "+= / " + mod + "+- / " + mod + "+0 / " + mod + "+F)\n"
-                        + "\n"
-                        + "■ ドリルダウン (図中のクリック可能要素)\n"
-                        + "  - 図中のクラス名やメソッド名のうち、人差し指 (👆) アイコンが\n"
-                        + "    表示される箇所はクリックで詳細表示に切り替わります。\n"
-                        + "    ※ アイコンが出ない箇所はクリック対象ではありません。\n"
-                        + "  - 右クリックでポップアップメニュー (関連図への遷移など)。\n"
-                        + "\n"
-                        + "■ 絞り込み / 検索\n"
-                        + "  - Diagram > Search Entities... (" + mod + "+Shift+F): クラス/メソッドを検索。\n"
-                        + "  - Diagram > Scope...: 表示範囲 (パッケージ等) を細かく指定。\n"
-                        + "  - Diagram > Filter Sequence Participants...: シーケンス図の登場人物を隠す。\n"
-                        + "  - Diagram > Preset > Minimal / Balanced / Detailed\n"
-                        + "    (" + mod + "+1 / " + mod + "+2 / " + mod + "+3): クラス図の表示密度を切替。\n"
-                        + "\n"
-                        + "■ 再描画 / キャンセル\n"
-                        + "  - File > Refresh (F5): 現在の図を再生成。\n"
-                        + "  - File > Cancel Loading: 重い解析を途中で中断。\n"
-                        + "\n"
-                        + "■ エクスポート (画像保存)\n"
-                        + "  - File > Save Diagram As... (" + mod + "+S): PNG / SVG / PUML で保存。\n"
-                        + "  - File > Export Class Diagrams Per Folder...: フォルダ単位で一括出力。\n"
-                        + "\n"
-                        + "■ スタイル (見た目)\n"
-                        + "  - Style メニュー: テーマ切替・詳細スタイル設定。\n"
-                        + "\n"
-                        + "■ ヒント\n"
-                        + "  - 右側タブの \"PlantUML Source\" で生成された .puml を確認できます。\n"
-                        + "  - Android プロジェクトでは \"Manifest Summary\" タブで概要を確認可能。";
-
-        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
-        area.setEditable(false);
-        area.setLineWrap(false);
-        area.setFont(new java.awt.Font(java.awt.Font.MONOSPACED,
-                java.awt.Font.PLAIN, area.getFont().getSize()));
-        area.setCaretPosition(0);
-        JScrollPane sp = new JScrollPane(area);
-        sp.setPreferredSize(new Dimension(640, 520));
-        JOptionPane.showMessageDialog(this, sp,
-                "Usage — PadTools UML", JOptionPane.INFORMATION_MESSAGE);
-    }
-
     private JComponent buildStatusBar() {
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
@@ -647,64 +376,6 @@ public class UmlMainFrame extends JFrame {
         bar.add(east, BorderLayout.EAST);
         return bar;
     }
-
-    // --- ツールバー -----------------------------------------------------------
-
-    /**
-     * ウィンドウ上部のツールバーを構築する。
-     *
-     * <p>2 段構成:
-     * <ol>
-     *   <li>上段: ファイル / 表示 / 検索など頻用操作のボタン群
-     *       (Open / Save / Refresh / Search / Scope / Zoom 各種)。
-     *       すべてのアクションはメニュー側と同じハンドラを呼び出し、
-     *       メニュー側で設定したショートカットも引き続き使用可能。</li>
-     *   <li>下段: 図種切替のトグルボタン (Class / Package / Sequence / Activity /
-     *       Common / Component / Dependency / Manifest / Layout)。
-     *       Diagram メニューのラジオ選択と双方向に同期する。</li>
-     * </ol>
-     * </p>
-     */
-    private JComponent buildToolBarPanel() {
-        JPanel container = new JPanel(new BorderLayout(0, 0));
-        container.add(buildActionToolBar(), BorderLayout.NORTH);
-        container.add(buildDiagramKindToolBar(), BorderLayout.SOUTH);
-        return container;
-    }
-
-    private JToolBar buildActionToolBar() {
-        JToolBar bar = new JToolBar();
-        bar.setFloatable(false);
-        bar.setRollover(true);
-
-        bar.add(makeButton("Open", "Open project (Ctrl+O)", e -> chooseProject()));
-        bar.add(makeButton("Save", "Save diagram (Ctrl+S)", e -> chooseAndExport()));
-        bar.add(makeButton("Refresh", "Refresh diagram (F5)", e -> refreshDiagram()));
-        bar.addSeparator();
-        bar.add(makeButton("Search", "Search entities (Ctrl+Shift+F)",
-                e -> openEntitySearch()));
-        return bar;
-    }
-
-    // ── ノード種別ごとに押下可能な図種セット ──────────────────────
-    private static final EnumSet<DiagramKind> DIAGRAMS_ALL =
-            EnumSet.allOf(DiagramKind.class);
-    /** 構造ノード (Module): モジュール図・クラス図・パッケージ図・依存図・コンポーネント図・共通クラス */
-    private static final EnumSet<DiagramKind> DIAGRAMS_MODULE = EnumSet.of(
-            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.MODULE,
-            DiagramKind.DEPENDENCY, DiagramKind.COMPONENT, DiagramKind.COMMON);
-    /** 構造ノード (Package): クラス図・パッケージ図・共通クラス */
-    private static final EnumSet<DiagramKind> DIAGRAMS_PACKAGE = EnumSet.of(
-            DiagramKind.CLASS, DiagramKind.PACKAGE, DiagramKind.COMMON);
-    /** Java 型ノード (Class / Interface / Enum / Annotation / AIDL): クラス図・共通クラス */
-    private static final EnumSet<DiagramKind> DIAGRAMS_JAVA_TYPE = EnumSet.of(
-            DiagramKind.CLASS, DiagramKind.COMMON);
-    /** メソッドノード: シーケンス図・アクティビティ図・コールグラフ */
-    private static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
-            DiagramKind.SEQUENCE, DiagramKind.ACTIVITY, DiagramKind.CALLGRAPH);
-    /** Android ノード (Manifest / コンポーネント / Permission / Feature): Manifest 図・コンポーネント図 */
-    private static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
-            DiagramKind.MANIFEST, DiagramKind.COMPONENT);
 
     /**
      * ノード選択に応じてツールバーの図種ボタンを有効/無効化する。
@@ -735,58 +406,6 @@ public class UmlMainFrame extends JFrame {
     private void showHomeTab() {
         if (mainTabs != null && mainTabs.getSelectedIndex() != 0) {
             mainTabs.setSelectedIndex(0);
-        }
-    }
-
-    private JToolBar buildDiagramKindToolBar() {
-        JToolBar bar = new JToolBar();
-        bar.setFloatable(false);
-        bar.setRollover(true);
-        bar.add(new JLabel(" Diagram: "));
-        for (DiagramKind k : DiagramKind.values()) {
-            JToggleButton b = new JToggleButton(toolbarLabel(k));
-            b.setToolTipText(k.getDisplayName() + tooltipExtra(k));
-            b.setFocusable(false);
-            if (k == DiagramKind.CLASS) {
-                b.setSelected(true);
-            }
-            final DiagramKind kind = k;
-            b.addActionListener(e -> selectDiagramKind(kind));
-            diagramToolbarGroup.add(b);
-            diagramToggles.put(k, b);
-            bar.add(b);
-        }
-        return bar;
-    }
-
-    /** トグルボタン用の短いラベル (ツールバー幅を抑えるため省略名)。 */
-    private static String toolbarLabel(DiagramKind k) {
-        switch (k) {
-            case CLASS: return "Class";
-            case PACKAGE: return "Package";
-            case SEQUENCE: return "Sequence";
-            case ACTIVITY: return "Activity";
-            case CALLGRAPH: return "Call Graph";
-            case COMMON: return "Common";
-            case COMPONENT: return "Component";
-            case DEPENDENCY: return "Dependency";
-            case MANIFEST: return "Manifest";
-            case LAYOUT: return "Layout";
-            case INHERITANCE: return "Inherit";
-            default: return k.getDisplayName();
-        }
-    }
-
-    /** ツールチップの末尾に付ける補助説明 (必要な図種だけ案内)。 */
-    private static String tooltipExtra(DiagramKind k) {
-        switch (k) {
-            case SEQUENCE:   return " (choose entry from Diagram menu)";
-            case ACTIVITY:   return " (choose method from Diagram menu)";
-            case CALLGRAPH:  return " — shows which functions are called from entry";
-            case LAYOUT:     return " (choose layout file from Diagram menu)";
-            case NAVIGATION: return " (choose navigation file from Diagram menu)";
-            case COMMON:     return " — top-N most referenced classes (fan-in)";
-            default: return "";
         }
     }
 
@@ -861,14 +480,6 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
-    private static JButton makeButton(String text, String tooltip,
-                                       java.awt.event.ActionListener listener) {
-        JButton b = new JButton(text);
-        b.setToolTipText(tooltip);
-        b.setFocusable(false);
-        b.addActionListener(listener);
-        return b;
-    }
 
     // --- イベント処理 ---------------------------------------------------------
 
@@ -900,7 +511,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: package " + pkg);
-        updateAvailableDiagrams(DIAGRAMS_PACKAGE);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_PACKAGE);
         showHomeTab();
         refreshDiagram();
     }
@@ -911,7 +522,7 @@ public class UmlMainFrame extends JFrame {
      */
     private void onTreeClassSelected(JavaClassInfo cls) {
         if (cls == null) {
-            updateAvailableDiagrams(DIAGRAMS_ALL);
+            updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ALL);
             return;
         }
         String fqn = cls.getQualifiedName();
@@ -928,7 +539,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
-        updateAvailableDiagrams(DIAGRAMS_JAVA_TYPE);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_JAVA_TYPE);
         showHomeTab();
         refreshDiagram();
     }
@@ -949,7 +560,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: module " + module);
-        updateAvailableDiagrams(DIAGRAMS_MODULE);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_MODULE);
         showHomeTab();
         refreshDiagram();
     }
@@ -1036,7 +647,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
-        updateAvailableDiagrams(DIAGRAMS_ANDROID);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ANDROID);
         showHomeTab();
         refreshDiagram();
     }
@@ -1074,7 +685,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
-        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
         showHomeTab();
         refreshDiagram();
     }
@@ -1143,7 +754,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
-        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
         showHomeTab();
         refreshDiagram();
     }
@@ -1156,7 +767,7 @@ public class UmlMainFrame extends JFrame {
         if (item != null) {
             item.setSelected(true);
         }
-        updateAvailableDiagrams(DIAGRAMS_METHOD);
+        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
         showHomeTab();
         refreshDiagram();
     }

@@ -236,22 +236,50 @@ public final class MethodUsageReport {
                     .append(csv(r.classFqn)).append(',')
                     .append(csv(r.kind)).append(',')
                     .append(csv(r.signature)).append(',')
-                    .append(csv(r.listener ? "" : String.join("; ", r.callers))).append(',')
-                    .append(csv(String.join("; ", r.conditions))).append(',')
+                    .append(csv(callersText(r))).append(',')
+                    .append(csv(conditionsText(r))).append(',')
                     .append(csv(r.derivation.reason)).append('\n');
         }
         if (actions != null) {
             for (UiActionEntry a : actions) {
+                String component = a.componentId.isEmpty() ? "(コンポーネント指定なし)" : a.componentId;
+                String source = actionSource(a);
                 out.append(csv("ui-action")).append(',')
-                        .append(csv(a.componentId)).append(',')
+                        .append(csv(component)).append(',')
                         .append(csv(a.actionType.label)).append(',')
                         .append(csv(a.handler)).append(',')
-                        .append(csv(actionSource(a))).append(',')
-                        .append(csv("")).append(',')
+                        .append(csv(source.isEmpty() ? "(場所不明)" : source)).append(',')
+                        .append(csv("(UIトリガ)")).append(',')
                         .append(csv("UIアクション（XML/Compose/メニュー検出）")).append('\n');
             }
         }
         return out.toString();
+    }
+
+    /** callers 列の本文（プレーン）。空欄になりうる箇所は理由付きで埋める。 */
+    private static String callersText(Row r) {
+        if (r.listener) {
+            return "(リスナー登録)";
+        }
+        if (r.derivation == Derivation.NO_CALLER) {
+            return "(呼び出し元なし: 外部/起点/未使用の可能性)";
+        }
+        return String.join("; ", r.callers);
+    }
+
+    /** conditions 列の本文（プレーン）。空欄になりうる箇所は理由付きで埋める。 */
+    private static String conditionsText(Row r) {
+        switch (r.derivation) {
+            case LISTENER:
+            case GUARDED:
+                return String.join("; ", r.conditions);
+            case DIRECT:
+                return "(直接呼び出し)";
+            case UNANALYZED:
+                return "(未算出: Kotlin等で分岐木なし)";
+            default:
+                return "(呼び出し元なし)";
+        }
     }
 
     /** 算出手順と理由凡例を Markdown で追記する。 */

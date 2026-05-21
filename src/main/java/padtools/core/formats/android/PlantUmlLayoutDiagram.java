@@ -237,13 +237,13 @@ public final class PlantUmlLayoutDiagram {
     }
 
     private static void emitLegend(StringBuilder out, Options o) {
-        out.append("legend right\n");
-        out.append("== Layout View Hierarchy ==\n");
-        out.append("rectangle <<ViewGroup>>   ViewGroup (children)\n");
-        out.append("rectangle <<View>>        leaf View\n");
+        out.append("legend top left\n");
+        out.append("== Layout ビュー階層 ==\n");
+        out.append("rectangle <<ViewGroup>>   ViewGroup (子ビューあり)\n");
+        out.append("rectangle <<View>>        末端 View\n");
         out.append("rectangle <<include>>     <include layout=...>\n");
         out.append("rectangle <<fragment>>    <fragment android:name=...>\n");
-        out.append("rectangle <<merge>>       <merge> root\n");
+        out.append("rectangle <<merge>>       <merge> ルート\n");
         out.append("MP = match_parent, WC = wrap_content\n");
         if (o.maxNodes > 0) {
             out.append("maxNodes = ").append(o.maxNodes).append('\n');

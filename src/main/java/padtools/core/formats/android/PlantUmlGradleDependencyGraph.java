@@ -175,7 +175,7 @@ public final class PlantUmlGradleDependencyGraph {
     }
 
     private static void emitLegend(StringBuilder out, Options o) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== Gradle 依存グラフ ==\n");
         out.append("component <<application>>  com.android.application\n");
         out.append("component <<library>>      com.android.library\n");

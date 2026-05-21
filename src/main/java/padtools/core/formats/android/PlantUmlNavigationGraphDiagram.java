@@ -240,14 +240,14 @@ public final class PlantUmlNavigationGraphDiagram {
     }
 
     private static void emitLegend(StringBuilder out) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== Navigation Graph ==\n");
-        out.append("state <<fragment>>    Fragment destination\n");
-        out.append("state <<activity>>    Activity destination\n");
-        out.append("state <<dialog>>      Dialog destination\n");
-        out.append("state <<navigation>>  Nested navigation\n");
-        out.append("state <<include>>     Included graph\n");
-        out.append("[*] --> start destination\n");
+        out.append("state <<fragment>>    Fragment 画面\n");
+        out.append("state <<activity>>    Activity 遷移先\n");
+        out.append("state <<dialog>>      Dialog 遷移先\n");
+        out.append("state <<navigation>>  ネストした Navigation\n");
+        out.append("state <<include>>     インクルードされた Navigation\n");
+        out.append("[*] --> スタート destination\n");
         out.append("endlegend\n");
     }
 

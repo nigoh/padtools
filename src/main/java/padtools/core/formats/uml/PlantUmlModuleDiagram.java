@@ -134,7 +134,7 @@ public final class PlantUmlModuleDiagram {
     }
 
     private static void emitLegend(StringBuilder out) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== モジュール依存グラフ ==\n");
         out.append("component    module-info.java で宣言されたモジュール\n");
         out.append("A --> B      A requires B (通常依存)\n");

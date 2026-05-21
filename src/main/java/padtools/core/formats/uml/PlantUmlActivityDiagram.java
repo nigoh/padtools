@@ -526,7 +526,7 @@ public final class PlantUmlActivityDiagram {
     }
 
     private static void emitLegend(StringBuilder out) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== アクティビティ図 ==\n");
         out.append(":action;           アクション (メソッド呼び出し / return / throw)\n");
         out.append(":Type var = expr;  ローカル変数宣言\n");

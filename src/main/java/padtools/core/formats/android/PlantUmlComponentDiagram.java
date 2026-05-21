@@ -172,7 +172,7 @@ public final class PlantUmlComponentDiagram {
     }
 
     private static void emitLegend(StringBuilder out, AndroidProjectAnalysis a, Options o) {
-        out.append("legend right\n");
+        out.append("legend top left\n");
         out.append("== Android コンポーネント図 ==\n");
         out.append("component <<Activity>>          画面 (Activity)\n");
         out.append("component <<Service>>           サービス\n");

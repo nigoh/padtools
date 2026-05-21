@@ -1280,10 +1280,16 @@ public class UmlMainFrame extends JFrame {
         String entry = simpleName + "." + methodName;
         JPopupMenu menu = new JPopupMenu();
         JMenuItem seqItem = new JMenuItem("Sequence Diagram");
-        seqItem.addActionListener(e -> switchToSequenceDiagram(entry));
+        seqItem.addActionListener(e -> {
+            switchToSequenceDiagram(entry);
+            treePanel.selectMethodNode(classFqn, methodName);
+        });
         menu.add(seqItem);
         JMenuItem actItem = new JMenuItem("Activity Diagram");
-        actItem.addActionListener(e -> switchToActivityDiagram(entry));
+        actItem.addActionListener(e -> {
+            switchToActivityDiagram(entry);
+            treePanel.selectMethodNode(classFqn, methodName);
+        });
         menu.add(actItem);
         menu.show(event.getComponent(), event.getX(), event.getY());
     }
@@ -1306,6 +1312,7 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Drill-down: " + fqn);
+        treePanel.selectClassNode(fqn);
         refreshDiagram();
     }
 
@@ -1472,10 +1479,27 @@ public class UmlMainFrame extends JFrame {
             case CLASS:
                 scopeToClass(result.ownerQn, result.simpleName);
                 break;
-            case METHOD:
+            case METHOD: {
                 String simple = extractSimpleClass(result.ownerQn);
-                switchToSequenceDiagram(simple + "." + result.simpleName);
+                String methodEntry = simple + "." + result.simpleName;
+                String ownerFqn = result.ownerQn;
+                String methodName = result.simpleName;
+                JPopupMenu menu = new JPopupMenu();
+                JMenuItem seqItem = new JMenuItem("Sequence Diagram");
+                seqItem.addActionListener(e -> {
+                    switchToSequenceDiagram(methodEntry);
+                    treePanel.selectMethodNode(ownerFqn, methodName);
+                });
+                menu.add(seqItem);
+                JMenuItem actItem = new JMenuItem("Activity Diagram");
+                actItem.addActionListener(e -> {
+                    switchToActivityDiagram(methodEntry);
+                    treePanel.selectMethodNode(ownerFqn, methodName);
+                });
+                menu.add(actItem);
+                menu.show(this, getWidth() / 2, getHeight() / 2);
                 break;
+            }
             case FIELD:
                 scopeToClass(result.ownerQn,
                         extractSimpleClass(result.ownerQn) + "." + result.simpleName);
@@ -1497,7 +1521,30 @@ public class UmlMainFrame extends JFrame {
             item.setSelected(true);
         }
         status.setText("Scope: " + statusLabel + " (+1 hop)");
+        treePanel.selectClassNode(fqn);
         refreshDiagram();
+    }
+
+    /**
+     * "SimpleClass.method" 形式のエントリからクラスの FQN を検索し、
+     * 左ツリーパネルの対応するメソッドノードを選択する。
+     */
+    private void syncTreeToMethodByEntry(String entry) {
+        if (entry == null || !cache.isLoaded()) {
+            return;
+        }
+        int dot = entry.lastIndexOf('.');
+        if (dot < 0) {
+            return;
+        }
+        String simpleName = entry.substring(0, dot);
+        String methodName = entry.substring(dot + 1);
+        for (padtools.core.formats.uml.JavaClassInfo c : cache.getClasses()) {
+            if (simpleName.equals(c.getSimpleName())) {
+                treePanel.selectMethodNode(c.getQualifiedName(), methodName);
+                return;
+            }
+        }
     }
 
     private static String extractSimpleClass(String qn) {
@@ -1534,6 +1581,7 @@ public class UmlMainFrame extends JFrame {
             if (item != null) {
                 item.setSelected(true);
             }
+            syncTreeToMethodByEntry(picked);
             refreshDiagram();
         }
     }
@@ -1612,6 +1660,7 @@ public class UmlMainFrame extends JFrame {
             if (item != null) {
                 item.setSelected(true);
             }
+            syncTreeToMethodByEntry(picked);
             refreshDiagram();
         }
     }

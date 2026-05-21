@@ -520,9 +520,11 @@ public class MainCliTest {
         Main.main(new String[]{"--function-list", "--function-list-format", "csv",
                 "-o", out.getAbsolutePath(), root.getAbsolutePath()});
         String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
-        assertTrue(csv, csv.startsWith("category,class,kind,signature,callers,conditions"));
+        assertTrue(csv, csv.startsWith(
+                "category,class,kind,signature,callers,conditions,reason"));
         assertTrue(csv, csv.contains("method,x.Svc,CLASS,"));
-        // helper() の呼び出しは if(f) 配下なので条件列に反映される
+        // helper() の呼び出しは if(f) 配下なので条件列・reason 列に反映される
         assertTrue(csv, csv.contains("if (f)"));
+        assertTrue(csv, csv.contains("分岐ガード"));
     }
 }

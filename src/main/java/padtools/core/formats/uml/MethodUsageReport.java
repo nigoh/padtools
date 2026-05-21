@@ -13,6 +13,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,24 +21,43 @@ import java.util.Set;
  * 全クラスの関数（メソッド）一覧を、各関数の「利用側（呼び出し元）」と
  * 「実行条件（呼び出しを囲む分岐条件 / リスナーの UI トリガ）」付きで出力する。
  *
- * <p>出力形式は {@link Format} で選択する（Markdown テーブル または CSV）。
- * 署名整形は {@link PlantUmlClassDiagram#emitMethod} と同等のロジックをプレーン化したもの。
- * 呼び出し元は {@link ReferenceIndex}、実行条件はパース済み statement tree の分岐ラベルから求める。
- * ボタン押下時のリスナーは、コード内のラムダ/匿名本体に加え、{@code UiActionScanner} が検出した
- * XML / Compose / メニューのアクションを「## UI Actions」セクション（CSV では ui-action 行）に併記する。</p>
+ * <p>出力形式は {@link Format} で選択する（Markdown テーブル または CSV）。空欄になりうる箇所は
+ * 必ず理由付きの表記（{@link Derivation}）に置き換え、Markdown 末尾に「## 算出ロジック」節として
+ * 算出手順と理由凡例を併記する。署名整形は {@link PlantUmlClassDiagram#emitMethod} 相当をプレーン化、
+ * 呼び出し元は {@link ReferenceIndex}、実行条件はパース済み statement tree の分岐ラベルから求める。</p>
  */
 public final class MethodUsageReport {
 
     /** 出力形式。 */
     public enum Format {
-        /** Markdown テーブル（1メソッド=1行 + UI Actions 表）。 */
+        /** Markdown テーブル（1メソッド=1行 + UI Actions 表 + 算出ロジック節）。 */
         TABLE,
-        /** カンマ区切り（スプレッドシート取込向け）。 */
+        /** カンマ区切り（スプレッドシート取込向け、reason 列付き）。 */
         CSV;
 
         /** 文字列 ("table" / "csv") から形式を解決する。不明・null は TABLE。 */
         public static Format fromString(String s) {
             return s != null && "csv".equalsIgnoreCase(s.trim()) ? CSV : TABLE;
+        }
+    }
+
+    /** 利用側・実行条件をどう導出したか（＝空欄理由）の分類。 */
+    private enum Derivation {
+        /** リスナー本体。実行条件は UI トリガ。 */
+        LISTENER("リスナー本体（UIトリガ）"),
+        /** 解析対象コード内に呼び出し箇所が見つからない。 */
+        NO_CALLER("呼び出し元なし（外部/起点/未使用/動的呼び出しの可能性）"),
+        /** 呼び出し元があり、分岐に囲まれている。 */
+        GUARDED("分岐ガードあり"),
+        /** 呼び出し元はあるが分岐に囲まれていない。 */
+        DIRECT("直接呼び出し（分岐に囲まれていない）"),
+        /** 呼び出し元が Kotlin 等で構文木を持たず、分岐条件を算出できない。 */
+        UNANALYZED("未算出（Kotlin軽量解析で分岐木なし）");
+
+        final String reason;
+
+        Derivation(String reason) {
+            this.reason = reason;
         }
     }
 
@@ -66,15 +86,17 @@ public final class MethodUsageReport {
         final boolean listener;
         final List<String> callers;
         final List<String> conditions;
+        final Derivation derivation;
 
         Row(String classFqn, String kind, String signature, boolean listener,
-            List<String> callers, List<String> conditions) {
+            List<String> callers, List<String> conditions, Derivation derivation) {
             this.classFqn = classFqn;
             this.kind = kind;
             this.signature = signature;
             this.listener = listener;
             this.callers = callers;
             this.conditions = conditions;
+            this.derivation = derivation;
         }
     }
 
@@ -102,7 +124,7 @@ public final class MethodUsageReport {
                 List<String> trigger = new ArrayList<>();
                 trigger.add(triggerOf(listener.getName()));
                 rows.add(new Row(qn, kind, signature(listener), true,
-                        new ArrayList<>(), trigger));
+                        new ArrayList<>(), trigger, Derivation.LISTENER));
             }
         }
         return rows;
@@ -115,8 +137,16 @@ public final class MethodUsageReport {
                 : refIndex.sites(ReferenceKey.ofMethod(qn, nz(m.getName())));
         List<String> callers = new ArrayList<>();
         Set<String> conditions = new LinkedHashSet<>();
+        boolean hasJava = false;
+        boolean hasKotlin = false;
         for (ReferenceSite s : sites) {
             callers.add(callerLabel(s));
+            String f = nz(s.getFile()).toLowerCase(Locale.ROOT);
+            if (f.endsWith(".java")) {
+                hasJava = true;
+            } else if (f.endsWith(".kt")) {
+                hasKotlin = true;
+            }
             JavaClassInfo caller = byQn.get(s.getCallerFqn());
             if (caller != null && !nz(s.getCallerMethod()).isEmpty()) {
                 for (JavaMethodInfo cm : caller.getMethods()) {
@@ -127,7 +157,17 @@ public final class MethodUsageReport {
                 }
             }
         }
-        return new Row(qn, kind, signature(m), false, callers, new ArrayList<>(conditions));
+        Derivation d;
+        if (sites.isEmpty()) {
+            d = Derivation.NO_CALLER;
+        } else if (!conditions.isEmpty()) {
+            d = Derivation.GUARDED;
+        } else if (hasJava || !hasKotlin) {
+            d = Derivation.DIRECT;
+        } else {
+            d = Derivation.UNANALYZED;
+        }
+        return new Row(qn, kind, signature(m), false, callers, new ArrayList<>(conditions), d);
     }
 
     private static String renderTable(List<Row> rows, List<UiActionEntry> actions) {
@@ -147,22 +187,34 @@ public final class MethodUsageReport {
         if (actions != null && !actions.isEmpty()) {
             out.append("## UI Actions（ボタン押下時のリスナー: XML / Compose / メニュー含む）\n\n");
             out.append(MarkdownActionReport.render(actions));
+            out.append('\n');
         }
+        appendMethodology(out);
         return out.toString();
     }
 
     private static String callersCell(Row r) {
         if (r.listener) {
-            return "—";
+            return "—（リスナー登録）";
         }
-        return r.callers.isEmpty() ? "(呼び出し元なし)" : joinMd(r.callers);
+        if (r.derivation == Derivation.NO_CALLER) {
+            return "(呼び出し元なし: 外部/起点/未使用の可能性)";
+        }
+        return joinMd(r.callers);
     }
 
     private static String conditionsCell(Row r) {
-        if (r.listener) {
-            return joinMd(r.conditions);
+        switch (r.derivation) {
+            case LISTENER:
+            case GUARDED:
+                return joinMd(r.conditions);
+            case DIRECT:
+                return "(直接呼び出し)";
+            case UNANALYZED:
+                return "(未算出: Kotlin等で分岐木なし)";
+            default:
+                return "(呼び出し元なし)";
         }
-        return r.conditions.isEmpty() ? "(直接呼び出し)" : joinMd(r.conditions);
     }
 
     private static String joinMd(List<String> items) {
@@ -178,14 +230,15 @@ public final class MethodUsageReport {
 
     private static String renderCsv(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
-        out.append("category,class,kind,signature,callers,conditions\n");
+        out.append("category,class,kind,signature,callers,conditions,reason\n");
         for (Row r : rows) {
             out.append(csv(r.listener ? "listener" : "method")).append(',')
                     .append(csv(r.classFqn)).append(',')
                     .append(csv(r.kind)).append(',')
                     .append(csv(r.signature)).append(',')
                     .append(csv(r.listener ? "" : String.join("; ", r.callers))).append(',')
-                    .append(csv(String.join("; ", r.conditions))).append('\n');
+                    .append(csv(String.join("; ", r.conditions))).append(',')
+                    .append(csv(r.derivation.reason)).append('\n');
         }
         if (actions != null) {
             for (UiActionEntry a : actions) {
@@ -194,10 +247,35 @@ public final class MethodUsageReport {
                         .append(csv(a.actionType.label)).append(',')
                         .append(csv(a.handler)).append(',')
                         .append(csv(actionSource(a))).append(',')
-                        .append(csv("")).append('\n');
+                        .append(csv("")).append(',')
+                        .append(csv("UIアクション（XML/Compose/メニュー検出）")).append('\n');
             }
         }
         return out.toString();
+    }
+
+    /** 算出手順と理由凡例を Markdown で追記する。 */
+    private static void appendMethodology(StringBuilder out) {
+        out.append("## 算出ロジック (How values are derived)\n\n");
+        out.append("- **利用側 (callers)**: 逆参照インデックス (ReferenceIndex) で"
+                + "「このメソッドを呼んでいる箇所」を収集し、`呼び出し元クラスFQN.メソッド (ファイル名[:行])`"
+                + " で列挙する。空欄理由 = 解析対象ソース内に呼び出しが見つからない"
+                + "（フレームワーク/ライフサイクル起点・外部公開API・未使用・リフレクション等の動的呼び出し）。\n");
+        out.append("- **実行条件 (conditions)**: 各呼び出し元メソッドの構文木 (statement tree) を辿り、"
+                + "当該呼び出しを囲む if/while/switch/try 等の分岐ラベルを根→葉で連鎖 (`→`) して記録する。"
+                + "呼び出し元メソッド単位で集約し、複数経路は表では `<br>`・CSV では `;` 区切りで併記する。\n");
+        out.append("- **リスナー本体 ([listener])**: `setOnXxxListener(...)` 等へ渡したラムダ/匿名本体を"
+                + " SAM 解決で抽出する。実行条件は UI トリガ（onClick→クリック 等）。\n");
+        out.append("- **UI Actions**: UiActionScanner が XML(`android:onClick`) / Compose(`onClick`)"
+                + " / メニューのハンドラを横断検出する。\n\n");
+        out.append("### 理由凡例 (実行条件の表記)\n\n");
+        out.append("| 表記 | 意味 |\n");
+        out.append("|---|---|\n");
+        out.append("| (直接呼び出し) | 呼び出し元はあるが分岐に囲まれていない（無条件で実行） |\n");
+        out.append("| (呼び出し元なし) | 呼び出し箇所が無いため条件算出の対象がない |\n");
+        out.append("| (未算出: Kotlin等で分岐木なし) | "
+                + "呼び出し元が Kotlin 軽量解析対象で構文木を持たず、分岐条件を判定できない |\n");
+        out.append("| if(...) → for(...) 等 | 呼び出しを囲む分岐の入れ子チェーン（ガード条件） |\n");
     }
 
     private static String actionSource(UiActionEntry a) {
@@ -246,7 +324,7 @@ public final class MethodUsageReport {
 
     private static String branchLabel(JavaMethodInfo.Branch br) {
         String type = nz(br.getType());
-        String label = nz(br.getLabel());
+        String label = nz(br.getLabel()).replaceAll("\\s+", " ").trim();
         return label.isEmpty() ? type : type + " (" + label + ")";
     }
 

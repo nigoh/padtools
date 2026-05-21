@@ -19,6 +19,9 @@ public class MethodUsageReportTest {
         // refIndex 無しなら利用側なし・直接呼び出し
         assertTrue(md, md.contains("利用側"));
         assertTrue(md, md.contains("実行条件"));
+        // 空欄は理由付きで表記し、算出ロジック節を末尾に出す
+        assertTrue(md, md.contains("呼び出し元なし"));
+        assertTrue(md, md.contains("算出ロジック"));
     }
 
     @Test
@@ -27,10 +30,13 @@ public class MethodUsageReportTest {
                 "package x; public class Foo { public int add(int a, int b) { return a + b; } }");
         String csv = MethodUsageReport.render(classes, null, Collections.emptyList(),
                 MethodUsageReport.Format.CSV);
-        assertTrue(csv, csv.startsWith("category,class,kind,signature,callers,conditions"));
+        assertTrue(csv, csv.startsWith(
+                "category,class,kind,signature,callers,conditions,reason"));
         // 署名にカンマを含むためクォートされる
         assertTrue(csv, csv.contains("\"+ add(a: int, b: int): int\""));
         assertTrue(csv, csv.contains("method,x.Foo,CLASS,"));
+        // reason 列に空欄理由が入る
+        assertTrue(csv, csv.contains("呼び出し元なし"));
     }
 
     @Test

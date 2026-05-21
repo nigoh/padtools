@@ -527,4 +527,39 @@ public class MainCliTest {
         assertTrue(csv, csv.contains("if (f)"));
         assertTrue(csv, csv.contains("分岐ガード"));
     }
+
+    @Test
+    public void testFunctionListConditionCoverage() throws Exception {
+        File root = tmp.newFolder("ProjCov");
+        File pkg = new File(root, "app/src/main/java/t");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Sample.java"),
+                "package t; public class Sample {"
+                + " void entry(int x) {"
+                + "  target();"
+                + "  if (x > 0) { target(); }"
+                + "  while (x > 1) { whileCall(); }"
+                + "  for (int i = 0; i < x; i++) { forCall(); }"
+                + "  switch (x) { case 1: swCall(); break; default: swCall(); }"
+                + "  try { tryCall(); } catch (Exception e) { catchCall(); }"
+                + "  if (x > 0) { if (x > 5) { nested(); } }"
+                + " }"
+                + " void target() {} void whileCall() {} void forCall() {}"
+                + " void swCall() {} void tryCall() {} void catchCall() {} void nested() {} }");
+        File out = new File(tmp.getRoot(), "cov.md");
+        Main.main(new String[]{"--function-list", "-o", out.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        // 無条件呼び出し + if 内呼び出しの両経路を併記する
+        assertTrue(md, md.contains("(直接呼び出し)<br>if (x > 0)"));
+        // 各分岐種別を網羅
+        assertTrue(md, md.contains("while (x > 1)"));
+        assertTrue(md, md.contains("for (int i = 0; i < x; i++)"));
+        assertTrue(md, md.contains("case (1)"));
+        assertTrue(md, md.contains("default"));
+        assertTrue(md, md.contains("try"));
+        assertTrue(md, md.contains("catch (Exception e)"));
+        // ネストした分岐は → で連鎖
+        assertTrue(md, md.contains("if (x > 0) → if (x > 5)"));
+    }
 }

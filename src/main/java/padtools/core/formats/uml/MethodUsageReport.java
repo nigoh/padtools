@@ -61,6 +61,9 @@ public final class MethodUsageReport {
         }
     }
 
+    /** 分岐に囲まれていない（無条件）呼び出しを表すラベル。条件集合内でも併記できる。 */
+    private static final String DIRECT_CALL = "(直接呼び出し)";
+
     private MethodUsageReport() {
     }
 
@@ -157,12 +160,21 @@ public final class MethodUsageReport {
                 }
             }
         }
+        boolean hasGuard = false;
+        for (String c : conditions) {
+            if (!DIRECT_CALL.equals(c)) {
+                hasGuard = true;
+                break;
+            }
+        }
         Derivation d;
         if (sites.isEmpty()) {
             d = Derivation.NO_CALLER;
-        } else if (!conditions.isEmpty()) {
+        } else if (hasGuard) {
+            // 一部が分岐内（無条件呼び出しがあれば conditions に併記される）
             d = Derivation.GUARDED;
-        } else if (hasJava || !hasKotlin) {
+        } else if (!conditions.isEmpty() || hasJava || !hasKotlin) {
+            // 構文木内で無条件にのみ出現、または Java だが呼び出し位置を特定できない（ラムダ内等）
             d = Derivation.DIRECT;
         } else {
             d = Derivation.UNANALYZED;
@@ -209,7 +221,7 @@ public final class MethodUsageReport {
             case GUARDED:
                 return joinMd(r.conditions);
             case DIRECT:
-                return "(直接呼び出し)";
+                return DIRECT_CALL;
             case UNANALYZED:
                 return "(未算出: Kotlin等で分岐木なし)";
             default:
@@ -274,7 +286,7 @@ public final class MethodUsageReport {
             case GUARDED:
                 return String.join("; ", r.conditions);
             case DIRECT:
-                return "(直接呼び出し)";
+                return DIRECT_CALL;
             case UNANALYZED:
                 return "(未算出: Kotlin等で分岐木なし)";
             default:
@@ -290,16 +302,24 @@ public final class MethodUsageReport {
                 + " で列挙する。空欄理由 = 解析対象ソース内に呼び出しが見つからない"
                 + "（フレームワーク/ライフサイクル起点・外部公開API・未使用・リフレクション等の動的呼び出し）。\n");
         out.append("- **実行条件 (conditions)**: 各呼び出し元メソッドの構文木 (statement tree) を辿り、"
-                + "当該呼び出しを囲む if/while/switch/try 等の分岐ラベルを根→葉で連鎖 (`→`) して記録する。"
-                + "呼び出し元メソッド単位で集約し、複数経路は表では `<br>`・CSV では `;` 区切りで併記する。\n");
+                + "当該呼び出しを囲む if/else/while/for/switch(case/default)/try(catch/finally) 等の分岐ラベルを"
+                + "根→葉で連鎖 (`→`) して記録する。呼び出し元メソッド単位で集約し、複数経路は表では `<br>`・"
+                + "CSV では `;` 区切りで併記する。同一メソッドが無条件呼び出しと分岐内呼び出しの両方を持つ場合は、"
+                + "`(直接呼び出し)` と分岐条件を併記する。\n");
         out.append("- **リスナー本体 ([listener])**: `setOnXxxListener(...)` 等へ渡したラムダ/匿名本体を"
                 + " SAM 解決で抽出する。実行条件は UI トリガ（onClick→クリック 等）。\n");
         out.append("- **UI Actions**: UiActionScanner が XML(`android:onClick`) / Compose(`onClick`)"
-                + " / メニューのハンドラを横断検出する。\n\n");
+                + " / メニューのハンドラを横断検出する。\n");
+        out.append("- **既知の制約**: (1) 呼び出し元/実行条件はメソッド名で対応付けるため、"
+                + "オーバーロード（同名・異シグネチャ）は呼び出し情報が合算される。"
+                + "(2) ラムダ/匿名内部クラスの本体「内側」の分岐条件は辿らない"
+                + "（その呼び出しは登録メソッド側の `(直接呼び出し)` として扱う）。"
+                + "(3) Kotlin は軽量解析のため分岐条件を算出しない（`(未算出)` と表示）。\n\n");
         out.append("### 理由凡例 (実行条件の表記)\n\n");
         out.append("| 表記 | 意味 |\n");
         out.append("|---|---|\n");
-        out.append("| (直接呼び出し) | 呼び出し元はあるが分岐に囲まれていない（無条件で実行） |\n");
+        out.append("| (直接呼び出し) | 呼び出し元はあるが分岐に囲まれていない（無条件で実行）。"
+                + "分岐条件と併記される場合は両方の経路があることを示す |\n");
         out.append("| (呼び出し元なし) | 呼び出し箇所が無いため条件算出の対象がない |\n");
         out.append("| (未算出: Kotlin等で分岐木なし) | "
                 + "呼び出し元が Kotlin 軽量解析対象で構文木を持たず、分岐条件を判定できない |\n");
@@ -331,14 +351,15 @@ public final class MethodUsageReport {
     /**
      * caller の statement tree を再帰走査し、{@code calleeName} の呼び出しを囲む分岐条件
      * （if/while/switch/try 等のラベル連鎖）を {@code acc} に集約する。
-     * 直接（無条件）呼び出しは記録しない（呼び出し元側で「直接呼び出し」と表示）。
+     * 分岐に囲まれない（無条件）呼び出しは {@link #DIRECT_CALL} として記録するため、
+     * 同じメソッドが「無条件呼び出し」と「分岐内呼び出し」の両方を持つ場合に両者を併記できる。
      */
     private static void collectConditions(List<JavaMethodInfo.Statement> stmts,
                                           Deque<String> ctx, String calleeName, Set<String> acc) {
         for (JavaMethodInfo.Statement s : stmts) {
             if (s instanceof JavaMethodInfo.Call) {
-                if (calleeName.equals(((JavaMethodInfo.Call) s).getMethodName()) && !ctx.isEmpty()) {
-                    acc.add(String.join(" → ", ctx));
+                if (calleeName.equals(((JavaMethodInfo.Call) s).getMethodName())) {
+                    acc.add(ctx.isEmpty() ? DIRECT_CALL : String.join(" → ", ctx));
                 }
             } else if (s instanceof JavaMethodInfo.Block) {
                 for (JavaMethodInfo.Branch br : ((JavaMethodInfo.Block) s).getBranches()) {

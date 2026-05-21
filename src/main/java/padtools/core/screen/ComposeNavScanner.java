@@ -35,6 +35,14 @@ public final class ComposeNavScanner {
     private static final Pattern NAVIGATE_CALL = Pattern.compile(
             "\\b(?:[A-Za-z_$][A-Za-z0-9_$]*)\\s*\\.\\s*navigate\\s*\\(\\s*\"([^\"]+)\"");
 
+    /**
+     * {@code navigate(Screen.Detail.route)} 等の非文字列 route - グループ 1: route 式。
+     * {@code R.id.*} (Jetpack Nav。IntentNavigationDetector が担当) と関数呼び出し形は除外する。
+     */
+    private static final Pattern NAVIGATE_NONSTRING = Pattern.compile(
+            "\\bnavigate\\s*\\(\\s*(?!R\\.id)"
+                    + "([A-Z][A-Za-z0-9_$]*(?:\\.[A-Za-z0-9_$]+)*)\\s*(?=[,)])");
+
     /** {@code @Composable fun Name(...)} - グループ 1: composable 関数名。 */
     private static final Pattern COMPOSABLE_FUN = Pattern.compile(
             "@Composable[\\s\\n]+(?:public\\s+|private\\s+|internal\\s+)?fun\\s+"
@@ -113,38 +121,85 @@ public final class ComposeNavScanner {
         }
 
         // 呼び出し元クラスの FQN を推定 (package + 最初に出る class/object)
-        String fqn = inferFqn(src);
+        NavCtx ctx = new NavCtx(inferFqn(src), src, filePath,
+                composableSpanRoute, funSpans, funNames);
 
-        // navigate("route") を走査
+        // navigate("route") (文字列) を走査
         Matcher gm = NAVIGATE_CALL.matcher(src);
         while (gm.find()) {
-            String targetRoute = gm.group(1);
-            int line = lineOf(src, gm.start());
-            // 呼び出し元の判定:
-            // 1. composable("route") { ... } ブロック内なら、その route が "from"
-            // 2. そうでなければ最も内側の @Composable fun 名を "from"
-            String fromLabel = "";
-            for (Map.Entry<int[], String> e : composableSpanRoute.entrySet()) {
-                int[] sp = e.getKey();
-                if (gm.start() >= sp[0] && gm.start() <= sp[1]) {
-                    fromLabel = e.getValue();
-                }
-            }
-            if (fromLabel.isEmpty()) {
-                int[] enclosing = innermostSpan(gm.start(), funSpans);
-                if (enclosing != null) {
-                    int idx = funSpans.indexOf(enclosing);
-                    fromLabel = funNames.get(idx);
-                }
-            }
-            if (fromLabel.isEmpty()) {
-                fromLabel = "(unknown)";
-            }
-            r.transitions.add(new ScreenTransition(
-                    fqn, fromLabel, targetRoute,
-                    filePath, line, ScreenTransition.Kind.START_ACTIVITY));
+            emitNavigate(r, ctx, gm.group(1), gm.start());
+        }
+        // navigate(Screen.Detail.route) (非文字列) を走査
+        Matcher nm2 = NAVIGATE_NONSTRING.matcher(src);
+        while (nm2.find()) {
+            emitNavigate(r, ctx, routeNameOf(nm2.group(1)), nm2.start());
         }
         return r;
+    }
+
+    /** navigate 呼び出しの遷移元解決に必要なファイル単位の文脈。 */
+    private static final class NavCtx {
+        final String fqn;
+        final String src;
+        final String filePath;
+        final Map<int[], String> composableSpanRoute;
+        final List<int[]> funSpans;
+        final List<String> funNames;
+
+        NavCtx(String fqn, String src, String filePath,
+               Map<int[], String> composableSpanRoute,
+               List<int[]> funSpans, List<String> funNames) {
+            this.fqn = fqn;
+            this.src = src;
+            this.filePath = filePath;
+            this.composableSpanRoute = composableSpanRoute;
+            this.funSpans = funSpans;
+            this.funNames = funNames;
+        }
+    }
+
+    /** route 式 ({@code Screen.Detail.route} 等) から表示用のroute名を取り出す。 */
+    private static String routeNameOf(String expr) {
+        String e = expr;
+        // 末尾の .route / .name / .destination を取り除く
+        for (String suffix : new String[]{".route", ".name", ".destination"}) {
+            if (e.endsWith(suffix)) {
+                e = e.substring(0, e.length() - suffix.length());
+                break;
+            }
+        }
+        int dot = e.lastIndexOf('.');
+        return dot < 0 ? e : e.substring(dot + 1);
+    }
+
+    private static void emitNavigate(Result r, NavCtx ctx, String targetRoute, int start) {
+        if (targetRoute == null || targetRoute.isEmpty()) {
+            return;
+        }
+        int line = lineOf(ctx.src, start);
+        // 呼び出し元の判定:
+        // 1. composable("route") { ... } ブロック内なら、その route が "from"
+        // 2. そうでなければ最も内側の @Composable fun 名を "from"
+        String fromLabel = "";
+        for (Map.Entry<int[], String> e : ctx.composableSpanRoute.entrySet()) {
+            int[] sp = e.getKey();
+            if (start >= sp[0] && start <= sp[1]) {
+                fromLabel = e.getValue();
+            }
+        }
+        if (fromLabel.isEmpty()) {
+            int[] enclosing = innermostSpan(start, ctx.funSpans);
+            if (enclosing != null) {
+                int idx = ctx.funSpans.indexOf(enclosing);
+                fromLabel = ctx.funNames.get(idx);
+            }
+        }
+        if (fromLabel.isEmpty()) {
+            fromLabel = "(unknown)";
+        }
+        r.transitions.add(new ScreenTransition(
+                ctx.fqn, fromLabel, targetRoute,
+                ctx.filePath, line, ScreenTransition.Kind.COMPOSE_NAVIGATE));
     }
 
     private static String inferFqn(String src) {

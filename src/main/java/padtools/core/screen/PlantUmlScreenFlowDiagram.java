@@ -77,6 +77,9 @@ public final class PlantUmlScreenFlowDiagram {
             case START_FOR_RESULT: return "-[#1f6fb0]->";
             case SET_CLASS: return "-[#888888,dashed]->";
             case SCREEN_PUSH: return "-[#2e8b57]->";
+            case FRAGMENT_TXN: return "-[#b8860b]->";
+            case NAV_ACTION: return "-[#8a2be2]->";
+            case COMPOSE_NAVIGATE: return "-[#d2691e]->";
             default: return "-->";
         }
     }

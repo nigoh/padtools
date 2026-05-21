@@ -1,5 +1,9 @@
 package padtools.core.screen;
 
+import padtools.core.formats.android.AndroidNavigationGraphInfo;
+import padtools.core.formats.android.AndroidNavigationGraphParser;
+import padtools.core.formats.android.NavigationAction;
+import padtools.core.formats.android.NavigationDestination;
 import padtools.core.formats.java.AndroidProjectScanner;
 
 import java.io.File;
@@ -70,6 +74,42 @@ public final class IntentNavigationDetector {
                     + "([A-Z][A-Za-z0-9_$]*)"
                     + "(?:\\s*\\.\\s*[A-Za-z_$][A-Za-z0-9_$]*)?\\s*\\(");
 
+    /**
+     * FragmentManager トランザクション {@code .replace/.add(container, new XxxFragment(...))}。
+     * グループ 1: Fragment クラス。誤検出防止のため対象クラスは {@code *Fragment} 命名に限る。
+     * {@code new XxxFragment(} / Kotlin {@code XxxFragment(} / {@code XxxFragment.newInstance(} /
+     * {@code XxxFragment.class} / {@code XxxFragment::class} を許容。
+     */
+    private static final Pattern FRAGMENT_TXN = Pattern.compile(
+            "\\.\\s*(?:replace|add)\\s*\\(\\s*[^,()]+,\\s*(?:new\\s+)?"
+                    + "([A-Z][A-Za-z0-9_$]*Fragment)"
+                    + "\\s*(?:\\(|\\.class|::class|\\.[A-Za-z_$][A-Za-z0-9_$]*\\s*\\()");
+
+    /** {@code .push(varName)} 形式 (変数経由)。グループ 1: 変数名。型は宣言から解決する。 */
+    private static final Pattern PUSH_VAR = Pattern.compile(
+            "\\.\\s*push(?:ForResult)?\\s*\\(\\s*([a-z_$][A-Za-z0-9_$]*)\\s*\\)");
+
+    /** {@code Type var} / 仮引数の宣言。グループ 1: 型、グループ 2: 変数名。 */
+    private static final Pattern VAR_DECL = Pattern.compile(
+            "\\b([A-Z][A-Za-z0-9_$]*)\\s+([a-z_$][A-Za-z0-9_$]*)\\s*[=;,)]");
+
+    /** {@code var = new Type(} 形式の代入。グループ 1: 変数名、グループ 2: 型。 */
+    private static final Pattern VAR_ASSIGN_NEW = Pattern.compile(
+            "\\b([a-z_$][A-Za-z0-9_$]*)\\s*=\\s*new\\s+([A-Z][A-Za-z0-9_$]*)\\s*\\(");
+
+    /** Kotlin {@code val/var name: Type} または {@code = Type(}。 */
+    private static final Pattern KOTLIN_VAR_DECL = Pattern.compile(
+            "\\b(?:val|var)\\s+([a-z_$][A-Za-z0-9_$]*)\\s*"
+                    + "(?::\\s*([A-Z][A-Za-z0-9_$]*)|=\\s*([A-Z][A-Za-z0-9_$]*)\\s*\\()");
+
+    /** Jetpack Navigation {@code .navigate(R.id.xxx)} - グループ 1: action/destination の id。 */
+    private static final Pattern NAV_BY_ID = Pattern.compile(
+            "\\.\\s*navigate\\s*\\(\\s*R\\.id\\.([A-Za-z0-9_]+)");
+
+    /** Jetpack Navigation {@code .navigate(XxxFragmentDirections.actionYyy())} - グループ 1: action メソッド。 */
+    private static final Pattern NAV_DIRECTIONS = Pattern.compile(
+            "\\.\\s*navigate\\s*\\(\\s*[A-Z][A-Za-z0-9_$]*Directions\\s*\\.\\s*([A-Za-z0-9_$]+)");
+
     /** メソッド開始位置検出パターン (大まかな抽出)。 */
     private static final Pattern METHOD_DECL_PATTERN = Pattern.compile(
             "(?:public|protected|private|static|final|synchronized|abstract|@\\w+\\s*)*\\s*"
@@ -111,7 +151,135 @@ public final class IntentNavigationDetector {
                 // skip unreadable
             }
         }
+        resolveNavActions(all, projectRoot);
         return all;
+    }
+
+    /**
+     * {@code .navigate(R.id...)} / NavDirections の遷移先 (action/destination id) を、
+     * res/navigation の XML を参照して遷移先 Fragment 名に解決する (ベストエフォート)。
+     */
+    private void resolveNavActions(List<ScreenTransition> all, File projectRoot) {
+        Map<String, String> destToFragment = new LinkedHashMap<>();
+        Map<String, String> actionToDest = new LinkedHashMap<>();
+        for (File nav : findNavigationXml(projectRoot)) {
+            try {
+                AndroidNavigationGraphInfo info =
+                        AndroidNavigationGraphParser.parse(AndroidProjectScanner.readFile(nav));
+                for (NavigationDestination d : info.getDestinations()) {
+                    if (!nz(d.getIdRef()).isEmpty() && !nz(d.getName()).isEmpty()) {
+                        destToFragment.put(d.getIdRef(), simpleName(d.getName()));
+                    }
+                    for (NavigationAction a : d.getActions()) {
+                        addAction(actionToDest, a);
+                    }
+                }
+                for (NavigationAction a : info.getGlobalActions()) {
+                    addAction(actionToDest, a);
+                }
+            } catch (IOException ignore) {
+                // skip unreadable nav file
+            }
+        }
+        if (destToFragment.isEmpty() && actionToDest.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < all.size(); i++) {
+            ScreenTransition t = all.get(i);
+            if (t.getKind() != ScreenTransition.Kind.NAV_ACTION) {
+                continue;
+            }
+            String resolved = resolveNavTarget(t.getTargetClassName(), destToFragment, actionToDest);
+            if (resolved != null && !resolved.equals(t.getTargetClassName())) {
+                all.set(i, new ScreenTransition(t.getFromFqn(), t.getFromMethod(), resolved,
+                        t.getFile(), t.getLineHint(), ScreenTransition.Kind.NAV_ACTION));
+            }
+        }
+    }
+
+    private static void addAction(Map<String, String> actionToDest, NavigationAction a) {
+        String id = nz(a.getIdRef());
+        String dest = stripRef(nz(a.getDestination()));
+        if (!id.isEmpty() && !dest.isEmpty()) {
+            actionToDest.put(id, dest);
+        }
+    }
+
+    /** action id / destination id / NavDirections メソッド名を遷移先 Fragment 名に解決する。 */
+    private static String resolveNavTarget(String target, Map<String, String> destToFragment,
+                                           Map<String, String> actionToDest) {
+        if (destToFragment.containsKey(target)) {
+            return destToFragment.get(target);
+        }
+        String destId = actionToDest.get(target);
+        if (destId == null) {
+            destId = actionToDest.get(camelToSnake(target));
+        }
+        if (destId != null) {
+            return destToFragment.getOrDefault(destId, destId);
+        }
+        return null;
+    }
+
+    /** res/navigation/ (navigation-* 含む) 配下の .xml を再帰収集する。 */
+    private static List<File> findNavigationXml(File root) {
+        List<File> result = new ArrayList<>();
+        collectNavigationXml(root, result, 0);
+        return result;
+    }
+
+    private static void collectNavigationXml(File dir, List<File> out, int depth) {
+        if (dir == null || !dir.isDirectory() || depth > 12) {
+            return;
+        }
+        File[] children = dir.listFiles();
+        if (children == null) {
+            return;
+        }
+        String dirName = dir.getName();
+        boolean navDir = "navigation".equals(dirName) || dirName.startsWith("navigation-");
+        for (File c : children) {
+            if (c.isDirectory()) {
+                collectNavigationXml(c, out, depth + 1);
+            } else if (navDir && c.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".xml")) {
+                out.add(c);
+            }
+        }
+    }
+
+    private static String stripRef(String s) {
+        String v = s;
+        for (String p : new String[]{"@+id/", "@id/", "@+navigation/", "@navigation/"}) {
+            if (v.startsWith(p)) {
+                return v.substring(p.length());
+            }
+        }
+        return v;
+    }
+
+    private static String simpleName(String fqn) {
+        int dot = fqn.lastIndexOf('.');
+        return dot < 0 ? fqn : fqn.substring(dot + 1);
+    }
+
+    private static String camelToSnake(String s) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (sb.length() > 0) {
+                    sb.append('_');
+                }
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     /** 単一ソースから画面遷移を抽出する (テスト用)。 */
@@ -160,10 +328,61 @@ public final class IntentNavigationDetector {
                 KOTLIN_SET_CLASS, ScreenTransition.Kind.SET_CLASS);
         addMatches(src, filePath, fqn, methodSpans, methodNames, out,
                 SCREEN_PUSH_NEW, ScreenTransition.Kind.SCREEN_PUSH);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                FRAGMENT_TXN, ScreenTransition.Kind.FRAGMENT_TXN);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                NAV_BY_ID, ScreenTransition.Kind.NAV_ACTION);
+        addMatches(src, filePath, fqn, methodSpans, methodNames, out,
+                NAV_DIRECTIONS, ScreenTransition.Kind.NAV_ACTION);
+        addPushVarMatches(src, filePath, fqn, methodSpans, methodNames, out);
 
         // startActivityForResult が同一メソッド内にあれば Kind を昇格
         promoteForResultTransitions(src, out, methodSpans);
         return out;
+    }
+
+    /**
+     * {@code .push(varName)} を変数の宣言型から解決して SCREEN_PUSH 遷移にする。
+     * push() は Car App Library の Screen 遷移なので、誤検出防止のため解決した型が
+     * {@code *Screen} 命名のときだけ採用する。
+     */
+    private static void addPushVarMatches(String src, String filePath, String fromFqn,
+                                          List<int[]> methodSpans, List<String> methodNames,
+                                          List<ScreenTransition> out) {
+        Map<String, String> varTypes = buildVarTypes(src);
+        Matcher m = PUSH_VAR.matcher(src);
+        while (m.find()) {
+            String var = m.group(1);
+            String type = varTypes.get(var);
+            if (type == null || !type.endsWith("Screen")) {
+                continue;
+            }
+            int line = lineOf(src, m.start());
+            String callerMethod = enclosingMethodName(m.start(), methodSpans, methodNames);
+            out.add(new ScreenTransition(fromFqn, callerMethod, type,
+                    filePath, line, ScreenTransition.Kind.SCREEN_PUSH));
+        }
+    }
+
+    /** ファイル内の変数→宣言型マップを (ベストエフォートで) 構築する。 */
+    private static Map<String, String> buildVarTypes(String src) {
+        Map<String, String> types = new LinkedHashMap<>();
+        Matcher d = VAR_DECL.matcher(src);
+        while (d.find()) {
+            types.putIfAbsent(d.group(2), d.group(1));
+        }
+        Matcher a = VAR_ASSIGN_NEW.matcher(src);
+        while (a.find()) {
+            types.put(a.group(1), a.group(2));
+        }
+        Matcher k = KOTLIN_VAR_DECL.matcher(src);
+        while (k.find()) {
+            String t = k.group(2) != null ? k.group(2) : k.group(3);
+            if (t != null) {
+                types.put(k.group(1), t);
+            }
+        }
+        return types;
     }
 
     /**

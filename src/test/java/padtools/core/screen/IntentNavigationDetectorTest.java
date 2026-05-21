@@ -1,7 +1,11 @@
 package padtools.core.screen;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -12,6 +16,106 @@ import static org.junit.Assert.assertTrue;
  * Intent ベース画面遷移検出のテスト。
  */
 public class IntentNavigationDetectorTest {
+
+    @Rule
+    public TemporaryFolder tmp = new TemporaryFolder();
+
+    @Test
+    public void detectsFragmentTransactionReplace() {
+        String src = "package x; public class MainActivity {"
+                + " void open() { getSupportFragmentManager().beginTransaction()"
+                + " .replace(R.id.container, new ProfileFragment()).commit(); } }";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "MainActivity.java");
+        boolean found = false;
+        for (ScreenTransition t : hits) {
+            if (t.getKind() == ScreenTransition.Kind.FRAGMENT_TXN
+                    && "ProfileFragment".equals(t.getTargetSimpleName())) {
+                found = true;
+            }
+        }
+        assertTrue("replace(container, new XxxFragment()) を検出", found);
+    }
+
+    @Test
+    public void resolvesPushVarFromFieldType() {
+        String src = "package x; public class RootScreen {"
+                + " private final SettingsScreen mSettings = new SettingsScreen(c);"
+                + " void onClick() { getScreenManager().push(mSettings); } }";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "RootScreen.java");
+        boolean found = false;
+        for (ScreenTransition t : hits) {
+            if (t.getKind() == ScreenTransition.Kind.SCREEN_PUSH
+                    && "SettingsScreen".equals(t.getTargetSimpleName())) {
+                found = true;
+            }
+        }
+        assertTrue("push(field) を宣言型から解決", found);
+    }
+
+    @Test
+    public void detectsJetpackNavByIdAndDirections() {
+        String src = "package x; public class HomeFragment {"
+                + " void go() {"
+                + " findNavController().navigate(R.id.detailFragment);"
+                + " findNavController().navigate(HomeFragmentDirections.actionHomeToSettings()); } }";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "HomeFragment.java");
+        boolean byId = false;
+        boolean directions = false;
+        for (ScreenTransition t : hits) {
+            if (t.getKind() != ScreenTransition.Kind.NAV_ACTION) {
+                continue;
+            }
+            if ("detailFragment".equals(t.getTargetSimpleName())) {
+                byId = true;
+            }
+            if ("actionHomeToSettings".equals(t.getTargetSimpleName())) {
+                directions = true;
+            }
+        }
+        assertTrue("navigate(R.id.x) を検出", byId);
+        assertTrue("navigate(XxxDirections.actionY()) を検出", directions);
+    }
+
+    @Test
+    public void resolvesNavActionToDestinationFragmentViaGraph() throws IOException {
+        File java = new File(tmp.getRoot(), "app/src/main/java/x");
+        File nav = new File(tmp.getRoot(), "app/src/main/res/navigation");
+        assertTrue(java.mkdirs());
+        assertTrue(nav.mkdirs());
+        write(new File(java, "HomeFragment.java"),
+                "package x; public class HomeFragment {"
+                + " void go() { findNavController().navigate("
+                + "HomeFragmentDirections.actionHomeToSettings()); } }");
+        write(new File(nav, "nav_graph.xml"),
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                + "<navigation xmlns:android=\"http://schemas.android.com/apk/res/android\""
+                + " xmlns:app=\"http://schemas.android.com/apk/res-auto\""
+                + " app:startDestination=\"@id/homeFragment\">"
+                + "<fragment android:id=\"@+id/homeFragment\" android:name=\"x.HomeFragment\">"
+                + "<action android:id=\"@+id/action_home_to_settings\""
+                + " app:destination=\"@id/settingsFragment\"/></fragment>"
+                + "<fragment android:id=\"@+id/settingsFragment\""
+                + " android:name=\"x.SettingsFragment\"/></navigation>");
+        List<ScreenTransition> hits = new IntentNavigationDetector().analyzeProject(tmp.getRoot());
+        boolean resolved = false;
+        for (ScreenTransition t : hits) {
+            if (t.getKind() == ScreenTransition.Kind.NAV_ACTION
+                    && "SettingsFragment".equals(t.getTargetSimpleName())) {
+                resolved = true;
+            }
+        }
+        assertTrue("Directions の action を遷移先 Fragment に解決", resolved);
+    }
+
+    private void write(File f, String content) throws IOException {
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(f), java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write(content);
+        }
+    }
 
     @Test
     public void detectsStartActivityWithNewIntent() {

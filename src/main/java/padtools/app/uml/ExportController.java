@@ -158,4 +158,33 @@ final class ExportController {
                     "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    /** 任意の Markdown テキスト (関数一覧など) を保存ダイアログでファイル出力する。 */
+    public void exportText(String content, String dialogTitle) {
+        if (content == null || content.isEmpty()) {
+            JOptionPane.showMessageDialog(parent, "No content to export.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle(dialogTitle);
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setFileFilter(new FileNameExtensionFilter("Markdown (*.md)", "md"));
+        int r = fc.showSaveDialog(parent);
+        if (r != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File chosen = fc.getSelectedFile();
+        if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".md")) {
+            chosen = new File(chosen.getAbsolutePath() + ".md");
+        }
+        try {
+            padtools.app.cli.CliOutput.writeText(chosen, content);
+            status.setText("Saved: " + chosen.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(parent,
+                    "Export failed: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 }

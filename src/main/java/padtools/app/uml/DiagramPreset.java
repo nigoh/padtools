@@ -95,7 +95,7 @@ public enum DiagramPreset {
                 o.showFinal = true;
                 o.showComments = true;
                 o.commentStyle = PlantUmlClassDiagram.CommentStyle.INLINE;
-                o.commentMaxLength = 80;
+                o.commentMaxLength = 60;
                 o.groupByPackage = true;
                 o.maxClasses = 0;
                 o.maxUsagePerClass = 30;

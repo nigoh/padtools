@@ -57,8 +57,8 @@ public final class PlantUmlClassDiagram {
         public boolean showComments = true;
         /** コメント表示スタイル。 */
         public CommentStyle commentStyle = CommentStyle.INLINE;
-        /** インライン表示時のコメント 1 件あたり最大文字数。超過分は ... で省略。 */
-        public int commentMaxLength = 80;
+        /** インライン表示時のコメント 1 件あたり最大文字数。INLINE では省略、NOTE では折り返しに使用。 */
+        public int commentMaxLength = 60;
         /**
          * コメント文字列の色 (PlantUML の {@code <color:#RRGGBB>} に渡す値)。
          * INLINE 表示時はテキストを {@code <color:...>...</color>} で囲み、
@@ -432,12 +432,43 @@ public final class PlantUmlClassDiagram {
         return t;
     }
 
+    /**
+     * テキストを単語境界（スペース）で折り返し、maxLen 文字以内の行に分割する。
+     * スペースが見つからない場合は maxLen 文字でハードブレークする。
+     * note ブロック内の長い行を折り返すために使用。シーケンス図側からも再利用するため package-private。
+     */
+    static String wordWrap(String s, int maxLen) {
+        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder();
+        int start = 0;
+        while (start < s.length()) {
+            if (s.length() - start <= maxLen) {
+                sb.append(s, start, s.length());
+                break;
+            }
+            int end = start + maxLen;
+            int breakAt = s.lastIndexOf(' ', end);
+            if (breakAt <= start) {
+                // スペースが見つからないためハードブレーク
+                breakAt = end;
+                sb.append(s, start, breakAt).append('\n');
+                start = breakAt;
+            } else {
+                sb.append(s, start, breakAt).append('\n');
+                start = breakAt + 1; // スペースをスキップ
+            }
+        }
+        return sb.toString();
+    }
+
     /** NOTE モード: クラス・各メンバーの JavaDoc を {@code note ...} で出力。 */
     private static void emitNoteBlocks(StringBuilder out, JavaClassInfo c,
                                         String alias, Options o, String indent) {
         if (c.getComment() != null && !c.getComment().isEmpty()) {
             out.append(indent).append("note top of ").append(alias).append('\n');
-            appendNoteBody(out, c.getComment(), indent);
+            appendNoteBody(out, c.getComment(), indent, o.commentMaxLength);
             out.append(indent).append("end note\n");
         }
         if (o.showFields) {
@@ -450,7 +481,7 @@ public final class PlantUmlClassDiagram {
                 }
                 out.append(indent).append("note right of ").append(alias).append("::")
                         .append(f.getName()).append('\n');
-                appendNoteBody(out, f.getComment(), indent);
+                appendNoteBody(out, f.getComment(), indent, o.commentMaxLength);
                 out.append(indent).append("end note\n");
             }
         }
@@ -464,21 +495,26 @@ public final class PlantUmlClassDiagram {
                 }
                 out.append(indent).append("note right of ").append(alias).append("::")
                         .append(m.getName()).append('\n');
-                appendNoteBody(out, m.getComment(), indent);
+                appendNoteBody(out, m.getComment(), indent, o.commentMaxLength);
                 out.append(indent).append("end note\n");
             }
         }
     }
 
-    /** note ブロックの本文を 1 行ずつ書き出す。シーケンス図側からも再利用するため package-private。 */
-    static void appendNoteBody(StringBuilder out, String comment, String indent) {
+    /** note ブロックの本文を 1 行ずつ書き出す。maxLen > 0 のとき wordWrap を適用。シーケンス図側からも再利用するため package-private。 */
+    static void appendNoteBody(StringBuilder out, String comment, String indent, int maxLen) {
         String[] lines = comment.split("\n", -1);
         for (String line : lines) {
             String t = line.replace('\r', ' ').replace('\t', ' ').trim();
             if (t.isEmpty()) {
                 continue;
             }
-            out.append(indent).append("  ").append(t).append('\n');
+            String wrapped = wordWrap(t, maxLen);
+            for (String wl : wrapped.split("\n", -1)) {
+                if (!wl.isEmpty()) {
+                    out.append(indent).append("  ").append(wl).append('\n');
+                }
+            }
         }
     }
 

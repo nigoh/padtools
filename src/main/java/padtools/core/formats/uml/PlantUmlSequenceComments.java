@@ -111,7 +111,7 @@ final class PlantUmlSequenceComments {
 
         out.append("note over ").append(quote(participant)).append('\n');
         if (hasClassComment) {
-            PlantUmlClassDiagram.appendNoteBody(out, c.getComment(), "");
+            PlantUmlClassDiagram.appendNoteBody(out, c.getComment(), "", o.commentMaxLength);
         }
         boolean needSeparator = hasClassComment && hasAnyMethodContent;
         for (String name : methodNames) {
@@ -152,11 +152,20 @@ final class PlantUmlSequenceComments {
                 continue;
             }
             if (first) {
-                out.append("  ").append(name).append("(): ")
-                        .append(truncate(t, o.commentMaxLength)).append('\n');
+                String[] wl = PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1);
+                out.append("  ").append(name).append("(): ").append(wl[0]).append('\n');
+                for (int i = 1; i < wl.length; i++) {
+                    if (!wl[i].isEmpty()) {
+                        out.append("    ").append(wl[i]).append('\n');
+                    }
+                }
                 first = false;
             } else {
-                out.append("    ").append(truncate(t, o.commentMaxLength)).append('\n');
+                for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                    if (!wl.isEmpty()) {
+                        out.append("    ").append(wl).append('\n');
+                    }
+                }
             }
         }
         if (first) {
@@ -174,16 +183,13 @@ final class PlantUmlSequenceComments {
                 if (t.isEmpty()) {
                     continue;
                 }
-                out.append("    // ").append(truncate(t, o.commentMaxLength)).append('\n');
+                for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                    if (!wl.isEmpty()) {
+                        out.append("    // ").append(wl).append('\n');
+                    }
+                }
             }
         }
-    }
-
-    private static String truncate(String s, int maxLen) {
-        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
-            return s;
-        }
-        return s.substring(0, Math.max(1, maxLen - 1)) + "…";
     }
 
     private static String quote(String s) {

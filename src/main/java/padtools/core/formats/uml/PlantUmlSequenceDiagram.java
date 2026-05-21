@@ -731,8 +731,12 @@ public final class PlantUmlSequenceDiagram {
             if (t.isEmpty()) {
                 continue;
             }
-            body.append(indent).append("  ").append(truncate(t, o.commentMaxLength)).append('\n');
-            any = true;
+            for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                if (!wl.isEmpty()) {
+                    body.append(indent).append("  ").append(wl).append('\n');
+                    any = true;
+                }
+            }
         }
         if (!any) {
             body.append(indent).append("  ").append(method.getName()).append("()\n");
@@ -745,20 +749,15 @@ public final class PlantUmlSequenceDiagram {
                     if (t.isEmpty()) {
                         continue;
                     }
-                    body.append(indent).append("  // ")
-                            .append(truncate(t, o.commentMaxLength)).append('\n');
+                    for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                        if (!wl.isEmpty()) {
+                            body.append(indent).append("  // ").append(wl).append('\n');
+                        }
+                    }
                 }
             }
         }
         body.append(indent).append("end note\n");
-    }
-
-    /** PlantUmlSequenceComments と独立に保持する短縮ユーティリティ。 */
-    private static String truncate(String s, int maxLen) {
-        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
-            return s;
-        }
-        return s.substring(0, Math.max(1, maxLen - 1)) + "…";
     }
 
     private static void emitBlock(JavaMethodInfo.Block block,

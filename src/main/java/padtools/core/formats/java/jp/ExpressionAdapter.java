@@ -87,7 +87,32 @@ final class ExpressionAdapter {
 
     /** 呼び出しの receiver 文字列（{@code ""} / {@code "foo"} / {@code "a.b"} / {@code "this.x"}）。 */
     static String receiver(MethodCallExpr mc) {
-        return mc.getScope().map(Node::toString).orElse("");
+        return mc.getScope().map(ExpressionAdapter::receiverOf).orElse("");
+    }
+
+    /**
+     * スコープ式から receiver 文字列を作る。名前/フィールドアクセスは原文どおり
+     * ({@code "foo"} / {@code "a.b"} / {@code "this.x"}) を保ち、シンボル未解決でも
+     * 読みやすいよう {@code new X(...)} → {@code X}、キャスト {@code ((T) x)} → {@code T} に畳む。
+     */
+    private static String receiverOf(Expression scope) {
+        Expression e = scope;
+        while (e instanceof com.github.javaparser.ast.expr.EnclosedExpr) {
+            e = ((com.github.javaparser.ast.expr.EnclosedExpr) e).getInner();
+        }
+        if (e instanceof ObjectCreationExpr) {
+            return JpText.outer(((ObjectCreationExpr) e).getType().toString());
+        }
+        if (e instanceof com.github.javaparser.ast.expr.CastExpr) {
+            return JpText.outer(((com.github.javaparser.ast.expr.CastExpr) e)
+                    .getType().toString());
+        }
+        if (e instanceof MethodCallExpr) {
+            // チェーン呼び出しはルートまで辿る (new X().a().b() → X、getScreenManager().push() → self)
+            return ((MethodCallExpr) e).getScope()
+                    .map(ExpressionAdapter::receiverOf).orElse("");
+        }
+        return e.toString();
     }
 
     /** SymbolSolver で呼び出し先の宣言型 FQN とシグネチャを解決する。失敗時は何もしない。 */

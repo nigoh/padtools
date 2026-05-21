@@ -31,6 +31,27 @@ final class JpText {
         return Visibility.fromModifiers(modifiers(node));
     }
 
+    /**
+     * 型表記から最外殻の型単純名を取り出す。
+     * 例: {@code Action.Builder} → {@code Action}、{@code com.x.ScreenManager} → {@code ScreenManager}。
+     * ジェネリクス・配列・空白は落とす。
+     */
+    static String outer(String type) {
+        String t = type;
+        int lt = t.indexOf('<');
+        if (lt >= 0) {
+            t = t.substring(0, lt);
+        }
+        t = t.replace("[]", "").trim();
+        for (String s : t.split("\\.")) {
+            if (!s.isEmpty() && Character.isUpperCase(s.charAt(0))) {
+                return s;
+            }
+        }
+        int dot = t.lastIndexOf('.');
+        return dot < 0 ? t : t.substring(dot + 1);
+    }
+
     /** アノテーションを先頭 {@code @} を除いた文字列リストで返す。 */
     static List<String> annotations(NodeWithAnnotations<?> node) {
         List<String> out = new ArrayList<>();

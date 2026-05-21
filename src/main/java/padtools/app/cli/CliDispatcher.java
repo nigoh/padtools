@@ -21,6 +21,10 @@ public final class CliDispatcher {
             UmlCommands.handleListMethods(ctx);
             return true;
         }
+        if (o.functionList.isSet()) {
+            UmlCommands.handleFunctionList(ctx);
+            return true;
+        }
         if (o.sequenceDiagrams.isSet()) {
             UmlCommands.handleSequenceDiagrams(ctx);
             return true;

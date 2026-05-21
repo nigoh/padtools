@@ -484,4 +484,26 @@ public class MainCliTest {
         assertTrue(md, md.contains("Jaccard"));
         assertTrue(md, md.contains("B のみ"));
     }
+
+    @Test
+    public void testFunctionListCli() throws Exception {
+        File root = tmp.newFolder("ProjFn");
+        File pkg = new File(root, "app/src/main/java/x");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Svc.java"),
+                "package x; public class Svc {"
+                + " public void run(boolean f) { if (f) { helper(); } }"
+                + " void helper() {} }");
+        File out = new File(tmp.getRoot(), "fn.md");
+        Main.main(new String[]{"--function-list", "-o", out.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("x.Svc"));
+        assertTrue(md, md.contains("helper()"));
+        // helper() は run() から if(f) 配下で呼ばれる → 利用側と実行条件に反映
+        assertTrue(md, md.contains("利用側"));
+        assertTrue(md, md.contains("run"));
+        assertTrue(md, md.contains("実行条件"));
+        assertTrue(md, md.contains("if"));
+    }
 }

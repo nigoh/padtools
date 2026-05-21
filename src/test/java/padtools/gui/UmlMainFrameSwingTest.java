@@ -12,7 +12,6 @@ import org.junit.rules.TemporaryFolder;
 import padtools.SettingManager;
 import padtools.app.uml.UmlMainFrame;
 
-import javax.swing.JLabel;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.TreeModel;
@@ -26,6 +25,7 @@ import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -114,16 +114,15 @@ public class UmlMainFrameSwingTest {
     }
 
     /**
-     * 左ペインのツリーで「クラス / パッケージ / モジュール」ノードをクリックしたとき、
-     * 何かしらのフィードバック (status 文言の更新) が起きることを確認する回帰テスト。
+     * VS Code 風タブ中心モデルの回帰テスト: 左ペインのツリーで
+     * 「モジュール / パッケージ / クラス」ノードをクリックすると、対応するダイアグラムタブが
+     * 開かれてフォーカスされることを確認する。
      *
-     * <p>従来は class / package / module ノードへの左クリックがどこにも繋がっておらず
-     * 「何も反応しない」状態だった。最低限「Scope: ..." がステータスバーに出る」までを
-     * GUI 経由で検証する。</p>
+     * <p>旧モデルでは共有 Home ビューに "Scope: ..." を表示していたが、現在は各ノードが
+     * 対等なタブ (= エディタ) として開く。</p>
      */
     @Test
-    public void testTreeNodeClickFiresScopeChange()
-            throws IOException, InterruptedException, ReflectiveOperationException {
+    public void testTreeNodeClickOpensDiagramTab() throws Exception {
         File project = makeTinyProject();
 
         UmlMainFrame frame = GuiActionRunner.execute(
@@ -145,23 +144,23 @@ public class UmlMainFrameSwingTest {
         }
         assertTrue("プロジェクトツリーが構築されたはず", ready);
 
-        JLabel status = getPrivate(frame, "status");
+        Object tabPane = getPrivate(frame, "tabPane");
 
-        // モジュールノード ([module] ...) を選択 → "Scope: module ..." がステータスに出るはず
+        // モジュールノード ([module] ...) を選択 → ダイアグラムタブが開いてフォーカスされる
         TreePath modulePath = GuiActionRunner.execute(
                 () -> findPathByPrefix(tree.target(), "[module]"));
         assertNotNull("module ノードが見つからない", modulePath);
         clickPath(tree, modulePath);
-        assertTrue("モジュールクリックで status が更新されない: " + status.getText(),
-                waitForStatusContains(status, "Scope: module", 5_000));
+        assertTrue("モジュールクリックでダイアグラムタブが開かない",
+                waitForDiagramTabFocused(tabPane, 5_000));
 
-        // パッケージノード (com.demo (...)) を選択 → "Scope: package com.demo" になるはず
+        // パッケージノード (com.demo (...)) を選択 → 別のタブが開いてフォーカスされる
         TreePath packagePath = GuiActionRunner.execute(
                 () -> findPathByPrefix(tree.target(), "com.demo"));
         assertNotNull("package ノードが見つからない", packagePath);
         clickPath(tree, packagePath);
-        assertTrue("パッケージクリックで status が更新されない: " + status.getText(),
-                waitForStatusContains(status, "Scope: package com.demo", 5_000));
+        assertTrue("パッケージクリックでダイアグラムタブが開かない",
+                waitForDiagramTabFocused(tabPane, 5_000));
 
         // パッケージを展開してクラスノードを露出させた上でクリック
         GuiActionRunner.execute(() -> tree.target().expandPath(packagePath));
@@ -169,8 +168,40 @@ public class UmlMainFrameSwingTest {
                 () -> findPathByPrefix(tree.target(), "[C] Foo"));
         assertNotNull("class ノード [C] Foo が見つからない", classPath);
         clickPath(tree, classPath);
-        assertTrue("クラスクリックで status が更新されない: " + status.getText(),
-                waitForStatusContains(status, "Scope: class Foo", 5_000));
+        assertTrue("クラスクリックでダイアグラムタブが開かない",
+                waitForDiagramTabFocused(tabPane, 5_000));
+        assertEquals("クラスタブのタイトルは Foo のはず", "Foo", focusedTabTitle(frame));
+    }
+
+    /** tabPane.dynamicTabFocused() が true になるまで待つ。 */
+    private static boolean waitForDiagramTabFocused(Object tabPane, long timeoutMs)
+            throws Exception {
+        java.lang.reflect.Method m = tabPane.getClass().getMethod("dynamicTabFocused");
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            boolean focused = GuiActionRunner.execute(() -> {
+                try {
+                    return (Boolean) m.invoke(tabPane);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            if (focused) {
+                return true;
+            }
+            Thread.sleep(80);
+        }
+        return false;
+    }
+
+    private static String focusedTabTitle(Object frame) throws Exception {
+        Field f = frame.getClass().getDeclaredField("mainTabs");
+        f.setAccessible(true);
+        javax.swing.JTabbedPane tabs = (javax.swing.JTabbedPane) f.get(frame);
+        return GuiActionRunner.execute(() -> {
+            int i = tabs.getSelectedIndex();
+            return i < 0 ? "(none)" : tabs.getTitleAt(i);
+        });
     }
 
     /** Swing ツリーで「先頭が prefix で始まるノード」最初のひとつへの TreePath を返す。 */
@@ -217,21 +248,6 @@ public class UmlMainFrameSwingTest {
         GuiActionRunner.execute(() -> {
             treeFixture.target().setSelectionPath(path);
         });
-    }
-
-    /** status JLabel に指定文字列が含まれるまで待ち合わせる。 */
-    private static boolean waitForStatusContains(JLabel status, String needle,
-                                                  long timeoutMs)
-            throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            String s = GuiActionRunner.execute(status::getText);
-            if (s != null && s.contains(needle)) {
-                return true;
-            }
-            Thread.sleep(80);
-        }
-        return false;
     }
 
     @SuppressWarnings("unchecked")

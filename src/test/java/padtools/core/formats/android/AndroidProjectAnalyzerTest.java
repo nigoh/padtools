@@ -171,6 +171,47 @@ public class AndroidProjectAnalyzerTest {
         assertEquals(":root", name);
     }
 
+    /**
+     * Gradle のサブプロジェクトのディレクトリ単体を開いたときの回帰テスト (end-to-end)。
+     *
+     * <p>親リポジトリの settings.gradle で {@code :feature:lib} として登録されたモジュールを、
+     * その {@code feature/} ディレクトリだけをルートとして開くと、モジュール名はルート相対の
+     * {@code "lib"} になる。一方で各モジュールの build.gradle は親リポジトリ向けに書かれており
+     * {@code project(':feature:lib')} という絶対 Gradle パスで参照する。
+     * このズレで完全一致だけではモジュール間 {@code project()} 依存エッジが脱落していた。
+     * {@link AndroidProjectAnalyzer} → {@link PlantUmlGradleDependencyGraph} の経路で
+     * エッジが復元されることを確認する。</p>
+     */
+    @Test
+    public void testDependencyGraphLinksModulesWhenSubprojectDirOpened() throws IOException {
+        File feature = tmp.newFolder("feature");
+        File featApp = new File(feature, "app");
+        File featLib = new File(feature, "lib");
+        assertTrue(featApp.mkdirs());
+        assertTrue(featLib.mkdirs());
+        write(new File(featApp, "build.gradle"),
+                "plugins { id 'com.android.application' }\n"
+                        + "dependencies {\n"
+                        + "  implementation project(':feature:lib')\n"
+                        + "  implementation 'androidx.core:core:1.0.0'\n"
+                        + "}\n");
+        write(new File(featLib, "build.gradle"),
+                "plugins { id 'com.android.library' }\n"
+                        + "dependencies {\n"
+                        + "  implementation 'androidx.annotation:annotation:1.0.0'\n"
+                        + "}\n");
+
+        AndroidProjectAnalysis a = AndroidProjectAnalyzer.analyze(feature);
+        // モジュール名はルート相対 ("app" / "lib") に短縮される
+        assertTrue(a.getGradleByModule().containsKey("app"));
+        assertTrue(a.getGradleByModule().containsKey("lib"));
+
+        String puml = PlantUmlGradleDependencyGraph.generate(a);
+        assertTrue("module-to-module edge must survive root-relative naming: " + puml,
+                java.util.regex.Pattern.compile("(?m)^M\\d+ --> M\\d+ : ")
+                        .matcher(puml).find());
+    }
+
     @Test
     public void testMultipleManifestsPerModule() throws IOException {
         // app モジュールに main + debug + 独自 flavor の 3 つの manifest を追加

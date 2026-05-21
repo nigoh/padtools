@@ -15,37 +15,30 @@ import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JRadioButtonMenuItem;
-import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
-import javax.swing.SwingWorker;
-import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.MouseEvent;
 import java.io.File;
-import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
-import padtools.app.uml.PlantUmlSvgRenderer.RenderedSvg;
 
 /**
  * UML 専用のメインウィンドウ。
  *
- * <p>左ペインに {@link ProjectTreePanel}、右ペインに {@link SvgPreviewPanel}
- * と {@link PumlSourcePanel} をタブで切り替え表示する。
- * メニューから図種選択・ズーム操作・エクスポートを行える。</p>
+ * <p>左ペインに {@link ProjectTreePanel} (サイドバー / ナビゲータ)、右ペインに
+ * VS Code 風の {@link DiagramTabPane} (すべての図を対等なタブ = エディタとして管理) を
+ * 配置する。特別扱いの「Home タブ」は持たない。メニュー・ツールバーはアクティブタブに
+ * 対して作用する。</p>
  *
- * <p>図の生成と SVG (ベクター) レンダリングは {@link SwingWorker} で
- * バックグラウンド実行し、図種/オプション変更時の再描画は {@link Timer} で
- * 300ms デバウンスする。PNG ラスタ化は保存時のみ行う。</p>
+ * <p>図の生成と SVG (ベクター) レンダリングは各タブが {@code SwingWorker} で
+ * バックグラウンド実行する。PNG ラスタ化は保存時のみ行う。</p>
  */
 public class UmlMainFrame extends JFrame {
 
@@ -63,8 +56,6 @@ public class UmlMainFrame extends JFrame {
     private final ProjectAnalysisCache cache = new ProjectAnalysisCache();
     private final ReferenceIndexCache refIndexCache = new ReferenceIndexCache(cache);
     private final ProjectTreePanel treePanel = new ProjectTreePanel();
-    private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
-    private final PumlSourcePanel sourcePanel = new PumlSourcePanel();
     private final ManifestSummaryPanel manifestSummaryPanel = new ManifestSummaryPanel();
     private final padtools.app.uml.explore.ImpactExplorerPanel impactPanel
             = new padtools.app.uml.explore.ImpactExplorerPanel(refIndexCache);
@@ -84,14 +75,12 @@ public class UmlMainFrame extends JFrame {
     private ButtonGroup themeGroup;
     private java.util.Map<String, JRadioButtonMenuItem> themeItems;
 
-    private final Timer refreshTimer = new Timer(300, e -> refreshDiagramNow());
-
-    /** タブマネージャ。 */
+    /** タブマネージャ (すべての図を対等なタブとして管理)。 */
     private DiagramTabPane tabPane;
-    /** 右側のフラットタブバー (Home / 動的タブ / Manifest / Impact / References)。 */
+    /** 右側のフラットタブバー (動的タブ / Manifest / Impact / References / Func Diff / Functions)。 */
     private JTabbedPane mainTabs;
 
-    /** 全可変状態。テスト互換のため currentKind のみ UmlMainFrame に直接残す。 */
+    /** アクティブタブのミラー兼スクラッチ状態 (エクスポート・スコープ/フィルタダイアログが参照)。 */
     private final DiagramState state = new DiagramState();
     /** 図のエクスポート (保存ダイアログ・クリップボード) を担う補助。 */
     private final ExportController exportController = new ExportController(this, state, status);
@@ -119,6 +108,8 @@ public class UmlMainFrame extends JFrame {
         buildCenterTabs();
         buildToolBar();
         controller = createDiagramController();
+        // タブにフォーカスが移ったら、ツリーハイライト・図種ミラー・ツールバー反映を連動させる。
+        tabPane.setOnTabFocused(info -> controller.onTabFocused(info));
         add(buildStatusBar(), BorderLayout.SOUTH);
         applyInitialWindowSize();
         initPersistorsAndLoader();
@@ -128,13 +119,8 @@ public class UmlMainFrame extends JFrame {
         }
     }
 
-    /** previewPanel / treePanel / 進捗バー等のイベントリスナを配線する。 */
+    /** treePanel / 進捗バー等のイベントリスナを配線する (図のプレビューは各タブが自前で持つ)。 */
     private void wirePanelListeners() {
-        refreshTimer.setRepeats(false);
-        previewPanel.setZoomChangeListener(this::updateZoomLabel);
-        previewPanel.setOnLinkPopup(this::onPreviewLinkPopup);
-        previewPanel.setOnLinkClick((link, ev) -> controller.onPreviewLinkClick(link, ev));
-        previewPanel.setCopyFeedbackListener(msg -> status.setText(msg));
         treePanel.setOnMethodSelected(sel -> controller.onTreeMethodSelected(sel));
         treePanel.setOnActivityMethodSelected(sel -> controller.onTreeActivityMethodSelected(sel));
         treePanel.setOnClassSelected(cls -> controller.onTreeClassSelected(cls));
@@ -185,10 +171,10 @@ public class UmlMainFrame extends JFrame {
         mcb.syncDiagramToggle = k -> controller.syncDiagramToggle(k);
         mcb.applyTheme = this::applyTheme;
         mcb.openStyleSettings = this::openStyleSettings;
-        mcb.zoomIn = previewPanel::zoomIn;
-        mcb.zoomOut = previewPanel::zoomOut;
-        mcb.zoomReset = previewPanel::zoomReset;
-        mcb.zoomToFit = previewPanel::zoomToFit;
+        mcb.zoomIn = () -> tabPane.zoomInActive();
+        mcb.zoomOut = () -> tabPane.zoomOutActive();
+        mcb.zoomReset = () -> tabPane.zoomResetActive();
+        mcb.zoomToFit = () -> tabPane.zoomToFitActive();
         MenuBarBuilder.Result menuResult =
                 new MenuBarBuilder(DiagramKind.CLASS, MENU_MASK, mcb, this).build();
         cancelLoadingItem = menuResult.cancelLoadingItem;
@@ -199,17 +185,12 @@ public class UmlMainFrame extends JFrame {
         setJMenuBar(menuResult.menuBar);
     }
 
-    /** 中央のツリー + タブ (Home/Manifest/Impact/References/Func Diff) を構築する。 */
+    /** 中央のツリー + タブ (動的ダイアグラムタブ + 末尾の固定ユーティリティタブ) を構築する。 */
     private void buildCenterTabs() {
-        // 右側: 1 層のフラットタブバー
-        // [Home] [動的タブ…] [Manifest] [Impact] [References]
+        // 右側: VS Code 風のフラットタブバー
+        // [動的ダイアグラムタブ…] [Manifest] [Impact] [References] [Func Diff] [Functions]
+        // 特別扱いの「Home タブ」は持たない。
         mainTabs = new JTabbedPane(JTabbedPane.TOP);
-
-        // Home タブ: 共有の previewPanel / sourcePanel を JSplitPane で上下に配置
-        JSplitPane homeSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
-                new JScrollPane(previewPanel), sourcePanel);
-        homeSplit.setResizeWeight(0.85);
-        mainTabs.addTab("Home", homeSplit);
 
         // ユーティリティタブ (固定・末尾 5 本)
         mainTabs.addTab("Manifest", manifestSummaryPanel);
@@ -219,14 +200,12 @@ public class UmlMainFrame extends JFrame {
         mainTabs.addTab("Functions", methodListPanel);
 
         // 動的タブマネージャ (fixedSuffix=5 で末尾ユーティリティタブの手前に挿入)
-        tabPane = new DiagramTabPane(mainTabs, 5, cache, status::setText);
+        tabPane = new DiagramTabPane(mainTabs, 5, cache, state,
+                status::setText, this::updateZoomLabelFromValue);
 
-        // Home タブ表示時は divider 位置をセット、Functions タブ表示時は一覧を遅延生成
+        // Functions タブ表示時は一覧を遅延生成
         mainTabs.addChangeListener(ev -> {
-            if (mainTabs.getSelectedIndex() == 0) {
-                javax.swing.SwingUtilities.invokeLater(
-                        () -> homeSplit.setDividerLocation(0.85));
-            } else if (mainTabs.getSelectedComponent() == methodListPanel) {
+            if (mainTabs.getSelectedComponent() == methodListPanel) {
                 updateFunctionList();
             }
         });
@@ -284,7 +263,8 @@ public class UmlMainFrame extends JFrame {
         loaderDeps.onLoadSuccess = root -> {
             persistAndRestoreProjectSettings(root);
             updateManifestSummary();
-            refreshDiagram();
+            // VS Code 風: 起動直後に既定タブ (Common 図) を 1 枚開く。
+            controller.openDefaultDiagram();
         };
         projectLoader = new ProjectLoader(loaderDeps);
     }
@@ -324,7 +304,7 @@ public class UmlMainFrame extends JFrame {
         p.applyTo(b);
         state.currentScope = b.build();
         status.setText("Preset: " + p.getDisplayName());
-        refreshDiagram();
+        controller.applyStateToActiveTab();
     }
 
     private void applyTheme(String theme) {
@@ -405,7 +385,8 @@ public class UmlMainFrame extends JFrame {
         }
         saveCurrentProjectSettings();
         syncThemeMenuSelection(style);
-        refreshDiagram();
+        // スタイルは全体共通設定なので、開いているすべてのタブを再描画する。
+        tabPane.rerenderAllTabs();
     }
 
     private void syncThemeMenuSelection(DiagramStyle style) {
@@ -523,177 +504,11 @@ public class UmlMainFrame extends JFrame {
                 "Save function list (Markdown table or CSV)");
     }
 
-    /**
-     * プレビュー上で右クリックされたとき、図のエクスポートポップアップを表示する。
-     * {@code link} はヒットしたリンク領域 (null なら非リンク領域でのクリック)。
-     */
-    private void onPreviewLinkPopup(LinkArea link, MouseEvent event) {
-        if (event == null) {
-            return;
-        }
-        JPopupMenu popup = exportController.buildExportPopup();
-        popup.show(event.getComponent(), event.getX(), event.getY());
-    }
-
-    /**
-     * ステータス バー表示用に長文を短縮する。Batik 等が data: URI を本文に含めて
-     * 投げてくる超長文メッセージをそのまま流すと UI が読めなくなるため、
-     * 改行とスペースで折り返した先頭 {@code max} 文字に省略記号を付けて返す。
-     */
-    static String truncateForStatus(String msg, int max) {
-        if (msg == null) {
-            return "";
-        }
-        // 改行・連続空白を 1 スペースに畳んでから長さで切る
-        String oneLine = msg.replaceAll("\\s+", " ").trim();
-        if (oneLine.length() <= max) {
-            return oneLine;
-        }
-        return oneLine.substring(0, Math.max(0, max - 1)) + "…";
-    }
-
+    /** F5 / Refresh / フィルタ変更後にアクティブタブを再描画する。 */
     private void refreshDiagram() {
-        refreshTimer.restart();
-    }
-
-    private void refreshDiagramNow() {
-        if (!cache.isLoaded()) {
-            return;
+        if (controller != null) {
+            controller.applyStateToActiveTab();
         }
-        final DiagramKind kind = currentKind;
-        if (kind == DiagramKind.SEQUENCE
-                && (state.sequenceEntry == null || state.sequenceEntry.isEmpty())) {
-            previewPanel.setSvgGraphicsNode(null, 0, 0);
-            sourcePanel.setText("");
-            status.setText("Choose a sequence entry from Diagram menu.");
-            return;
-        }
-        if (kind == DiagramKind.ACTIVITY
-                && (state.activityEntry == null || state.activityEntry.isEmpty())) {
-            previewPanel.setSvgGraphicsNode(null, 0, 0);
-            sourcePanel.setText("");
-            status.setText("Choose an activity method from Diagram menu.");
-            return;
-        }
-        if (kind == DiagramKind.LAYOUT
-                && (state.currentLayoutKey == null || state.currentLayoutKey.isEmpty())) {
-            previewPanel.setSvgGraphicsNode(null, 0, 0);
-            sourcePanel.setText("");
-            status.setText("Choose a layout file from Diagram menu.");
-            return;
-        }
-        if (kind == DiagramKind.NAVIGATION
-                && (state.currentNavigationKey == null || state.currentNavigationKey.isEmpty())) {
-            previewPanel.setSvgGraphicsNode(null, 0, 0);
-            sourcePanel.setText("");
-            status.setText("Choose a navigation file from Diagram menu.");
-            return;
-        }
-        if (kind == DiagramKind.CALLGRAPH
-                && (state.callGraphEntry == null || state.callGraphEntry.isEmpty())) {
-            previewPanel.setSvgGraphicsNode(null, 0, 0);
-            sourcePanel.setText("");
-            status.setText("Choose a call graph entry from Diagram menu.");
-            return;
-        }
-        status.setText("Rendering " + kind.getDisplayName() + " ...");
-        loadProgress.setString("Rendering...");
-        loadProgress.setIndeterminate(true);
-        loadProgress.setVisible(true);
-        final String entry = state.sequenceEntry;
-        final String activity = state.activityEntry;
-        final String callGraph = state.callGraphEntry;
-        final String layoutKey = state.currentLayoutKey;
-        final String navigationKey = state.currentNavigationKey;
-        final DiagramScope scope = state.currentScope;
-        new SwingWorker<RenderResult, Void>() {
-            private Throwable error;
-            // レンダ前にキャプチャしておく puml。例外発生時も PlantUML Source タブに
-            // 残せるようにするための退避先。
-            private String pumlOnError;
-
-            @Override
-            protected RenderResult doInBackground() {
-                try {
-                    boolean wantLinks = (kind == DiagramKind.CLASS
-                            || kind == DiagramKind.INHERITANCE);
-                    DiagramRequest req;
-                    if (kind == DiagramKind.SEQUENCE && entry != null) {
-                        req = controller.buildSequenceRequest(entry);
-                    } else if (kind == DiagramKind.ACTIVITY && activity != null) {
-                        req = controller.buildActivityRequest(activity);
-                    } else if (kind == DiagramKind.CALLGRAPH && callGraph != null) {
-                        req = controller.buildCallGraphRequest(callGraph);
-                    } else if (kind == DiagramKind.LAYOUT && layoutKey != null) {
-                        req = DiagramRequest.forLayout(layoutKey, true);
-                    } else if (kind == DiagramKind.NAVIGATION && navigationKey != null) {
-                        req = DiagramRequest.forNavigationGraph(navigationKey, true);
-                    } else {
-                        req = new DiagramRequest(kind, null, null, true, scope, wantLinks);
-                    }
-                    String puml = DiagramService.generatePuml(req, cache);
-                    pumlOnError = puml;
-                    // ベクター SVG として描画して、PlantUML の PNG 4096x4096
-                    // キャンバス上限による切り詰めを回避する。
-                    RenderedSvg svg = PlantUmlSvgRenderer.render(puml);
-                    return new RenderResult(puml, svg);
-                } catch (Throwable ex) {
-                    error = ex;
-                    return null;
-                }
-            }
-
-            @Override
-            protected void done() {
-                loadProgress.setVisible(false);
-                loadProgress.setIndeterminate(false);
-                loadProgress.setString(null);
-                if (error != null) {
-                    // モーダル ダイアログは出さず、ステータス バー + PlantUML Source タブで
-                    // 通知する。Smetana のフォールバック SVG (Batik が読めない巨大 base64) を
-                    // ダイアログに出すと使い物にならないため、UX 優先で握り潰す。
-                    previewPanel.setSvgGraphicsNode(null, 0, 0);
-                    if (pumlOnError != null) {
-                        sourcePanel.setText(pumlOnError);
-                    }
-                    String reason;
-                    if (error instanceof padtools.core.formats.uml.PlantUmlRenderFailedException) {
-                        reason = "PlantUML layout error (Smetana)";
-                    } else {
-                        String m = error.getMessage();
-                        reason = m == null ? error.getClass().getSimpleName()
-                                : truncateForStatus(m, 120);
-                    }
-                    status.setText(kind.getDisplayName()
-                            + ": rendering failed -- " + reason
-                            + ". See 'PlantUML Source' tab.");
-                    return;
-                }
-                try {
-                    RenderResult r = get();
-                    if (r == null || r.svg == null) {
-                        previewPanel.setSvgGraphicsNode(null, 0, 0);
-                        sourcePanel.setText(r != null ? r.puml : "");
-                        status.setText(kind.getDisplayName() + ": (no diagram)");
-                        return;
-                    }
-                    state.currentPuml = r.puml;
-                    state.currentSvgXml = r.svg.getSvgXml();
-                    previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
-                            r.svg.getWidth(), r.svg.getHeight());
-                    previewPanel.setLinkAreas(r.svg.getLinkAreas());
-                    previewPanel.setTextItems(r.svg.getTextItems());
-                    sourcePanel.setText(r.puml);
-                    status.setText(kind.getDisplayName() + " rendered ("
-                            + (int) Math.round(r.svg.getWidth()) + "x"
-                            + (int) Math.round(r.svg.getHeight()) + ", SVG)");
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(UmlMainFrame.this,
-                            "Failed to display: " + ex.getMessage(),
-                            "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        }.execute();
     }
 
     private void chooseAndExport() {
@@ -702,8 +517,9 @@ public class UmlMainFrame extends JFrame {
 
     // --- 状態管理 -------------------------------------------------------------
 
-    private void updateZoomLabel() {
-        int pct = (int) Math.round(previewPanel.getZoomLevel() * 100);
+    /** アクティブタブのズーム率 (1.0 = 100%) をステータスバーのズームラベルへ反映する。 */
+    private void updateZoomLabelFromValue(double zoom) {
+        int pct = (int) Math.round(zoom * 100);
         zoomLabel.setText(pct + "%");
     }
 
@@ -738,16 +554,6 @@ public class UmlMainFrame extends JFrame {
 
     private void saveCurrentProjectSettings() {
         settingsPersistor.saveCurrentProjectSettings(currentProjectRoot);
-    }
-
-    private static final class RenderResult {
-        final String puml;
-        final RenderedSvg svg;
-
-        RenderResult(String puml, RenderedSvg svg) {
-            this.puml = puml;
-            this.svg = svg;
-        }
     }
 
     /** GUI を EDT で起動する。 */

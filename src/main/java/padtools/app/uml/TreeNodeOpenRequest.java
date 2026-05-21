@@ -67,7 +67,8 @@ public final class TreeNodeOpenRequest {
     public String displayLabel() {
         switch (target) {
             case METHOD:
-                String suffix = kind == DiagramKind.ACTIVITY ? " (act)" : "";
+                String suffix = kind == DiagramKind.ACTIVITY ? " (act)"
+                        : kind == DiagramKind.CALLGRAPH ? " (cg)" : "";
                 return classInfo.getSimpleName() + "." + methodInfo.getName() + suffix;
             case CLASS:
                 return classInfo.getSimpleName();

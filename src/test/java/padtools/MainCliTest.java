@@ -439,4 +439,49 @@ public class MainCliTest {
         assertEquals(padtools.app.uml.DiagramPreset.CUSTOM,
                 padtools.app.uml.DiagramPreset.fromCli("bogus"));
     }
+
+    @Test
+    public void testFuncDiffCli() throws Exception {
+        File fileA = tmp.newFile("ServiceA.java");
+        writeFile(fileA,
+                "class ServiceA { Manager m; void bind() {"
+                + " m.connect(); m.init(); } }");
+        File fileB = tmp.newFile("ServiceB.java");
+        writeFile(fileB,
+                "class ServiceB { Manager m; void bind() {"
+                + " m.connect(); m.init(); m.extra(); } }");
+        File out = new File(tmp.getRoot(), "diff.md");
+
+        String spec = fileA.getAbsolutePath() + "::ServiceA.bind,"
+                + fileB.getAbsolutePath() + "::ServiceB.bind";
+        Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
+
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("# 関数差分レポート"));
+        assertTrue(md, md.contains("## サマリー"));
+        assertTrue(md, md.contains("## 呼び出し比較"));
+        assertTrue(md, md.contains("一致"));
+        assertTrue(md, md.contains("B のみ"));
+        assertTrue(md, md.contains("extra"));
+    }
+
+    @Test
+    public void testFuncDiffCliMethodOnly() throws Exception {
+        File fileA = tmp.newFile("Alpha.java");
+        writeFile(fileA, "class Alpha { X x; void go() { x.run(); } }");
+        File fileB = tmp.newFile("Beta.java");
+        writeFile(fileB, "class Beta { X x; void go() { x.run(); x.stop(); } }");
+        File out = new File(tmp.getRoot(), "d2.md");
+
+        String spec = fileA.getAbsolutePath() + "::go,"
+                + fileB.getAbsolutePath() + "::go";
+        Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
+
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("# 関数差分レポート"));
+        assertTrue(md, md.contains("LCS 類似度"));
+        assertTrue(md, md.contains("編集距離"));
+        assertTrue(md, md.contains("Jaccard"));
+        assertTrue(md, md.contains("B のみ"));
+    }
 }

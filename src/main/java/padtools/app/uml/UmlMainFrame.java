@@ -87,6 +87,8 @@ public class UmlMainFrame extends JFrame {
             = new padtools.app.uml.explore.ImpactExplorerPanel(refIndexCache);
     private final padtools.app.uml.explore.ReverseReferencePanel referencesPanel
             = new padtools.app.uml.explore.ReverseReferencePanel(refIndexCache);
+    private final padtools.app.uml.explore.FuncDiffPanel funcDiffPanel
+            = new padtools.app.uml.explore.FuncDiffPanel();
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
@@ -176,13 +178,14 @@ public class UmlMainFrame extends JFrame {
         homeSplit.setResizeWeight(0.85);
         mainTabs.addTab("Home", homeSplit);
 
-        // ユーティリティタブ (固定・末尾 3 本)
+        // ユーティリティタブ (固定・末尾 4 本)
         mainTabs.addTab("Manifest", manifestSummaryPanel);
         mainTabs.addTab("Impact", impactPanel);
         mainTabs.addTab("References", referencesPanel);
+        mainTabs.addTab("Func Diff", funcDiffPanel);
 
-        // 動的タブマネージャ (fixedSuffix=3 で Manifest/Impact/References の手前に挿入)
-        tabPane = new DiagramTabPane(mainTabs, 3, cache, status::setText);
+        // 動的タブマネージャ (fixedSuffix=4 で Manifest/Impact/References/Func Diff の手前に挿入)
+        tabPane = new DiagramTabPane(mainTabs, 4, cache, status::setText);
 
         // Home タブが表示された後に divider 位置を相対値でセット
         mainTabs.addChangeListener(ev -> {

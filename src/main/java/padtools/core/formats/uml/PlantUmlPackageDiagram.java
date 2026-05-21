@@ -80,7 +80,7 @@ public final class PlantUmlPackageDiagram {
                 addRef(out, emitted, srcPkg, iface, ctx);
             }
             for (JavaFieldInfo f : c.getFields()) {
-                String target = PlantUmlClassDiagram.pickUsageTarget(
+                String target = PlantUmlClassRelations.pickUsageTarget(
                         f.getType(), ctx.knownNames);
                 addRef(out, emitted, srcPkg, target, ctx);
             }

@@ -165,7 +165,7 @@ final class PlantUmlClassLegend {
                 s.hasMemberAnnotation = true;
             }
             if (!s.hasUsage) {
-                String tgt = PlantUmlClassDiagram.pickUsageTarget(f.getType(), known);
+                String tgt = PlantUmlClassRelations.pickUsageTarget(f.getType(), known);
                 if (tgt != null && !tgt.equals(c.getQualifiedName())
                         && !tgt.equals(c.getSimpleName())) {
                     s.hasUsage = true;

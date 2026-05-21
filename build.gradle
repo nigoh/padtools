@@ -52,6 +52,10 @@ dependencies {
 def defaultEncoding = 'UTF-8'
 tasks.withType(JavaCompile).configureEach {
     options.encoding = defaultEncoding
+    // JDK 21+ でビルドしても Java 17 の API シグネチャに対してコンパイル検証する。
+    // これがないと List.getFirst() など Java 21 で追加された API が紛れ込み、
+    // 実際に JDK 17 でビルドしたユーザー環境でだけ "cannot find symbol" になる。
+    options.release = 17
 }
 
 test {

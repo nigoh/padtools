@@ -44,7 +44,7 @@ public final class CliContext {
      */
     public static CliContext from(CliOptions options) {
         File fileIn = options.arguments().isEmpty()
-                ? null : requireReadable(new File(options.arguments().getFirst()));
+                ? null : requireReadable(new File(options.arguments().get(0)));
         File fileOut = options.out.getArguments().isEmpty()
                 ? null : new File(options.out.getArguments().getLast());
 

@@ -13,6 +13,7 @@ import padtools.core.refs.ReferenceKey;
 import padtools.core.refs.ReferenceSite;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -184,6 +185,14 @@ public final class IndexReader {
         if (projectRoot == null) {
             return f;
         }
-        return new File(projectRoot, relPath);
+        try {
+            File resolved = new File(projectRoot, relPath).getCanonicalFile();
+            if (!resolved.getPath().startsWith(projectRoot.getCanonicalPath() + File.separator)) {
+                return null;
+            }
+            return resolved;
+        } catch (IOException ex) {
+            return null;
+        }
     }
 }

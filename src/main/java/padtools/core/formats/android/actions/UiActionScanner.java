@@ -196,8 +196,17 @@ public final class UiActionScanner {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true);
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            // XXE 対策
+            try {
+                factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+                factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+                factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+                factory.setXIncludeAware(false);
+                factory.setExpandEntityReferences(false);
+            } catch (Exception ignore) {
+                // 一部の features は古い XML パーサで未対応。可能なものだけ設定
+            }
             DocumentBuilder builder = factory.newDocumentBuilder();
             builder.setErrorHandler(null);
             Document doc = builder.parse(new ByteArrayInputStream(

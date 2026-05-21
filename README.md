@@ -159,6 +159,40 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
   動作します。Smetana が苦手な巨大グラフは `-o foo.puml` で書き出して、Graphviz を
   別途インストールした上で `plantuml -tsvg foo.puml` を試してください。
 
+セキュリティ
+------------------------------------------------
+
+### 設計上の安全対策
+
+PadTools は**ローカルプロジェクトのソースコードを読み取るだけ**のツールであり、
+ネットワーク通信・外部サービスへの送信・コード実行は一切行いません。
+入力となる Java / AIDL / AndroidManifest.xml / Gradle ファイルはすべてローカルディスク上にあります。
+
+主なセキュリティ対策:
+
+| 対象 | 対策 |
+|---|---|
+| XML パース (AndroidManifest / Preferences / Layout XML) | XXE (外部エンティティ参照) を全パーサで無効化。`disallow-doctype-decl` / `external-general-entities` / `external-parameter-entities` / `setXIncludeAware(false)` / `setExpandEntityReferences(false)` を設定 |
+| PlantUML カスタム skinparam | `!include` / `!pragma` 等のプリプロセッサ系ディレクティブをフィルタしてからレンダラに渡す |
+| DB 保存済みの相対パス解決 | `getCanonicalFile()` でプロジェクトルート外への逸脱 (パストラバーサル) を検出・拒否 |
+| GUI の HTML 表示 | プロジェクト名・パスを Swing HTML に埋め込む前に `&amp;` / `&lt;` / `&gt;` をエスケープ |
+| SQL | すべての動的値は `PreparedStatement` のバインドパラメータ (`?`) 経由 |
+| プロセス起動 | `Runtime.exec()` / `ProcessBuilder` を PadTools 本体から直接呼び出さない。Graphviz 実行は PlantUML ライブラリに委譲 |
+| デシリアライズ | `ObjectInputStream` / `readObject()` を一切使用しない。設定は Properties XML、索引は SQLite で永続化 |
+| ハードコード秘密情報 | API キー・パスワード・トークンをコード内に埋め込まない |
+
+### ユーザーへの注意事項
+
+* **信頼できないプロジェクトを開く場合**: 悪意ある XML ファイルや AIDL ファイルが含まれる可能性があります。上記の対策を施していますが、未知の脆弱性の可能性はゼロではありません。
+* **Custom Skinparam**: Style Settings の「Custom Skinparam」フィールドは PlantUML の `skinparam` 命令のみを受け付けます。ファイル読み込み系のディレクティブ (`!include` 等) は自動的に除去されます。
+* **依存ライブラリ**: 同梱の PlantUML / Apache Batik 等に既知 CVE が公開された場合は、最新の fat jar をビルドし直してください (`./gradlew jar`)。
+
+### 脆弱性の報告
+
+セキュリティ上の問題を発見した場合は、公開 Issue ではなく
+**GitHub の [Security Advisories](https://github.com/nigoh/padtools/security/advisories/new)**
+からご報告ください。
+
 ビルド (開発者向け)
 ------------------------------------------------
 

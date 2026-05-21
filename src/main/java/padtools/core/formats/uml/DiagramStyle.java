@@ -1,6 +1,7 @@
 package padtools.core.formats.uml;
 
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * PlantUML 描画スタイル設定。
@@ -13,6 +14,10 @@ import java.util.Objects;
  * <p>本オブジェクトは GUI / 設定永続化 (Properties XML) / レンダラの 3 者で共有される。</p>
  */
 public final class DiagramStyle {
+
+    /** PlantUML のファイル読み込み・プリプロセッサ系ディレクティブ（危険）を除去するパターン。 */
+    private static final Pattern UNSAFE_DIRECTIVE =
+            Pattern.compile("(?im)^[ \\t]*!(?:include|pragma|define|undef|ifdef|ifndef|else|endif|import|log|dump_memory|endprocedure|procedure|function|endfunction|return|call|startsub|endsub|stdlib)[^\\n]*", Pattern.MULTILINE);
 
     /** 図の描画方向。 */
     public enum Direction {
@@ -102,10 +107,11 @@ public final class DiagramStyle {
                 break;
         }
         if (!customSkinparam.isEmpty()) {
-            // ユーザ入力の改行は LF に正規化して埋め込む。末尾の改行は揃える。
+            // ユーザ入力の改行は LF に正規化し、危険なプリプロセッサ系ディレクティブを除去して埋め込む。
             String normalized = customSkinparam.replace("\r\n", "\n").replace('\r', '\n');
-            sb.append(normalized);
-            if (!normalized.endsWith("\n")) {
+            String sanitized = UNSAFE_DIRECTIVE.matcher(normalized).replaceAll("");
+            sb.append(sanitized);
+            if (!sanitized.endsWith("\n")) {
                 sb.append('\n');
             }
         }

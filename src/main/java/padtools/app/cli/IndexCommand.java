@@ -486,7 +486,17 @@ public final class IndexCommand {
 
     private static AndroidManifestInfo parseManifestFromDisk(File projectRoot, String relPath,
             ErrorListener listener) {
-        File f = new File(projectRoot, relPath);
+        File f;
+        try {
+            f = new File(projectRoot, relPath).getCanonicalFile();
+            if (!f.getPath().startsWith(projectRoot.getCanonicalPath() + File.separator)) {
+                listener.onError(relPath, -1, "path traversal rejected: " + relPath);
+                return null;
+            }
+        } catch (IOException ex) {
+            listener.onError(relPath, -1, "path resolution failed: " + ex.getMessage());
+            return null;
+        }
         if (!f.isFile()) {
             return null;
         }

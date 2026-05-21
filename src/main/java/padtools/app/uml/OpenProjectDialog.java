@@ -199,15 +199,19 @@ final class OpenProjectDialog extends JDialog {
             if (value instanceof ProjectRecord) {
                 ProjectRecord rec = (ProjectRecord) value;
                 boolean exists = rec.root().isDirectory();
-                setText("<html><b>" + rec.getName() + "</b>"
+                setText("<html><b>" + escapeHtml(rec.getName()) + "</b>"
                         + "&nbsp;&nbsp;<font color='" + (isSelected ? "#cccccc" : "#888888") + "'>"
-                        + rec.getPath() + "</font></html>");
+                        + escapeHtml(rec.getPath()) + "</font></html>");
                 if (!exists) {
                     setForeground(isSelected ? Color.LIGHT_GRAY : Color.GRAY);
                 }
                 setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
             }
             return this;
+        }
+
+        private static String escapeHtml(String s) {
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         }
     }
 }

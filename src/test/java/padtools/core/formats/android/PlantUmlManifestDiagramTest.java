@@ -176,7 +176,7 @@ public class PlantUmlManifestDiagramTest {
     @Test
     public void testLegendByDefault() {
         String puml = PlantUmlManifestDiagram.generate(buildAnalysis());
-        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("legend top left"));
         assertTrue(puml, puml.contains("endlegend"));
     }
 
@@ -185,7 +185,7 @@ public class PlantUmlManifestDiagramTest {
         PlantUmlManifestDiagram.Options o = new PlantUmlManifestDiagram.Options();
         o.includeLegend = false;
         String puml = PlantUmlManifestDiagram.generate(buildAnalysis(), o);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     @Test

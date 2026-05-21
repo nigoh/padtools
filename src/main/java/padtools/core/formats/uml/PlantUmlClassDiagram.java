@@ -130,7 +130,7 @@ public final class PlantUmlClassDiagram {
         public int maxSiblingsPerRow = 0;
     }
 
-    private static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
+    static final Pattern PRIMITIVE_OR_BUILTIN = Pattern.compile(
             "^(void|boolean|byte|char|short|int|long|float|double"
                     + "|String|Object|CharSequence|Number"
                     + "|Integer|Long|Short|Byte|Float|Double|Boolean|Character"
@@ -244,15 +244,15 @@ public final class PlantUmlClassDiagram {
         // 関係線
         if (o.showInheritance || o.showImplementations) {
             for (JavaClassInfo c : classes) {
-                emitInheritance(out, c, o, aliasByQn, qnBySimple);
+                PlantUmlClassRelations.emitInheritance(out, c, o, aliasByQn, qnBySimple);
             }
             if (o.topToBottomDirection && o.maxSiblingsPerRow > 0) {
-                emitSiblingWrapHints(out, classes, aliasByQn, qnBySimple, o);
+                PlantUmlClassRelations.emitSiblingWrapHints(out, classes, aliasByQn, qnBySimple, o);
             }
         }
         if (o.showUsageRelations) {
             for (JavaClassInfo c : classes) {
-                emitUsage(out, c, knownNames, aliasByQn, qnBySimple, o);
+                PlantUmlClassRelations.emitUsage(out, c, knownNames, aliasByQn, qnBySimple, o);
             }
         }
         if (o.includeLegend) {
@@ -405,7 +405,7 @@ public final class PlantUmlClassDiagram {
         if (line.isEmpty()) {
             return;
         }
-        line = sanitizeInlineComment(line, o.commentMaxLength);
+        line = PlantUmlCommentFormatter.sanitizeInlineComment(line, o.commentMaxLength);
         out.append(indent).append(".. ");
         if (o.commentColor != null && !o.commentColor.isEmpty()) {
             out.append("<color:").append(o.commentColor).append('>')
@@ -417,58 +417,12 @@ public final class PlantUmlClassDiagram {
         out.append(" ..\n");
     }
 
-    /**
-     * PlantUML の {@code ..} セパレータと干渉する文字を抑止し、長さも制限する。
-     * シーケンス図側からも再利用するため package-private。
-     */
-    static String sanitizeInlineComment(String s, int maxLen) {
-        // PlantUML の class body 内でレイアウトを乱す制御文字を除去
-        String t = s.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ').trim();
-        // 末尾の '..' は区切りと干渉するためスペースに置換
-        t = t.replaceAll("\\.\\.+$", ".");
-        if (maxLen > 0 && t.length() > maxLen) {
-            t = t.substring(0, Math.max(1, maxLen - 1)) + "…";
-        }
-        return t;
-    }
-
-    /**
-     * テキストを単語境界（スペース）で折り返し、maxLen 文字以内の行に分割する。
-     * スペースが見つからない場合は maxLen 文字でハードブレークする。
-     * note ブロック内の長い行を折り返すために使用。シーケンス図側からも再利用するため package-private。
-     */
-    static String wordWrap(String s, int maxLen) {
-        if (maxLen <= 0 || s == null || s.length() <= maxLen) {
-            return s;
-        }
-        StringBuilder sb = new StringBuilder();
-        int start = 0;
-        while (start < s.length()) {
-            if (s.length() - start <= maxLen) {
-                sb.append(s, start, s.length());
-                break;
-            }
-            int end = start + maxLen;
-            int breakAt = s.lastIndexOf(' ', end);
-            if (breakAt <= start) {
-                // スペースが見つからないためハードブレーク
-                breakAt = end;
-                sb.append(s, start, breakAt).append('\n');
-                start = breakAt;
-            } else {
-                sb.append(s, start, breakAt).append('\n');
-                start = breakAt + 1; // スペースをスキップ
-            }
-        }
-        return sb.toString();
-    }
-
     /** NOTE モード: クラス・各メンバーの JavaDoc を {@code note ...} で出力。 */
     private static void emitNoteBlocks(StringBuilder out, JavaClassInfo c,
                                         String alias, Options o, String indent) {
         if (c.getComment() != null && !c.getComment().isEmpty()) {
             out.append(indent).append("note top of ").append(alias).append('\n');
-            appendNoteBody(out, c.getComment(), indent, o.commentMaxLength);
+            PlantUmlCommentFormatter.appendNoteBody(out, c.getComment(), indent, o.commentMaxLength);
             out.append(indent).append("end note\n");
         }
         if (o.showFields) {
@@ -481,7 +435,7 @@ public final class PlantUmlClassDiagram {
                 }
                 out.append(indent).append("note right of ").append(alias).append("::")
                         .append(f.getName()).append('\n');
-                appendNoteBody(out, f.getComment(), indent, o.commentMaxLength);
+                PlantUmlCommentFormatter.appendNoteBody(out, f.getComment(), indent, o.commentMaxLength);
                 out.append(indent).append("end note\n");
             }
         }
@@ -495,28 +449,12 @@ public final class PlantUmlClassDiagram {
                 }
                 out.append(indent).append("note right of ").append(alias).append("::")
                         .append(m.getName()).append('\n');
-                appendNoteBody(out, m.getComment(), indent, o.commentMaxLength);
+                PlantUmlCommentFormatter.appendNoteBody(out, m.getComment(), indent, o.commentMaxLength);
                 out.append(indent).append("end note\n");
             }
         }
     }
 
-    /** note ブロックの本文を 1 行ずつ書き出す。maxLen > 0 のとき wordWrap を適用。シーケンス図側からも再利用するため package-private。 */
-    static void appendNoteBody(StringBuilder out, String comment, String indent, int maxLen) {
-        String[] lines = comment.split("\n", -1);
-        for (String line : lines) {
-            String t = line.replace('\r', ' ').replace('\t', ' ').trim();
-            if (t.isEmpty()) {
-                continue;
-            }
-            String wrapped = wordWrap(t, maxLen);
-            for (String wl : wrapped.split("\n", -1)) {
-                if (!wl.isEmpty()) {
-                    out.append(indent).append("  ").append(wl).append('\n');
-                }
-            }
-        }
-    }
 
     private static String classKeyword(JavaClassInfo c) {
         switch (c.getKind()) {
@@ -611,7 +549,7 @@ public final class PlantUmlClassDiagram {
         return c.getQualifiedName();
     }
 
-    private static String quoteId(String id) {
+    static String quoteId(String id) {
         return "\"" + id.replace("\"", "\\\"") + "\"";
     }
 
@@ -746,199 +684,6 @@ public final class PlantUmlClassDiagram {
         out.append('\n');
     }
 
-    private static void emitInheritance(StringBuilder out, JavaClassInfo c,
-                                         Options o,
-                                         java.util.Map<String, String> aliasByQn,
-                                         java.util.Map<String, String> qnBySimple) {
-        String me = aliasByQn.get(c.getQualifiedName());
-        if (me == null) {
-            return;
-        }
-        if (o.showInheritance
-                && c.getSuperClass() != null && !c.getSuperClass().isEmpty()) {
-            String parent = relationId(simplifyTypeRef(c.getSuperClass()), aliasByQn, qnBySimple);
-            out.append(parent).append(" <|-- ").append(me).append('\n');
-        }
-        if (o.showImplementations) {
-            for (String iface : c.getInterfaces()) {
-                String parent = relationId(simplifyTypeRef(iface), aliasByQn, qnBySimple);
-                out.append(parent).append(" <|.. ").append(me).append('\n');
-            }
-        }
-    }
-
-    /**
-     * topToBottomDirection 時に同一親を持つ兄弟ノードが横に広がりすぎるのを防ぐため、
-     * {@link Options#maxSiblingsPerRow} 個ごとに隠しリンク ({@code -[hidden]->}) を挿入する。
-     *
-     * <p>グループ末尾 → 次グループ先頭 に hidden リンクを打つことで、
-     * Graphviz/Smetana のランク割り当てが次グループを強制的に下のランクに押し出す。</p>
-     */
-    private static void emitSiblingWrapHints(
-            StringBuilder out, List<JavaClassInfo> classes,
-            java.util.Map<String, String> aliasByQn,
-            java.util.Map<String, String> qnBySimple,
-            Options o) {
-        // parent alias → 子エイリアスの順序リスト (extends のみ追跡)
-        java.util.Map<String, List<String>> childrenByParent = new java.util.LinkedHashMap<>();
-        for (JavaClassInfo c : classes) {
-            if (!o.showInheritance) break;
-            if (c.getSuperClass() == null || c.getSuperClass().isEmpty()) continue;
-            String childAlias = aliasByQn.get(c.getQualifiedName());
-            if (childAlias == null) continue;
-            String parentId = relationId(simplifyTypeRef(c.getSuperClass()), aliasByQn, qnBySimple);
-            childrenByParent.computeIfAbsent(parentId, k -> new ArrayList<>()).add(childAlias);
-        }
-        for (List<String> siblings : childrenByParent.values()) {
-            if (siblings.size() <= o.maxSiblingsPerRow) continue;
-            int n = o.maxSiblingsPerRow;
-            // グループ境界ごとに hidden リンクを打つ
-            for (int i = n; i < siblings.size(); i += n) {
-                out.append(siblings.get(i - 1)).append(" -[hidden]-> ")
-                   .append(siblings.get(i)).append('\n');
-            }
-        }
-    }
-
-    private static void emitUsage(StringBuilder out, JavaClassInfo c,
-                                   Set<String> known,
-                                   java.util.Map<String, String> aliasByQn,
-                                   java.util.Map<String, String> qnBySimple,
-                                   Options o) {
-        String me = aliasByQn.get(c.getQualifiedName());
-        if (me == null) {
-            return;
-        }
-        Set<String> emitted = new LinkedHashSet<>();
-        int count = 0;
-        for (JavaFieldInfo f : c.getFields()) {
-            if (count >= o.maxUsagePerClass) {
-                break;
-            }
-            String target = pickUsageTarget(f.getType(), known);
-            if (target == null || target.equals(c.getQualifiedName())
-                    || target.equals(c.getSimpleName())) {
-                continue;
-            }
-            String tid = relationId(target, aliasByQn, qnBySimple);
-            // 自己参照スキップ
-            if (tid.equals(me)) {
-                continue;
-            }
-            if (emitted.add(tid)) {
-                out.append(me).append(" --> ").append(tid).append('\n');
-                count++;
-            }
-        }
-    }
-
-    /**
-     * 関係性の片端の識別子を返す。
-     * - 完全修飾名で既知ならそのエイリアス
-     * - 単純名で既知なら対応する完全修飾名のエイリアス
-     * - 既知ではないなら引用符付き名 (PlantUML が暗黙生成)
-     */
-    private static String relationId(String typeRef,
-                                      java.util.Map<String, String> aliasByQn,
-                                      java.util.Map<String, String> qnBySimple) {
-        if (typeRef == null || typeRef.isEmpty()) {
-            return "\"?\"";
-        }
-        String alias = aliasByQn.get(typeRef);
-        if (alias != null) {
-            return alias;
-        }
-        String qn = qnBySimple.get(typeRef);
-        if (qn != null) {
-            String a = aliasByQn.get(qn);
-            if (a != null) {
-                return a;
-            }
-        }
-        // 未定義: PlantUML に暗黙作成させる。"a.b.C" 形式は namespace 扱いされうるため
-        // 末尾の単純名のみを使う。
-        String simple = typeRef;
-        int lastDot = simple.lastIndexOf('.');
-        if (lastDot >= 0) {
-            simple = simple.substring(lastDot + 1);
-        }
-        return quoteId(simple);
-    }
-
-    /** 型参照 (たとえば {@code Map<String, Foo>}) から、利用対象となるユーザ定義型を推定する。 */
-    static String pickUsageTarget(String type, Set<String> known) {
-        if (type == null || type.isEmpty()) {
-            return null;
-        }
-        String t = type.replaceAll("\\[\\]", "").trim();
-        // 一番外側のジェネリックがあれば、その引数を再帰的に検索
-        int lt = t.indexOf('<');
-        if (lt >= 0) {
-            int gt = t.lastIndexOf('>');
-            String inner = (gt > lt) ? t.substring(lt + 1, gt) : "";
-            String outer = t.substring(0, lt).trim();
-            String tgt = matchKnown(outer, known);
-            if (tgt != null) {
-                return tgt;
-            }
-            for (String part : splitTopLevelCsv(inner)) {
-                String r = pickUsageTarget(part.trim(), known);
-                if (r != null) {
-                    return r;
-                }
-            }
-            return null;
-        }
-        return matchKnown(t, known);
-    }
-
-    private static String matchKnown(String name, Set<String> known) {
-        if (PRIMITIVE_OR_BUILTIN.matcher(name).matches()) {
-            return null;
-        }
-        if (known.contains(name)) {
-            return name;
-        }
-        for (String k : known) {
-            if (k.endsWith("." + name)) {
-                return k;
-            }
-        }
-        return null;
-    }
-
-    private static String simplifyTypeRef(String t) {
-        if (t == null) {
-            return "";
-        }
-        // ジェネリクスを除く
-        int lt = t.indexOf('<');
-        return (lt >= 0 ? t.substring(0, lt) : t).trim();
-    }
-
-    private static List<String> splitTopLevelCsv(String s) {
-        List<String> out = new ArrayList<>();
-        int depth = 0;
-        StringBuilder cur = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '<' || c == '(') {
-                depth++;
-            } else if (c == '>' || c == ')') {
-                depth--;
-            }
-            if (c == ',' && depth == 0) {
-                out.add(cur.toString());
-                cur.setLength(0);
-                continue;
-            }
-            cur.append(c);
-        }
-        if (cur.length() > 0) {
-            out.add(cur.toString());
-        }
-        return out;
-    }
 
     /**
      * 外部ライブラリ由来クラス判定。

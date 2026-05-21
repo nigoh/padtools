@@ -319,7 +319,7 @@ public final class PlantUmlCommonClassesDiagram {
         }
         // 完全修飾名 / 単純名のどちらでも資料できるよう、まずは pickUsageTarget で 1 段
         // 取り出す (Map<String, Foo> → Foo)。
-        String picked = PlantUmlClassDiagram.pickUsageTarget(typeRef, knownNames);
+        String picked = PlantUmlClassRelations.pickUsageTarget(typeRef, knownNames);
         if (picked != null) {
             if (knownNames.contains(picked)) {
                 return picked;

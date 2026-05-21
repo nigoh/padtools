@@ -702,7 +702,7 @@ public final class PlantUmlSequenceDiagram {
         if (first == null || first.isEmpty()) {
             return;
         }
-        String line = PlantUmlClassDiagram.sanitizeInlineComment(first, o.commentMaxLength);
+        String line = PlantUmlCommentFormatter.sanitizeInlineComment(first, o.commentMaxLength);
         if (line == null || line.isEmpty()) {
             return;
         }
@@ -731,7 +731,7 @@ public final class PlantUmlSequenceDiagram {
             if (t.isEmpty()) {
                 continue;
             }
-            for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+            for (String wl : PlantUmlCommentFormatter.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
                 if (!wl.isEmpty()) {
                     body.append(indent).append("  ").append(wl).append('\n');
                     any = true;
@@ -749,7 +749,7 @@ public final class PlantUmlSequenceDiagram {
                     if (t.isEmpty()) {
                         continue;
                     }
-                    for (String wl : PlantUmlClassDiagram.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
+                    for (String wl : PlantUmlCommentFormatter.wordWrap(t, o.commentMaxLength).split("\n", -1)) {
                         if (!wl.isEmpty()) {
                             body.append(indent).append("  // ").append(wl).append('\n');
                         }

@@ -96,7 +96,7 @@ public class PlantUmlLayoutDiagramTest {
     public void testLegendIncludedByDefault() throws IOException {
         AndroidLayoutInfo info = parseSample("activity_main.xml");
         String puml = PlantUmlLayoutDiagram.generate(info);
-        assertTrue(puml.contains("legend right"));
+        assertTrue(puml.contains("legend top left"));
         assertTrue(puml.contains("endlegend"));
     }
 
@@ -106,7 +106,7 @@ public class PlantUmlLayoutDiagramTest {
         PlantUmlLayoutDiagram.Options opts = new PlantUmlLayoutDiagram.Options();
         opts.includeLegend = false;
         String puml = PlantUmlLayoutDiagram.generate(info, opts);
-        assertFalse(puml.contains("legend right"));
+        assertFalse(puml.contains("legend top left"));
     }
 
     @Test

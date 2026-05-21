@@ -90,7 +90,7 @@ public class PlantUmlGradleDependencyGraphTest {
     @Test
     public void testLegendOnByDefault() {
         String puml = PlantUmlGradleDependencyGraph.generate(build());
-        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("legend top left"));
     }
 
     @Test
@@ -98,7 +98,7 @@ public class PlantUmlGradleDependencyGraphTest {
         PlantUmlGradleDependencyGraph.Options o = new PlantUmlGradleDependencyGraph.Options();
         o.includeLegend = false;
         String puml = PlantUmlGradleDependencyGraph.generate(build(), o);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     /**

@@ -223,7 +223,7 @@ public class PlantUmlClassDiagramTest {
     public void testLegendIncludedByDefault() {
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract("class A {}"));
-        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("legend top left"));
         assertTrue(puml, puml.contains("endlegend"));
     }
 
@@ -233,7 +233,7 @@ public class PlantUmlClassDiagramTest {
         o.includeLegend = false;
         String puml = PlantUmlClassDiagram.generate(
                 JavaStructureExtractor.extract("class A {}"), o);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     @Test

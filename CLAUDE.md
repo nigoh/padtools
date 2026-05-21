@@ -46,3 +46,26 @@
 - チャット応答内のコメントや見出しも、可能な限り日本語を優先する（コード内コメントは既存スタイルに合わせる）。
 - コミットメッセージ・PR タイトル本体は英語のままでよい（CHANGE.md や README は日本語要約があると親切）。
 - 専門用語・固有名詞（Gradle, PlantUML, fat jar など）は無理に訳さず原語のまま使う。
+
+## UmlMainFrame リファクタリングルール
+
+### 責務の分離原則
+
+- `DiagramState`: 状態の保持のみ（副作用なし）
+- `DiagramController`: 状態遷移と UI 同期
+- `MenuBarBuilder` / `ToolBarBuilder`: UI 構築のみ（状態変更なし）
+- `ProjectLoader`: SwingWorker ライフサイクルのみ
+- `UmlMainFrame`: 上記の配線と renderLoop のみ
+
+### 絶対に UmlMainFrame から移動してはならないフィールド
+
+`cache`, `previewPanel`, `status`, `currentKind`
+
+（既存テストがリフレクションでアクセスしているため。`UmlMainFrameRightClickIT` および `UmlMainFrameSwingTest` が `Field.setAccessible` を使用）
+
+### 新機能追加時のルール
+
+- 状態の追加 → `DiagramState` に追加
+- 図の切り替えロジック → `DiagramController` に追加
+- メニュー項目追加 → `MenuBarBuilder.Callbacks` に追加
+- `UmlMainFrame` への直接追加は原則禁止

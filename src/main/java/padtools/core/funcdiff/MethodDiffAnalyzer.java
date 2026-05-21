@@ -168,6 +168,9 @@ public final class MethodDiffAnalyzer {
         }
         String filePath = spec.substring(0, sep).trim();
         String methodPart = spec.substring(sep + 2).trim();
+        if (methodPart.isEmpty()) {
+            throw new IllegalArgumentException("methodName must not be empty in spec: " + spec);
+        }
 
         // "ClassName.methodName" または "methodName" を判別
         // 最後の '.' の前が ClassName（大文字始まり）なら ClassName.method 形式

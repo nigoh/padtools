@@ -49,6 +49,8 @@ public final class DiagramTabPane {
     private final Map<String, DiagramTab> openTabs = new LinkedHashMap<>();
     private final ProjectAnalysisCache cache;
     private final Consumer<String> statusReporter;
+    /** 動的タブにフォーカスが移ったとき、その由来ノードを通知する (タブ↔ツリー同期用)。 */
+    private Consumer<TreeNodeOpenRequest> onTabFocused;
 
     /**
      * @param tabs         ダイアグラムタブを追加する外部 JTabbedPane
@@ -62,6 +64,28 @@ public final class DiagramTabPane {
         this.fixedSuffix = fixedSuffix;
         this.cache = cache;
         this.statusReporter = statusReporter;
+        // タブ選択が動的タブに移ったら、左ツリー選択・ステータスを連動させる。
+        tabs.addChangeListener(e -> handleTabSelectionChanged());
+    }
+
+    /**
+     * 動的タブにフォーカスが移ったときに呼ぶコールバックを設定する。
+     * 受け取り側は当該タブの由来ノードをツリーでハイライトする等に使う。
+     */
+    public void setOnTabFocused(Consumer<TreeNodeOpenRequest> listener) {
+        this.onTabFocused = listener;
+    }
+
+    /** 現在選択中のタブが動的ダイアグラムタブなら、その由来ノードを通知しステータスを更新する。 */
+    private void handleTabSelectionChanged() {
+        java.awt.Component sel = tabs.getSelectedComponent();
+        if (sel instanceof DiagramTab) {
+            DiagramTab tab = (DiagramTab) sel;
+            if (onTabFocused != null) {
+                onTabFocused.accept(tab.req);
+            }
+            tab.reportFocusStatus();
+        }
     }
 
     /** リクエストに対応するタブを開く。既存タブがあればフォーカスのみ移す。 */
@@ -138,6 +162,8 @@ public final class DiagramTabPane {
         private final SvgPreviewPanel previewPanel = new SvgPreviewPanel();
         private final PumlSourcePanel sourcePanel  = new PumlSourcePanel();
         private String renderedPuml;
+        /** このタブの最新ステータス文言。タブ再フォーカス時にステータスバーへ復元する。 */
+        private String lastStatus;
 
         DiagramTab(TreeNodeOpenRequest req) {
             super(new java.awt.BorderLayout());
@@ -151,8 +177,20 @@ public final class DiagramTabPane {
             previewPanel.setOnLinkPopup(this::handleLinkPopup);
         }
 
+        /** このタブのステータスを記録し、ステータスバーにも反映する。 */
+        private void setStatus(String msg) {
+            lastStatus = msg;
+            reportStatus(msg);
+        }
+
+        /** タブにフォーカスが戻ったとき、ステータスバーをこのタブの最新状態に復元する。 */
+        void reportFocusStatus() {
+            reportStatus(lastStatus != null ? lastStatus
+                    : req.displayLabel() + " (tab)");
+        }
+
         void startRender() {
-            reportStatus("Rendering " + req.displayLabel() + " ...");
+            setStatus("Rendering " + req.displayLabel() + " ...");
             final DiagramRequest dreq = toDiagramRequest(req);
             new SwingWorker<RenderResult, Void>() {
                 private Throwable error;
@@ -178,7 +216,7 @@ public final class DiagramTabPane {
                             sourcePanel.setText(pumlOnError);
                         }
                         previewPanel.setSvgGraphicsNode(null, 0, 0);
-                        reportStatus(req.displayLabel() + ": rendering failed.");
+                        setStatus(req.displayLabel() + ": rendering failed.");
                         return;
                     }
                     try {
@@ -192,9 +230,9 @@ public final class DiagramTabPane {
                         previewPanel.setLinkAreas(r.svg.getLinkAreas());
                         sourcePanel.setText(r.puml);
                         renderedPuml = r.puml;
-                        reportStatus(req.displayLabel() + " rendered.");
+                        setStatus(req.displayLabel() + " rendered.");
                     } catch (Exception ex) {
-                        reportStatus(req.displayLabel() + ": " + ex.getMessage());
+                        setStatus(req.displayLabel() + ": " + ex.getMessage());
                     }
                 }
             }.execute();

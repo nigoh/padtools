@@ -2,14 +2,21 @@ package padtools.app.uml;
 
 import org.junit.Before;
 import org.junit.Test;
+import padtools.core.formats.android.AndroidProjectAnalysis;
 import padtools.core.formats.uml.JavaClassInfo;
 import padtools.core.formats.uml.JavaMethodInfo;
+import padtools.core.formats.uml.JavaStructureExtractor;
 
 import javax.swing.JLabel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
+import javax.swing.JTree;
+import javax.swing.tree.TreePath;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -23,6 +30,7 @@ public class DiagramControllerTest {
     private EnumMap<DiagramKind, JToggleButton> diagramToggles;
     private AtomicInteger refreshCount;
     private AtomicReference<DiagramKind> lastKind;
+    private ProjectTreePanel treePanel;
     private DiagramController controller;
 
     @Before
@@ -37,12 +45,13 @@ public class DiagramControllerTest {
         }
         refreshCount = new AtomicInteger(0);
         lastKind = new AtomicReference<>(DiagramKind.CLASS);
+        treePanel = new ProjectTreePanel();
         DiagramControllerDeps deps = new DiagramControllerDeps();
         deps.state = state;
         deps.cacheSupplier = () -> cache;
         deps.diagramItems = diagramItems;
         deps.diagramToggles = diagramToggles;
-        deps.treePanel = new ProjectTreePanel();
+        deps.treePanel = treePanel;
         deps.mainTabs = new JTabbedPane();
         deps.tabPane = null;
         deps.statusLabel = new JLabel();
@@ -204,5 +213,85 @@ public class DiagramControllerTest {
         controller.selectDiagramKind(DiagramKind.SEQUENCE);
         assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
         assertEquals(1, refreshCount.get());
+    }
+
+    // --- 動的タブ ↔ ツリー連動 (syncToFocusedTab) ---
+
+    private static List<JavaClassInfo> demoClasses() {
+        List<JavaClassInfo> classes = new ArrayList<>();
+        classes.addAll(JavaStructureExtractor.extract(
+                "package com.demo; public class Foo { public void bar() {} }"));
+        classes.addAll(JavaStructureExtractor.extract(
+                "package com.demo; public class Baz {}"));
+        return classes;
+    }
+
+    private JTree populatedTree() throws Exception {
+        List<JavaClassInfo> classes = demoClasses();
+        treePanel.populate(new AndroidProjectAnalysis(), classes, "Demo", null);
+        Field f = ProjectTreePanel.class.getDeclaredField("tree");
+        f.setAccessible(true);
+        return (JTree) f.get(treePanel);
+    }
+
+    private static JavaClassInfo find(List<JavaClassInfo> cs, String simple) {
+        for (JavaClassInfo c : cs) {
+            if (simple.equals(c.getSimpleName())) {
+                return c;
+            }
+        }
+        throw new IllegalStateException("no class " + simple);
+    }
+
+    @Test
+    public void syncToFocusedTab_class_highlightsClassNode() throws Exception {
+        JTree tree = populatedTree();
+        JavaClassInfo foo = find(demoClasses(), "Foo");
+        controller.syncToFocusedTab(TreeNodeOpenRequest.classNode(foo));
+        TreePath sel = tree.getSelectionPath();
+        assertNotNull("class tab should highlight a tree node", sel);
+        assertTrue("expected Foo class node, got " + sel.getLastPathComponent(),
+                String.valueOf(sel.getLastPathComponent()).contains("Foo"));
+    }
+
+    @Test
+    public void syncToFocusedTab_method_highlightsMethodNode() throws Exception {
+        JTree tree = populatedTree();
+        List<JavaClassInfo> cs = demoClasses();
+        JavaClassInfo foo = find(cs, "Foo");
+        JavaMethodInfo bar = foo.getMethods().get(0);
+        controller.syncToFocusedTab(
+                TreeNodeOpenRequest.method(foo, bar, DiagramKind.SEQUENCE));
+        TreePath sel = tree.getSelectionPath();
+        assertNotNull("method tab should highlight a tree node", sel);
+        assertTrue("expected bar method node, got " + sel.getLastPathComponent(),
+                String.valueOf(sel.getLastPathComponent()).contains("bar"));
+    }
+
+    @Test
+    public void syncToFocusedTab_package_highlightsPackageNode() throws Exception {
+        JTree tree = populatedTree();
+        controller.syncToFocusedTab(TreeNodeOpenRequest.pkg("com.demo"));
+        TreePath sel = tree.getSelectionPath();
+        assertNotNull("package tab should highlight a tree node", sel);
+        assertTrue("expected com.demo package node, got " + sel.getLastPathComponent(),
+                String.valueOf(sel.getLastPathComponent()).contains("com.demo"));
+    }
+
+    @Test
+    public void syncToFocusedTab_null_isNoOp() throws Exception {
+        JTree tree = populatedTree();
+        controller.syncToFocusedTab(null);
+        assertNull(tree.getSelectionPath());
+    }
+
+    @Test
+    public void syncToFocusedTab_doesNotTriggerHomeRefresh() throws Exception {
+        populatedTree();
+        int before = refreshCount.get();
+        JavaClassInfo foo = find(demoClasses(), "Foo");
+        controller.syncToFocusedTab(TreeNodeOpenRequest.classNode(foo));
+        // ツリーハイライトは suppressNotify なので Home の再描画を誘発しない
+        assertEquals(before, refreshCount.get());
     }
 }

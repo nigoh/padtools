@@ -427,6 +427,38 @@ public final class DiagramController {
         }
     }
 
+    /**
+     * 動的ダイアグラムタブにフォーカスが移ったとき、その由来ノードを左ツリーで
+     * ハイライトして「タブ ↔ リスト」を連動させる。選択コールバックは発火しない
+     * ({@code select*Node} は suppressNotify) ため Home の図には影響しない。
+     */
+    public void syncToFocusedTab(TreeNodeOpenRequest req) {
+        if (req == null) {
+            return;
+        }
+        switch (req.target) {
+            case METHOD:
+                if (req.classInfo != null && req.methodInfo != null) {
+                    treePanel.selectMethodNode(
+                            req.classInfo.getQualifiedName(), req.methodInfo.getName());
+                }
+                break;
+            case CLASS:
+                if (req.classInfo != null) {
+                    treePanel.selectClassNode(req.classInfo.getQualifiedName());
+                }
+                break;
+            case PACKAGE:
+                treePanel.selectPackageNode(req.name);
+                break;
+            case MODULE:
+                treePanel.selectModuleNode(req.name);
+                break;
+            default:
+                break;
+        }
+    }
+
     /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
     private void showHomeTab() {
         if (mainTabs != null && mainTabs.getTabCount() > 0 && mainTabs.getSelectedIndex() != 0) {

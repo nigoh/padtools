@@ -119,6 +119,8 @@ public class UmlMainFrame extends JFrame {
         buildCenterTabs();
         buildToolBar();
         controller = createDiagramController();
+        // 動的タブにフォーカスが移ったら、その由来ノードを左ツリーでハイライトして連動させる。
+        tabPane.setOnTabFocused(req -> controller.syncToFocusedTab(req));
         add(buildStatusBar(), BorderLayout.SOUTH);
         applyInitialWindowSize();
         initPersistorsAndLoader();

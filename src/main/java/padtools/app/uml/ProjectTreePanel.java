@@ -333,6 +333,50 @@ public class ProjectTreePanel extends JPanel {
         }
     }
 
+    /**
+     * 指定パッケージのノードをツリーで選択・スクロールする。
+     * 選択変更コールバック ({@link #notifySelection}) は発火しない (タブ↔ツリー同期用)。
+     */
+    public void selectPackageNode(String pkg) {
+        if (pkg == null || pkg.isEmpty()) {
+            return;
+        }
+        for (int m = 0; m < root.getChildCount(); m++) {
+            DefaultMutableTreeNode moduleNode = (DefaultMutableTreeNode) root.getChildAt(m);
+            DefaultMutableTreeNode pkgNode = findPackageNode(moduleNode, pkg);
+            if (pkgNode != null) {
+                TreePath path = new TreePath(pkgNode.getPath());
+                suppressNotify = true;
+                tree.setSelectionPath(path);
+                suppressNotify = false;
+                tree.scrollPathToVisible(path);
+                return;
+            }
+        }
+    }
+
+    /**
+     * 指定モジュールのノードをツリーで選択・スクロールする。
+     * 選択変更コールバック ({@link #notifySelection}) は発火しない (タブ↔ツリー同期用)。
+     */
+    public void selectModuleNode(String module) {
+        if (module == null || module.isEmpty()) {
+            return;
+        }
+        for (int m = 0; m < root.getChildCount(); m++) {
+            DefaultMutableTreeNode moduleNode = (DefaultMutableTreeNode) root.getChildAt(m);
+            Object u = moduleNode.getUserObject();
+            if (u instanceof ModuleEntry && module.equals(((ModuleEntry) u).name)) {
+                TreePath path = new TreePath(moduleNode.getPath());
+                suppressNotify = true;
+                tree.setSelectionPath(path);
+                suppressNotify = false;
+                tree.scrollPathToVisible(path);
+                return;
+            }
+        }
+    }
+
     private static DefaultMutableTreeNode findPackageNode(DefaultMutableTreeNode moduleNode, String pkg) {
         for (int i = 0; i < moduleNode.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) moduleNode.getChildAt(i);

@@ -172,9 +172,17 @@ public final class PlantUmlCallGraphDiagram {
         for (JavaMethodInfo.Statement stmt : stmts) {
             if (stmt instanceof JavaMethodInfo.Call) {
                 JavaMethodInfo.Call call = (JavaMethodInfo.Call) stmt;
-                String receiver = call.getReceiver();
-                if (receiver == null || receiver.isEmpty()) {
-                    receiver = ownerClass;
+                String receiver;
+                String resolved = call.getResolvedOwnerFqn();
+                if (resolved != null && !resolved.isEmpty()) {
+                    // シンボル解決済みなら宣言型の最外殻型名でグルーピング
+                    // ("new Action.Builder()" / "getScreenManager()" のノイズを避ける)。
+                    receiver = PlantUmlSequenceDiagram.outerSimpleName(resolved);
+                } else {
+                    receiver = call.getReceiver();
+                    if (receiver == null || receiver.isEmpty()) {
+                        receiver = ownerClass;
+                    }
                 }
                 String meth = call.getMethodName();
                 if (meth == null || meth.isEmpty()) {

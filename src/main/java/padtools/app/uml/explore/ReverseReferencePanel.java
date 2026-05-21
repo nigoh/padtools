@@ -124,7 +124,8 @@ public final class ReverseReferencePanel extends JPanel {
             String maybeMember = target.substring(lastDot + 1);
             if (!maybeMember.isEmpty()
                     && Character.isLowerCase(maybeMember.charAt(0))) {
-                return idx.sites(ReferenceKey.ofMethod(maybeOwner, maybeMember));
+                return idx.sitesByMember(
+                        ReferenceKey.Kind.METHOD, maybeOwner, maybeMember);
             }
         }
         return idx.sitesForClass(target);

@@ -110,8 +110,8 @@ public final class AnalysisCommands {
             String maybeMember = target.substring(lastDot + 1);
             if (!maybeMember.isEmpty()
                     && Character.isLowerCase(maybeMember.charAt(0))) {
-                sites = refIndex.sites(
-                        ReferenceKey.ofMethod(maybeOwner, maybeMember));
+                sites = refIndex.sitesByMember(
+                        ReferenceKey.Kind.METHOD, maybeOwner, maybeMember);
             } else {
                 sites = refIndex.sitesForClass(target);
             }

@@ -23,6 +23,8 @@ public class JavaMethodInfo {
         private final String methodName;
         private final List<JavaMethodInfo> inlineMethods = new ArrayList<>();
         private String firstArgLabel;
+        private String resolvedOwnerFqn;
+        private String resolvedSignature;
 
         public Call(String receiver, String methodName) {
             this.receiver = receiver;
@@ -35,6 +37,29 @@ public class JavaMethodInfo {
 
         public String getMethodName() {
             return methodName;
+        }
+
+        /**
+         * シンボル解決器が特定した呼び出し先の宣言型 FQN。
+         * 解決済みなら逆参照インデックスはこれを優先し、receiver 文字列のヒューリスティックを
+         * 飛ばす。チェーン呼び出し・オーバーロード・継承・ジェネリクスを正確に辿れる。
+         * 未解決なら null。
+         */
+        public String getResolvedOwnerFqn() {
+            return resolvedOwnerFqn;
+        }
+
+        public void setResolvedOwnerFqn(String resolvedOwnerFqn) {
+            this.resolvedOwnerFqn = resolvedOwnerFqn;
+        }
+
+        /** 解決済みメソッドのシグネチャ (例: {@code doIt(int, java.lang.String)})。未解決なら null。 */
+        public String getResolvedSignature() {
+            return resolvedSignature;
+        }
+
+        public void setResolvedSignature(String resolvedSignature) {
+            this.resolvedSignature = resolvedSignature;
         }
 
         /**

@@ -137,7 +137,7 @@ public final class MethodUsageReport {
                                  ReferenceIndex refIndex, Map<String, JavaClassInfo> byQn) {
         List<ReferenceSite> sites = refIndex == null
                 ? new ArrayList<>()
-                : refIndex.sites(ReferenceKey.ofMethod(qn, nz(m.getName())));
+                : refIndex.sitesByMember(ReferenceKey.Kind.METHOD, qn, nz(m.getName()));
         List<String> callers = new ArrayList<>();
         Set<String> conditions = new LinkedHashSet<>();
         boolean hasJava = false;

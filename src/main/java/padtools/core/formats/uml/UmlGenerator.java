@@ -85,6 +85,17 @@ public final class UmlGenerator {
     /** エラーリスナー付き。 */
     public static List<JavaClassInfo> extractFromSource(String source, String fileName,
                                                          ErrorListener listener) {
+        return extractFromSource(source, fileName, listener, null);
+    }
+
+    /**
+     * {@code solver} が非 null なら Java ソースの呼び出し先をシンボル解決して
+     * {@code Call.resolvedOwnerFqn} を埋める (プロジェクト FULL 解析時のみ)。
+     */
+    public static List<JavaClassInfo> extractFromSource(String source, String fileName,
+                                                        ErrorListener listener,
+                                                        padtools.core.formats.java.jp.JpSolver
+                                                                solver) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
         }
@@ -98,7 +109,7 @@ public final class UmlGenerator {
             infos = new ArrayList<>(
                     padtools.core.formats.kotlin.KotlinLightScanner.scan(source, wrapped));
         } else {
-            infos = new ArrayList<>(JavaStructureExtractor.extract(source, wrapped));
+            infos = new ArrayList<>(JavaStructureExtractor.extract(source, wrapped, solver));
         }
         for (JavaClassInfo info : infos) {
             String cat = AaosPattern.categorize(info);
@@ -259,6 +270,13 @@ public final class UmlGenerator {
             return new ProjectParseResult(all, index);
         }
 
+        // FULL 解析時のみシンボル解決器を構築 (呼び出し先 FQN/シグネチャの解決用)。
+        final padtools.core.formats.java.jp.JpSolver solver =
+                (m == ParseMode.FULL)
+                        ? padtools.core.formats.java.jp.JpSolver.fromSourceRoots(
+                                deriveSourceRoots(files))
+                        : null;
+
         int workers = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
         ExecutorService pool = Executors.newFixedThreadPool(workers, r -> {
             Thread t = new Thread(r, "UmlGenerator-parse");
@@ -279,7 +297,7 @@ public final class UmlGenerator {
                 }
                 final File file = f;
                 final String module = AndroidProjectAnalyzer.inferModuleName(root, file);
-                cs.submit(new ParseTask(file, module, err, m));
+                cs.submit(new ParseTask(file, module, err, m, solver));
                 submitted++;
             }
             int done = 0;
@@ -370,17 +388,34 @@ public final class UmlGenerator {
         }
     }
 
+    /** 標準的なレイアウト ({@code .../src/<set>/java|kotlin/...}) からソースルート群を推定する。 */
+    private static java.util.Set<File> deriveSourceRoots(List<File> files) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "^(.*[/\\\\]src[/\\\\][^/\\\\]+[/\\\\](?:java|kotlin))[/\\\\]");
+        java.util.LinkedHashSet<File> roots = new java.util.LinkedHashSet<>();
+        for (File f : files) {
+            java.util.regex.Matcher m = p.matcher(f.getPath());
+            if (m.find()) {
+                roots.add(new File(m.group(1)));
+            }
+        }
+        return roots;
+    }
+
     private static final class ParseTask implements Callable<FileParseOutcome> {
         private final File file;
         private final String module;
         private final ErrorListener err;
         private final ParseMode mode;
+        private final padtools.core.formats.java.jp.JpSolver solver;
 
-        ParseTask(File file, String module, ErrorListener err, ParseMode mode) {
+        ParseTask(File file, String module, ErrorListener err, ParseMode mode,
+                  padtools.core.formats.java.jp.JpSolver solver) {
             this.file = file;
             this.module = module;
             this.err = err;
             this.mode = mode;
+            this.solver = solver;
         }
 
         @Override
@@ -397,7 +432,7 @@ public final class UmlGenerator {
                 if (mode == ParseMode.HEADERS_ONLY) {
                     classes = extractHeadersFromSource(src, file.getName(), err);
                 } else {
-                    classes = extractFromSource(src, file.getName(), err);
+                    classes = extractFromSource(src, file.getName(), err, solver);
                 }
             } catch (RuntimeException ex) {
                 err.onError(file.getName(), -1, "parse failed: " + ex.getMessage());

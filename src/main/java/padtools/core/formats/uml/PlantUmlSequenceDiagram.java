@@ -692,6 +692,13 @@ public final class PlantUmlSequenceDiagram {
     private static String resolveTarget(JavaClassInfo cls,
                                         JavaMethodInfo.Call call,
                                         Options o) {
+        // シンボル解決済みなら宣言型の最外殻型名を participant にする
+        // (チェーン/new 起点でも "new Action"/"getScreenManager()" のようなノイズを避け、
+        //  実際の宣言型 "Action"/"ScreenManager" に解決できる)。
+        String resolved = call.getResolvedOwnerFqn();
+        if (resolved != null && !resolved.isEmpty()) {
+            return outerSimpleName(resolved);
+        }
         String receiver = call.getReceiver();
         if (receiver == null || receiver.isEmpty() || "this".equals(receiver)) {
             return cls.getSimpleName();
@@ -719,6 +726,21 @@ public final class PlantUmlSequenceDiagram {
         }
         // それ以外は receiver の先頭シンボルをそのまま使用
         return head;
+    }
+
+    /**
+     * FQN から最外殻の型単純名を取り出す (パッケージ後の最初の大文字始まりセグメント)。
+     * 例: {@code androidx.car.app.model.Action.Builder} → {@code Action}、
+     * {@code com.x.ScreenManager} → {@code ScreenManager}。
+     */
+    static String outerSimpleName(String fqn) {
+        String[] segs = fqn.split("\\.");
+        for (String s : segs) {
+            if (!s.isEmpty() && Character.isUpperCase(s.charAt(0))) {
+                return s;
+            }
+        }
+        return segs.length > 0 ? segs[segs.length - 1] : fqn;
     }
 
     private static JavaClassInfo findClass(List<JavaClassInfo> classes, String name) {

@@ -62,8 +62,8 @@ public final class ImpactAnalyzer {
         if (ownerFqn == null || methodName == null) {
             return g;
         }
-        List<ReferenceSite> direct = index.sites(
-                ReferenceKey.ofMethod(ownerFqn, methodName));
+        List<ReferenceSite> direct = index.sitesByMember(
+                ReferenceKey.Kind.METHOD, ownerFqn, methodName);
         runBfs(g, target, direct, maxDepth);
         return g;
     }

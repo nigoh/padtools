@@ -87,8 +87,8 @@ public class PlantUmlPackageDiagramTest {
         PlantUmlPackageDiagram.Options opts = new PlantUmlPackageDiagram.Options();
         opts.includeLegend = true;
         String puml = PlantUmlPackageDiagram.generate(infos, opts);
-        assertTrue(puml, puml.contains("legend right"));
-        assertTrue(puml, puml.contains("end legend"));
+        assertTrue(puml, puml.contains("legend top left"));
+        assertTrue(puml, puml.contains("endlegend"));
     }
 
     @Test
@@ -98,7 +98,7 @@ public class PlantUmlPackageDiagramTest {
         PlantUmlPackageDiagram.Options opts = new PlantUmlPackageDiagram.Options();
         opts.includeLegend = false;
         String puml = PlantUmlPackageDiagram.generate(infos, opts);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     @Test

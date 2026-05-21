@@ -73,7 +73,7 @@ public class PlantUmlNavigationGraphDiagramTest {
         PlantUmlNavigationGraphDiagram.Options opts = new PlantUmlNavigationGraphDiagram.Options();
         opts.includeLegend = true;
         String puml = PlantUmlNavigationGraphDiagram.generate(info, opts);
-        assertTrue(puml.contains("legend right"));
+        assertTrue(puml.contains("legend top left"));
         assertTrue(puml.contains("endlegend"));
     }
 
@@ -83,7 +83,7 @@ public class PlantUmlNavigationGraphDiagramTest {
         PlantUmlNavigationGraphDiagram.Options opts = new PlantUmlNavigationGraphDiagram.Options();
         opts.includeLegend = false;
         String puml = PlantUmlNavigationGraphDiagram.generate(info, opts);
-        assertFalse(puml.contains("legend right"));
+        assertFalse(puml.contains("legend top left"));
     }
 
     @Test

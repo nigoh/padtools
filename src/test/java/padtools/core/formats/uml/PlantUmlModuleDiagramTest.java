@@ -133,7 +133,7 @@ public class PlantUmlModuleDiagramTest {
                 "module com.example.app { }");
         String puml = PlantUmlModuleDiagram.generate(infos);
         assertTrue("legend should be included by default: " + puml,
-                puml.contains("legend right"));
+                puml.contains("legend top left"));
         assertTrue("legend should explain component: " + puml,
                 puml.contains("module-info.java"));
     }
@@ -146,7 +146,7 @@ public class PlantUmlModuleDiagramTest {
         o.includeLegend = false;
         String puml = PlantUmlModuleDiagram.generate(infos, o);
         assertFalse("legend should be suppressed: " + puml,
-                puml.contains("legend right"));
+                puml.contains("legend top left"));
     }
 
     @Test

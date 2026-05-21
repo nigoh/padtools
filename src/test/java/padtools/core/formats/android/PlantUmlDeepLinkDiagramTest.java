@@ -130,7 +130,7 @@ public class PlantUmlDeepLinkDiagramTest {
     @Test
     public void testLegendByDefault() {
         String puml = PlantUmlDeepLinkDiagram.generate(buildAnalysis());
-        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("legend top left"));
         assertTrue(puml, puml.contains("endlegend"));
     }
 
@@ -139,7 +139,7 @@ public class PlantUmlDeepLinkDiagramTest {
         PlantUmlDeepLinkDiagram.Options o = new PlantUmlDeepLinkDiagram.Options();
         o.includeLegend = false;
         String puml = PlantUmlDeepLinkDiagram.generate(buildAnalysis(), o);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     @Test

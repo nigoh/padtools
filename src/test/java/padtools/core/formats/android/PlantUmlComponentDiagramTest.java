@@ -106,7 +106,7 @@ public class PlantUmlComponentDiagramTest {
     @Test
     public void testLegendIncludedByDefault() {
         String puml = PlantUmlComponentDiagram.generate(buildAnalysis());
-        assertTrue(puml, puml.contains("legend right"));
+        assertTrue(puml, puml.contains("legend top left"));
         assertTrue(puml, puml.contains("endlegend"));
     }
 
@@ -115,7 +115,7 @@ public class PlantUmlComponentDiagramTest {
         PlantUmlComponentDiagram.Options o = new PlantUmlComponentDiagram.Options();
         o.includeLegend = false;
         String puml = PlantUmlComponentDiagram.generate(buildAnalysis(), o);
-        assertFalse(puml, puml.contains("legend right"));
+        assertFalse(puml, puml.contains("legend top left"));
     }
 
     @Test

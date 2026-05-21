@@ -1271,7 +1271,7 @@ public class MethodDiffAnalyzerTest {
         String srcB = "class B { Bar b; void go() { b.save(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
         assertNotNull(r.rows.get(0).detail);
-        assertTrue(r.rows.get(0).detail.contains("receiver"));
+        assertTrue(r.rows.get(0).detail.contains("レシーバー"));
     }
 
     @Test
@@ -1475,49 +1475,49 @@ public class MethodDiffAnalyzerTest {
     @Test
     public void report_nullResult_returnsNoData() {
         String md = MarkdownMethodDiffReport.render(null);
-        assertTrue(md.contains("no data"));
+        assertTrue(md.contains("データなし"));
     }
 
     @Test
     public void report_containsTitle() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("# Function Diff Report"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("# 関数差分レポート"));
     }
 
     @Test
     public void report_containsSummarySection() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("## Summary"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("## サマリー"));
     }
 
     @Test
     public void report_containsCallComparisonSection() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("## Call Comparison"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("## 呼び出し比較"));
     }
 
     @Test
     public void report_containsDiffDetailSection() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("## Diff Detail"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("## 差分詳細"));
     }
 
     @Test
     public void report_containsLcsSimilarityLabel() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("LCS Similarity"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("LCS 類似度"));
     }
 
     @Test
     public void report_containsEditDistanceLabel() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Edit Distance"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("編集距離"));
     }
 
     @Test
@@ -1531,7 +1531,7 @@ public class MethodDiffAnalyzerTest {
     public void report_containsFormulaReference() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Formula Reference"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("計算式の説明"));
     }
 
     @Test
@@ -1552,7 +1552,7 @@ public class MethodDiffAnalyzerTest {
     public void report_perfectMatch_noDifferencesFound() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("No differences found"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("差分なし"));
     }
 
     @Test
@@ -1560,7 +1560,7 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { X x; void go() { x.extra(); } }";
         String srcB = "class B { void go() {} }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Only in A"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("A のみ"));
     }
 
     @Test
@@ -1568,7 +1568,7 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { void go() {} }";
         String srcB = "class B { X x; void go() { x.extra(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Only in B"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("B のみ"));
     }
 
     @Test
@@ -1576,14 +1576,14 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { Foo f; void go() { f.save(); } }";
         String srcB = "class B { Bar b; void go() { b.save(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Partial Match"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("部分一致"));
     }
 
     @Test
     public void report_containsMATCH_statusWord() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("MATCH"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("一致"));
     }
 
     @Test
@@ -1591,7 +1591,7 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { X x; void go() { x.a(); x.extra(); } }";
         String srcB = "class B { X x; void go() { x.a(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("ONLY_A"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("A のみ"));
     }
 
     @Test
@@ -1599,7 +1599,7 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { X x; void go() { x.a(); } }";
         String srcB = "class B { X x; void go() { x.a(); x.extra(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("ONLY_B"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("B のみ"));
     }
 
     @Test
@@ -1607,21 +1607,21 @@ public class MethodDiffAnalyzerTest {
         String srcA = "class A { Foo f; void go() { f.save(); } }";
         String srcB = "class B { Bar b; void go() { b.save(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(srcA, "A", "go", srcB, "B", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("PARTIAL"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("部分一致"));
     }
 
     @Test
     public void report_containsConfidenceHeader() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Confidence"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("信頼度"));
     }
 
     @Test
     public void report_avgConfidence_shownWhenMatchExists() {
         String src = "class A { X x; void go() { x.run(); } }";
         MethodDiffAnalyzer.DiffResult r = diff(src, "A", "go", src, "A", "go");
-        assertTrue(MarkdownMethodDiffReport.render(r).contains("Avg. Confidence"));
+        assertTrue(MarkdownMethodDiffReport.render(r).contains("平均信頼度"));
     }
 
     @Test

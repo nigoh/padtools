@@ -457,11 +457,11 @@ public class MainCliTest {
         Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
 
         String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
-        assertTrue(md, md.contains("# Function Diff Report"));
-        assertTrue(md, md.contains("## Summary"));
-        assertTrue(md, md.contains("## Call Comparison"));
-        assertTrue(md, md.contains("MATCH"));
-        assertTrue(md, md.contains("ONLY_B"));
+        assertTrue(md, md.contains("# 関数差分レポート"));
+        assertTrue(md, md.contains("## サマリー"));
+        assertTrue(md, md.contains("## 呼び出し比較"));
+        assertTrue(md, md.contains("一致"));
+        assertTrue(md, md.contains("B のみ"));
         assertTrue(md, md.contains("extra"));
     }
 
@@ -478,10 +478,10 @@ public class MainCliTest {
         Main.main(new String[]{"--func-diff", spec, "-o", out.getAbsolutePath()});
 
         String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
-        assertTrue(md, md.contains("# Function Diff Report"));
-        assertTrue(md, md.contains("LCS Similarity"));
-        assertTrue(md, md.contains("Edit Distance"));
+        assertTrue(md, md.contains("# 関数差分レポート"));
+        assertTrue(md, md.contains("LCS 類似度"));
+        assertTrue(md, md.contains("編集距離"));
         assertTrue(md, md.contains("Jaccard"));
-        assertTrue(md, md.contains("ONLY_B"));
+        assertTrue(md, md.contains("B のみ"));
     }
 }

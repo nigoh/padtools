@@ -16,10 +16,10 @@ public final class MarkdownMethodDiffReport {
 
     public static String render(MethodDiffAnalyzer.DiffResult result) {
         if (result == null) {
-            return "# Function Diff Report\n\n(no data)\n";
+            return "# 関数差分レポート\n\n(データなし)\n";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append("# Function Diff Report\n\n");
+        sb.append("# 関数差分レポート\n\n");
         appendSummary(sb, result);
         appendCallComparison(sb, result);
         appendDiffDetail(sb, result);
@@ -27,68 +27,68 @@ public final class MarkdownMethodDiffReport {
     }
 
     // -------------------------------------------------------------------------
-    // Summary
+    // サマリー
     // -------------------------------------------------------------------------
 
     private static void appendSummary(StringBuilder sb, MethodDiffAnalyzer.DiffResult r) {
-        sb.append("## Summary\n\n");
-        sb.append("| Item | Value |\n");
+        sb.append("## サマリー\n\n");
+        sb.append("| 項目 | 値 |\n");
         sb.append("|---|---|\n");
         sb.append("| Method A | `").append(r.specA.filePath)
           .append("` :: `").append(r.specA.label()).append("()` |\n");
         sb.append("| Method B | `").append(r.specB.filePath)
           .append("` :: `").append(r.specB.label()).append("()` |\n");
-        sb.append("| Total calls (A / B) | ").append(r.totalCallsA)
+        sb.append("| 呼び出し総数 (A / B) | ").append(r.totalCallsA)
           .append(" / ").append(r.totalCallsB).append(" |\n");
 
         int maxLen = Math.max(r.totalCallsA, r.totalCallsB);
         MethodDiffAnalyzer.SimilarityMetrics m = r.metrics;
 
-        sb.append("| **LCS Similarity** | **")
+        sb.append("| **LCS 類似度** | **")
           .append(fmt2(m.lcsSimilarity))
-          .append("** (LCS_length=").append(m.lcsLen)
+          .append("** (LCS長=").append(m.lcsLen)
           .append(" / max(").append(r.totalCallsA).append(',').append(r.totalCallsB)
           .append(")=").append(maxLen).append(") |\n");
 
-        sb.append("| **Edit Distance** | **")
+        sb.append("| **編集距離** | **")
           .append(m.editDistance)
-          .append("** — Normalized similarity: ")
+          .append("** — 正規化類似度: ")
           .append(fmt2(m.normalizedEditSimilarity))
           .append(" (1 − ").append(m.editDistance).append('/').append(maxLen)
           .append(") |\n");
 
-        sb.append("| **Jaccard Coefficient** | **")
+        sb.append("| **Jaccard 係数** | **")
           .append(fmt2(m.jaccard))
           .append("** (|A∩B| / |A∪B|) |\n");
 
         if (r.matchCount + r.partialCount > 0) {
-            sb.append("| **Avg. Confidence** | **")
+            sb.append("| **平均信頼度** | **")
               .append(fmt2(r.avgConfidence))
-              .append("** (matched pairs only) |\n");
+              .append("** (マッチペアのみ) |\n");
         }
 
-        sb.append("\n### Formula Reference\n\n");
-        sb.append("- LCS Similarity = LCS_length / max(|A|, |B|)"
+        sb.append("\n### 計算式の説明\n\n");
+        sb.append("- LCS 類似度 = LCS長 / max(|A|, |B|)"
                 + " — 順序保持の共通部分割合\n");
-        sb.append("- Edit Distance (Levenshtein)"
-                + " = min(insertions + deletions + substitutions)\n");
-        sb.append("- Normalized Edit Similarity"
-                + " = 1 − edit_distance / max(|A|, |B|)\n");
-        sb.append("- Jaccard = |A∩B| / |A∪B|"
+        sb.append("- 編集距離 (Levenshtein)"
+                + " = 最小(挿入 + 削除 + 置換) 操作数\n");
+        sb.append("- 正規化編集類似度"
+                + " = 1 − 編集距離 / max(|A|, |B|)\n");
+        sb.append("- Jaccard 係数 = |A∩B| / |A∪B|"
                 + " — 集合ベース（順序無視・重複排除）\n");
-        sb.append("- Confidence = receiver\\_score×0.4"
+        sb.append("- 信頼度 = receiver\\_score×0.4"
                 + " + firstArg\\_score×0.3 + position\\_score×0.3\n");
         sb.append('\n');
     }
 
     // -------------------------------------------------------------------------
-    // Call Comparison table
+    // 呼び出し比較テーブル
     // -------------------------------------------------------------------------
 
     private static void appendCallComparison(StringBuilder sb,
                                               MethodDiffAnalyzer.DiffResult r) {
-        sb.append("## Call Comparison\n\n");
-        sb.append("| # | Status | Method A call | Method B call | Confidence | Notes |\n");
+        sb.append("## 呼び出し比較\n\n");
+        sb.append("| # | 状態 | メソッドA の呼び出し | メソッドB の呼び出し | 信頼度 | 備考 |\n");
         sb.append("|---|---|---|---|---|---|\n");
 
         int seq = 1;
@@ -99,7 +99,7 @@ public final class MarkdownMethodDiffReport {
             String notes = row.detail != null ? escapePipe(row.detail) : "";
 
             sb.append("| ").append(seq++).append(" | ")
-              .append(row.kind).append(" | `")
+              .append(kindLabel(row.kind)).append(" | `")
               .append(callAStr).append("` | `")
               .append(callBStr).append("` | ")
               .append(confStr).append(" | ")
@@ -109,7 +109,7 @@ public final class MarkdownMethodDiffReport {
     }
 
     // -------------------------------------------------------------------------
-    // Diff Detail
+    // 差分詳細
     // -------------------------------------------------------------------------
 
     private static void appendDiffDetail(StringBuilder sb, MethodDiffAnalyzer.DiffResult r) {
@@ -127,18 +127,18 @@ public final class MarkdownMethodDiffReport {
         }
 
         if (onlyA.isEmpty() && onlyB.isEmpty() && partial.isEmpty()) {
-            sb.append("## Diff Detail\n\nNo differences found.\n");
+            sb.append("## 差分詳細\n\n差分なし（完全一致）\n");
             return;
         }
 
-        sb.append("## Diff Detail\n\n");
+        sb.append("## 差分詳細\n\n");
 
         if (!onlyA.isEmpty()) {
-            sb.append("### Only in A\n\n");
+            sb.append("### A のみ\n\n");
             for (MethodDiffAnalyzer.DiffRow row : onlyA) {
                 sb.append("- `").append(callLabel(row.callA)).append('`');
                 if (row.callA.getReceiver() != null) {
-                    sb.append(" — receiver: `").append(row.callA.getReceiver()).append('`');
+                    sb.append(" — レシーバー: `").append(row.callA.getReceiver()).append('`');
                 }
                 sb.append('\n');
             }
@@ -146,11 +146,11 @@ public final class MarkdownMethodDiffReport {
         }
 
         if (!onlyB.isEmpty()) {
-            sb.append("### Only in B\n\n");
+            sb.append("### B のみ\n\n");
             for (MethodDiffAnalyzer.DiffRow row : onlyB) {
                 sb.append("- `").append(callLabel(row.callB)).append('`');
                 if (row.callB.getReceiver() != null) {
-                    sb.append(" — receiver: `").append(row.callB.getReceiver()).append('`');
+                    sb.append(" — レシーバー: `").append(row.callB.getReceiver()).append('`');
                 }
                 sb.append('\n');
             }
@@ -158,7 +158,7 @@ public final class MarkdownMethodDiffReport {
         }
 
         if (!partial.isEmpty()) {
-            sb.append("### Partial Match\n\n");
+            sb.append("### 部分一致\n\n");
             for (MethodDiffAnalyzer.DiffRow row : partial) {
                 sb.append("- `").append(row.callA.getMethodName()).append("()`");
                 if (row.detail != null) {
@@ -173,6 +173,16 @@ public final class MarkdownMethodDiffReport {
     // -------------------------------------------------------------------------
     // ヘルパー
     // -------------------------------------------------------------------------
+
+    private static String kindLabel(MethodDiffAnalyzer.MatchKind kind) {
+        switch (kind) {
+            case MATCH:   return "一致";
+            case PARTIAL: return "部分一致";
+            case ONLY_A:  return "A のみ";
+            case ONLY_B:  return "B のみ";
+            default:      return kind.name();
+        }
+    }
 
     private static String callLabel(JavaMethodInfo.Call c) {
         String base = c.getReceiver() != null

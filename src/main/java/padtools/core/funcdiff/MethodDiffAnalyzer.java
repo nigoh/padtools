@@ -364,16 +364,16 @@ public final class MethodDiffAnalyzer {
         }
         // PARTIAL: 差分の説明を構築
         if (!receiverOk) {
-            detail.append("receiver: ")
+            detail.append("レシーバー: ")
                   .append(nullStr(a.getReceiver()))
-                  .append(" vs ")
+                  .append(" → ")
                   .append(nullStr(b.getReceiver()));
         }
         if (!firstArgOk) {
             if (detail.length() > 0) detail.append(" / ");
-            detail.append("firstArg: ")
+            detail.append("第1引数: ")
                   .append(nullStr(a.getFirstArgLabel()))
-                  .append(" vs ")
+                  .append(" → ")
                   .append(nullStr(b.getFirstArgLabel()));
         }
         return MatchKind.PARTIAL;

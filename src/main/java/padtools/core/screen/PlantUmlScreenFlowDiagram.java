@@ -24,7 +24,7 @@ public final class PlantUmlScreenFlowDiagram {
     public static String render(List<ScreenTransition> transitions) {
         StringBuilder sb = new StringBuilder();
         sb.append("@startuml\n");
-        sb.append("title Screen Flow (Intent-based)\n");
+        sb.append("title Screen Flow (Intent + Screen.push)\n");
         sb.append("skinparam shadowing false\n");
         sb.append("skinparam state {\n");
         sb.append("  BackgroundColor #F0F8FF\n");
@@ -75,6 +75,7 @@ public final class PlantUmlScreenFlowDiagram {
         switch (kind) {
             case START_FOR_RESULT: return "<-->";
             case SET_CLASS: return "..>";
+            case SCREEN_PUSH: return "-[#2e8b57]->";
             default: return "-->";
         }
     }

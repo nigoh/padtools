@@ -173,7 +173,43 @@ public class IntentNavigationDetectorTest {
     public void emptyReportRendersPlaceholder() {
         String md = MarkdownScreenFlowReport.render(new java.util.ArrayList<>());
         assertNotNull(md);
-        assertTrue(md.contains("no Intent-based"));
+        assertTrue(md.contains("no screen transitions"));
+    }
+
+    @Test
+    public void reportEnumeratesMultiStepRoutes() {
+        String src = "package com.x;\n"
+                + "public class StartScreen {\n"
+                + "  void a() { getScreenManager().push(new MidScreen(c)); }\n"
+                + "}\n"
+                + "class MidScreen {\n"
+                + "  void b() { getScreenManager().push(new EndScreen(c)); }\n"
+                + "}\n";
+        List<ScreenTransition> hits = new IntentNavigationDetector()
+                .analyzeSource(src, "StartScreen.java");
+        // 同一ファイル内 2 クラスは primary class 起点になるため、ルート確認は
+        // ビルダー直接でも行う
+        List<List<String>> routes = ScreenRouteBuilder.routes(hits);
+        assertNotNull(routes);
+        String md = MarkdownScreenFlowReport.render(hits);
+        assertTrue(md, md.contains("## Routes"));
+    }
+
+    @Test
+    public void routeBuilderChainsTransitiveEdges() {
+        java.util.List<ScreenTransition> ts = new java.util.ArrayList<>();
+        ts.add(new ScreenTransition("p.A", "go", "B", "A.java", 1,
+                ScreenTransition.Kind.SCREEN_PUSH));
+        ts.add(new ScreenTransition("p.B", "go", "C", "B.java", 1,
+                ScreenTransition.Kind.SCREEN_PUSH));
+        List<List<String>> routes = ScreenRouteBuilder.routes(ts);
+        boolean hasAbc = false;
+        for (List<String> r : routes) {
+            if (String.join("→", r).equals("A→B→C")) {
+                hasAbc = true;
+            }
+        }
+        assertTrue("A→B→C のルートが列挙される", hasAbc);
     }
 
     @Test

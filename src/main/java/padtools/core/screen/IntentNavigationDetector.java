@@ -67,7 +67,8 @@ public final class IntentNavigationDetector {
      */
     private static final Pattern SCREEN_PUSH_NEW = Pattern.compile(
             "\\.\\s*push(?:ForResult)?\\s*\\(\\s*(?:new\\s+)?"
-                    + "([A-Z][A-Za-z0-9_$.]*)\\s*\\(");
+                    + "([A-Z][A-Za-z0-9_$]*)"
+                    + "(?:\\s*\\.\\s*[A-Za-z_$][A-Za-z0-9_$]*)?\\s*\\(");
 
     /** メソッド開始位置検出パターン (大まかな抽出)。 */
     private static final Pattern METHOD_DECL_PATTERN = Pattern.compile(

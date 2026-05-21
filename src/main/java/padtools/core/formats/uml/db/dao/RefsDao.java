@@ -118,7 +118,8 @@ public final class RefsDao {
         Map<ReferenceKey, List<ReferenceSite>> out = new LinkedHashMap<>();
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT r.callee_owner_qn, r.callee_member, r.sym_kind, "
-                + "       r.caller_qn, r.caller_method, f.path, r.line_hint, r.ref_kind "
+                + "       r.caller_qn, r.caller_method, f.path, r.line_hint, r.ref_kind, "
+                + "       r.callee_signature "
                 + "FROM refs r LEFT JOIN files f ON r.file_id = f.id "
                 + "ORDER BY r.id");
              ResultSet rs = ps.executeQuery()) {
@@ -145,8 +146,8 @@ public final class RefsDao {
         return conn.prepareStatement(
                 "INSERT INTO refs("
                 + "callee_owner_qn, callee_member, sym_kind, "
-                + "caller_qn, caller_method, file_id, line_hint, ref_kind) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                + "caller_qn, caller_method, file_id, line_hint, ref_kind, callee_signature) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     }
 
     private static void bind(PreparedStatement ps, ReferenceKey key, ReferenceSite site,
@@ -171,6 +172,11 @@ public final class RefsDao {
         }
         ps.setInt(7, site.getLineHint());
         ps.setString(8, site.getKind().name());
+        if (key.getSignature() == null || key.getSignature().isEmpty()) {
+            ps.setNull(9, Types.VARCHAR);
+        } else {
+            ps.setString(9, key.getSignature());
+        }
     }
 
     private static ReferenceKey toKey(ResultSet rs) throws SQLException {
@@ -184,7 +190,10 @@ public final class RefsDao {
         }
         switch (kind) {
             case METHOD:
-                return ReferenceKey.ofMethod(ownerQn, member);
+                String sig = rs.getString(9);
+                return (sig == null || sig.isEmpty())
+                        ? ReferenceKey.ofMethod(ownerQn, member)
+                        : ReferenceKey.ofMethod(ownerQn, member, sig);
             case FIELD:
                 return ReferenceKey.ofField(ownerQn, member);
             case CLASS:

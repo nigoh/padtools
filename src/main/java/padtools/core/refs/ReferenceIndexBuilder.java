@@ -153,7 +153,11 @@ public final class ReferenceIndexBuilder {
         }
         ReferenceSite site = new ReferenceSite(
                 ownerFqn, callerMethod, file, -1, ReferenceSite.Kind.CALL);
-        index.addReference(ReferenceKey.ofMethod(receiverFqn, methodName), site);
+        String sig = call.getResolvedSignature();
+        ReferenceKey key = (sig != null && !sig.isEmpty())
+                ? ReferenceKey.ofMethod(receiverFqn, methodName, sig)
+                : ReferenceKey.ofMethod(receiverFqn, methodName);
+        index.addReference(key, site);
     }
 
     /**

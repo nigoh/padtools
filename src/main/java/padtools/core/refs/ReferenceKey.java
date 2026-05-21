@@ -35,9 +35,17 @@ public final class ReferenceKey {
         return new ReferenceKey(Kind.CLASS, fqn, null, null);
     }
 
-    /** メソッドシンボルキー (オーナーの FQN + メソッド単純名)。 */
+    /** メソッドシンボルキー (オーナーの FQN + メソッド単純名)。シグネチャ無し。 */
     public static ReferenceKey ofMethod(String ownerFqn, String methodName) {
         return new ReferenceKey(Kind.METHOD, ownerFqn, methodName, null);
+    }
+
+    /**
+     * シグネチャ付きメソッドシンボルキー。{@code signature} を同一性に含めるので、
+     * 同名オーバーロードは別エントリになる (シンボル解決で型が確定したときに使う)。
+     */
+    public static ReferenceKey ofMethod(String ownerFqn, String methodName, String signature) {
+        return new ReferenceKey(Kind.METHOD, ownerFqn, methodName, signature);
     }
 
     /** フィールドシンボルキー (オーナーの FQN + フィールド名)。 */
@@ -58,7 +66,7 @@ public final class ReferenceKey {
         return member;
     }
 
-    /** 将来のシグネチャ厳密マッチ用。現状は常に null。 */
+    /** シグネチャ。{@link #ofMethod(String, String, String)} で設定したときのみ非 null。 */
     public String getSignature() {
         return signature;
     }
@@ -89,11 +97,12 @@ public final class ReferenceKey {
         ReferenceKey that = (ReferenceKey) o;
         return kind == that.kind
                 && Objects.equals(ownerFqn, that.ownerFqn)
-                && Objects.equals(member, that.member);
+                && Objects.equals(member, that.member)
+                && Objects.equals(signature, that.signature);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(kind, ownerFqn, member);
+        return Objects.hash(kind, ownerFqn, member, signature);
     }
 }

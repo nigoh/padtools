@@ -32,7 +32,7 @@ public final class SchemaInitializer {
      *                  を統合した外部境界俯瞰)</li>
      * </ul>
      */
-    public static final int SCHEMA_VERSION = 5;
+    public static final int SCHEMA_VERSION = 6;
 
     private SchemaInitializer() {
     }
@@ -198,7 +198,8 @@ public final class SchemaInitializer {
             + "  caller_method   TEXT,"
             + "  file_id         INTEGER REFERENCES files(id) ON DELETE CASCADE,"
             + "  line_hint       INTEGER NOT NULL DEFAULT -1,"
-            + "  ref_kind        TEXT NOT NULL"
+            + "  ref_kind        TEXT NOT NULL,"
+            + "  callee_signature TEXT"
             + ")"
         );
         st.executeUpdate(

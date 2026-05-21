@@ -158,4 +158,45 @@ final class ExportController {
                     "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    /**
+     * 関数一覧を Markdown テーブル / CSV のいずれかで保存する。
+     * 選択フィルタ（または入力した拡張子）が {@code .csv} なら CSV を、それ以外は Markdown を書き出す。
+     */
+    public void exportFunctionList(String markdown, String csv, String dialogTitle) {
+        if ((markdown == null || markdown.isEmpty()) && (csv == null || csv.isEmpty())) {
+            JOptionPane.showMessageDialog(parent, "No content to export.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle(dialogTitle);
+        fc.setAcceptAllFileFilterUsed(false);
+        FileNameExtensionFilter mdFilter =
+                new FileNameExtensionFilter("Markdown table (*.md)", "md");
+        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV (*.csv)", "csv");
+        fc.addChoosableFileFilter(mdFilter);
+        fc.addChoosableFileFilter(csvFilter);
+        fc.setFileFilter(mdFilter);
+        int r = fc.showSaveDialog(parent);
+        if (r != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File chosen = fc.getSelectedFile();
+        String lower = chosen.getName().toLowerCase(java.util.Locale.ROOT);
+        boolean asCsv = lower.endsWith(".csv")
+                || (!lower.endsWith(".md") && fc.getFileFilter() == csvFilter);
+        String ext = asCsv ? "csv" : "md";
+        if (!lower.endsWith("." + ext)) {
+            chosen = new File(chosen.getAbsolutePath() + "." + ext);
+        }
+        try {
+            padtools.app.cli.CliOutput.writeText(chosen, asCsv ? csv : markdown);
+            status.setText("Saved: " + chosen.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(parent,
+                    "Export failed: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 }

@@ -21,6 +21,13 @@ public final class CliDispatcher {
             UmlCommands.handleListMethods(ctx);
             return true;
         }
+        if (o.functionList.isSet()) {
+            String fmt = o.functionListFormat.getArguments().isEmpty()
+                    ? null : o.functionListFormat.getArguments().getLast();
+            UmlCommands.handleFunctionList(ctx,
+                    padtools.core.formats.uml.MethodUsageReport.Format.fromString(fmt));
+            return true;
+        }
         if (o.sequenceDiagrams.isSet()) {
             UmlCommands.handleSequenceDiagrams(ctx);
             return true;

@@ -484,4 +484,82 @@ public class MainCliTest {
         assertTrue(md, md.contains("Jaccard"));
         assertTrue(md, md.contains("B のみ"));
     }
+
+    @Test
+    public void testFunctionListCli() throws Exception {
+        File root = tmp.newFolder("ProjFn");
+        File pkg = new File(root, "app/src/main/java/x");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Svc.java"),
+                "package x; public class Svc {"
+                + " public void run(boolean f) { if (f) { helper(); } }"
+                + " void helper() {} }");
+        File out = new File(tmp.getRoot(), "fn.md");
+        Main.main(new String[]{"--function-list", "-o", out.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(md, md.contains("x.Svc"));
+        assertTrue(md, md.contains("helper()"));
+        // helper() は run() から if(f) 配下で呼ばれる → 利用側と実行条件に反映
+        assertTrue(md, md.contains("利用側"));
+        assertTrue(md, md.contains("run"));
+        assertTrue(md, md.contains("実行条件"));
+        assertTrue(md, md.contains("if"));
+    }
+
+    @Test
+    public void testFunctionListCsvCli() throws Exception {
+        File root = tmp.newFolder("ProjFnCsv");
+        File pkg = new File(root, "app/src/main/java/x");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Svc.java"),
+                "package x; public class Svc {"
+                + " public void run(boolean f) { if (f) { helper(); } }"
+                + " void helper() {} }");
+        File out = new File(tmp.getRoot(), "fn.csv");
+        Main.main(new String[]{"--function-list", "--function-list-format", "csv",
+                "-o", out.getAbsolutePath(), root.getAbsolutePath()});
+        String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        assertTrue(csv, csv.startsWith(
+                "category,class,kind,signature,callers,conditions,reason"));
+        assertTrue(csv, csv.contains("method,x.Svc,CLASS,"));
+        // helper() の呼び出しは if(f) 配下なので条件列・reason 列に反映される
+        assertTrue(csv, csv.contains("if (f)"));
+        assertTrue(csv, csv.contains("分岐ガード"));
+    }
+
+    @Test
+    public void testFunctionListConditionCoverage() throws Exception {
+        File root = tmp.newFolder("ProjCov");
+        File pkg = new File(root, "app/src/main/java/t");
+        assertTrue(pkg.mkdirs());
+        writeFile(new File(pkg, "Sample.java"),
+                "package t; public class Sample {"
+                + " void entry(int x) {"
+                + "  target();"
+                + "  if (x > 0) { target(); }"
+                + "  while (x > 1) { whileCall(); }"
+                + "  for (int i = 0; i < x; i++) { forCall(); }"
+                + "  switch (x) { case 1: swCall(); break; default: swCall(); }"
+                + "  try { tryCall(); } catch (Exception e) { catchCall(); }"
+                + "  if (x > 0) { if (x > 5) { nested(); } }"
+                + " }"
+                + " void target() {} void whileCall() {} void forCall() {}"
+                + " void swCall() {} void tryCall() {} void catchCall() {} void nested() {} }");
+        File out = new File(tmp.getRoot(), "cov.md");
+        Main.main(new String[]{"--function-list", "-o", out.getAbsolutePath(),
+                root.getAbsolutePath()});
+        String md = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
+        // 無条件呼び出し + if 内呼び出しの両経路を併記する
+        assertTrue(md, md.contains("(直接呼び出し)<br>if (x > 0)"));
+        // 各分岐種別を網羅
+        assertTrue(md, md.contains("while (x > 1)"));
+        assertTrue(md, md.contains("for (int i = 0; i < x; i++)"));
+        assertTrue(md, md.contains("case (1)"));
+        assertTrue(md, md.contains("default"));
+        assertTrue(md, md.contains("try"));
+        assertTrue(md, md.contains("catch (Exception e)"));
+        // ネストした分岐は → で連鎖
+        assertTrue(md, md.contains("if (x > 0) → if (x > 5)"));
+    }
 }

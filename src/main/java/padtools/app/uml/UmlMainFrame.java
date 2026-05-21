@@ -72,6 +72,7 @@ public class UmlMainFrame extends JFrame {
             = new padtools.app.uml.explore.ReverseReferencePanel(refIndexCache);
     private final padtools.app.uml.explore.FuncDiffPanel funcDiffPanel
             = new padtools.app.uml.explore.FuncDiffPanel();
+    private final MethodListPanel methodListPanel = new MethodListPanel();
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
@@ -154,6 +155,7 @@ public class UmlMainFrame extends JFrame {
         mcb.chooseProject = this::chooseProject;
         mcb.chooseAndExport = this::chooseAndExport;
         mcb.exportClassDiagramsPerFolder = this::exportClassDiagramsPerFolder;
+        mcb.exportFunctionList = this::exportFunctionList;
         mcb.refreshDiagram = this::refreshDiagram;
         mcb.cancelLoading = () -> {
             if (loadingCancelToken != null) {
@@ -209,20 +211,23 @@ public class UmlMainFrame extends JFrame {
         homeSplit.setResizeWeight(0.85);
         mainTabs.addTab("Home", homeSplit);
 
-        // ユーティリティタブ (固定・末尾 4 本)
+        // ユーティリティタブ (固定・末尾 5 本)
         mainTabs.addTab("Manifest", manifestSummaryPanel);
         mainTabs.addTab("Impact", impactPanel);
         mainTabs.addTab("References", referencesPanel);
         mainTabs.addTab("Func Diff", funcDiffPanel);
+        mainTabs.addTab("Functions", methodListPanel);
 
-        // 動的タブマネージャ (fixedSuffix=4 で Manifest/Impact/References/Func Diff の手前に挿入)
-        tabPane = new DiagramTabPane(mainTabs, 4, cache, status::setText);
+        // 動的タブマネージャ (fixedSuffix=5 で末尾ユーティリティタブの手前に挿入)
+        tabPane = new DiagramTabPane(mainTabs, 5, cache, status::setText);
 
-        // Home タブが表示された後に divider 位置を相対値でセット
+        // Home タブ表示時は divider 位置をセット、Functions タブ表示時は一覧を遅延生成
         mainTabs.addChangeListener(ev -> {
             if (mainTabs.getSelectedIndex() == 0) {
                 javax.swing.SwingUtilities.invokeLater(
                         () -> homeSplit.setDividerLocation(0.85));
+            } else if (mainTabs.getSelectedComponent() == methodListPanel) {
+                updateFunctionList();
             }
         });
 
@@ -476,6 +481,46 @@ public class UmlMainFrame extends JFrame {
         } else {
             manifestSummaryPanel.setText("");
         }
+    }
+
+    /** 全クラスの関数使用マップ (署名・利用側・実行条件・リスナー) を指定形式で構築する。 */
+    private String buildFunctionListReport(
+            padtools.core.formats.uml.MethodUsageReport.Format format) {
+        java.util.List<padtools.core.formats.android.actions.UiActionEntry> actions =
+                java.util.Collections.emptyList();
+        if (currentProjectRoot != null) {
+            try {
+                actions = new padtools.core.formats.android.actions.UiActionScanner()
+                        .analyzeProject(currentProjectRoot);
+            } catch (java.io.IOException ex) {
+                status.setText("UI action scan failed: " + ex.getMessage());
+            }
+        }
+        return padtools.core.formats.uml.MethodUsageReport.render(
+                cache.getClasses(), refIndexCache.get(), actions, format);
+    }
+
+    /** 「Functions」タブの内容をプロジェクトの現状で更新する (タブ選択時に遅延生成)。 */
+    private void updateFunctionList() {
+        methodListPanel.setText(cache.isLoaded()
+                ? buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.TABLE)
+                : "");
+    }
+
+    /** 関数使用マップをファイルに保存する (File メニュー、Markdown テーブル / CSV を拡張子で選択)。 */
+    private void exportFunctionList() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this, "Open a project first.",
+                    "Functions", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        exportController.exportFunctionList(
+                buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.TABLE),
+                buildFunctionListReport(
+                        padtools.core.formats.uml.MethodUsageReport.Format.CSV),
+                "Save function list (Markdown table or CSV)");
     }
 
     /**

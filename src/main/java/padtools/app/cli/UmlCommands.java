@@ -1,9 +1,13 @@
 package padtools.app.cli;
 
+import padtools.core.formats.android.actions.UiActionEntry;
+import padtools.core.formats.android.actions.UiActionScanner;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.core.formats.uml.UmlGenerator;
+import padtools.core.refs.ReferenceIndex;
+import padtools.core.refs.ReferenceIndexBuilder;
 import padtools.util.ErrorListener;
 
 import java.io.File;
@@ -147,6 +151,42 @@ public final class UmlCommands {
                     .append(", ").append(c.visibility.name().toLowerCase()).append(")\n");
         }
         CliOutput.writeText(fileOut, sb.toString());
+    }
+
+    /**
+     * {@code --function-list}: 全クラスの関数（メソッド）一覧を、各関数の利用側（呼び出し元）と
+     * 実行条件（呼び出しを囲む分岐条件 / リスナーの UI トリガ）付きで出力する。
+     * ディレクトリ入力時はボタン押下リスナー (XML/Compose/メニュー) も併記する。
+     */
+    public static void handleFunctionList(CliContext ctx,
+            padtools.core.formats.uml.MethodUsageReport.Format format) throws IOException {
+        File fileIn = ctx.fileIn;
+        File fileOut = ctx.fileOut;
+        ErrorListener listener = ctx.listener;
+        if (fileIn == null) {
+            System.err.println("--function-list requires an input file or directory.");
+            System.exit(1);
+            return;
+        }
+        java.util.List<padtools.core.formats.uml.JavaClassInfo> infos;
+        ReferenceIndex refIndex = null;
+        java.util.List<UiActionEntry> actions = java.util.Collections.emptyList();
+        if (fileIn.isDirectory()) {
+            UmlGenerator.ProjectParseResult result = UmlGenerator.extractFromProjectDetailed(
+                    fileIn, null, listener, null, null, false, UmlGenerator.ParseMode.FULL);
+            infos = new java.util.ArrayList<>(result.getClasses());
+            ReferenceIndex idx = new ReferenceIndex();
+            new ReferenceIndexBuilder(idx, result.getIndex(), result.getDependencyIndex(), listener)
+                    .addAll(result.getClasses());
+            refIndex = idx;
+            actions = new UiActionScanner().analyzeProject(fileIn);
+        } else {
+            String src = AndroidProjectScanner.readFile(fileIn);
+            infos = UmlGenerator.extractFromSource(src, fileIn.getName(), listener);
+        }
+        CliOutput.writeText(fileOut,
+                padtools.core.formats.uml.MethodUsageReport.render(
+                        infos, refIndex, actions, format));
     }
 
     /**

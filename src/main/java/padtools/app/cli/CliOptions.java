@@ -37,6 +37,8 @@ public final class CliOptions {
     public final Option noEnumConstants = new Option(null, "no-enum-constants", false);
     public final Option noFinal = new Option(null, "no-final", false);
     public final Option listMethods = new Option(null, "list-methods", false);
+    public final Option functionList = new Option(null, "function-list", false);
+    public final Option functionListFormat = new Option(null, "function-list-format", true);
     public final Option seqDepth = new Option(null, "seq-depth", true);
     public final Option sequenceDiagrams = new Option("Q", "sequence-diagrams", false);
     public final Option jetpack = new Option(null, "jetpack", false);
@@ -77,7 +79,7 @@ public final class CliOptions {
             all, noManifestMerge,
             noComments, commentStyle, noAnnotations,
             noEnumConstants, noFinal,
-            listMethods, seqDepth,
+            listMethods, functionList, functionListFormat, seqDepth,
             sequenceDiagrams, jetpack, perFolder,
             preset, noFields, noMethods, publicOnly,
             excludeExternal, excludePackage, relation, mode,
@@ -139,6 +141,11 @@ public final class CliOptions {
         System.err.println("  --no-enum-constants: Disable enum constant rendering.");
         System.err.println("  --no-final: Disable {final} marker on final fields.");
         System.err.println("  --list-methods: List Class.method candidates for use with -q.");
+        System.err.println("  --function-list: List all methods of all classes with callers"
+                + " (利用側) and execution conditions (実行条件: guarding branch / UI trigger),"
+                + " including button-click listeners.");
+        System.err.println("  --function-list-format table|csv: Output format for"
+                + " --function-list (default: table).");
         System.err.println("  --seq-depth N: Sequence trace depth limit (default 5, 0=unlimited).");
         System.err.println("  -Q --sequence-diagrams: Output PlantUML sequence diagrams"
                 + " (.puml + .svg) for Android lifecycle entry points to the directory specified by -o.");

@@ -36,31 +36,19 @@ public final class ProjectLoader {
     private final Consumer<File> projectRootSetter;
     private final Consumer<File> onLoadSuccess;
 
-    public ProjectLoader(
-            ProjectAnalysisCache cache,
-            ReferenceIndexCache refIndexCache,
-            DiagramState state,
-            ProjectTreePanel treePanel,
-            ManifestSummaryPanel manifestSummaryPanel,
-            JProgressBar loadProgress,
-            JMenuItem cancelLoadingItem,
-            JLabel statusLabel,
-            JFrame parentFrame,
-            Consumer<CancelToken> cancelTokenSetter,
-            Consumer<File> projectRootSetter,
-            Consumer<File> onLoadSuccess) {
-        this.cache = cache;
-        this.refIndexCache = refIndexCache;
-        this.state = state;
-        this.treePanel = treePanel;
-        this.manifestSummaryPanel = manifestSummaryPanel;
-        this.loadProgress = loadProgress;
-        this.cancelLoadingItem = cancelLoadingItem;
-        this.statusLabel = statusLabel;
-        this.parentFrame = parentFrame;
-        this.cancelTokenSetter = cancelTokenSetter;
-        this.projectRootSetter = projectRootSetter;
-        this.onLoadSuccess = onLoadSuccess;
+    public ProjectLoader(ProjectLoaderDeps deps) {
+        this.cache = deps.cache;
+        this.refIndexCache = deps.refIndexCache;
+        this.state = deps.state;
+        this.treePanel = deps.treePanel;
+        this.manifestSummaryPanel = deps.manifestSummaryPanel;
+        this.loadProgress = deps.loadProgress;
+        this.cancelLoadingItem = deps.cancelLoadingItem;
+        this.statusLabel = deps.statusLabel;
+        this.parentFrame = deps.parentFrame;
+        this.cancelTokenSetter = deps.cancelTokenSetter;
+        this.projectRootSetter = deps.projectRootSetter;
+        this.onLoadSuccess = deps.onLoadSuccess;
     }
 
     /** プロジェクト解析を開始する。EDT から呼ぶこと。 */

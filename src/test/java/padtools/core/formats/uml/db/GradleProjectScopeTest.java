@@ -8,7 +8,6 @@ import padtools.util.ErrorListener;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;

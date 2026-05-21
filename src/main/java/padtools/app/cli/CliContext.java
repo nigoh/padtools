@@ -1,6 +1,5 @@
 package padtools.app.cli;
 
-import padtools.UmlOverrides;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.ErrorListener;
 
@@ -63,12 +62,7 @@ public final class CliContext {
             legendOverride = Boolean.FALSE;
         }
         boolean mergeManifest = !options.noManifestMerge.isSet();
-        UmlOverrides overrides = UmlOverrides.build(
-                options.noComments, options.noAnnotations, options.noEnumConstants,
-                options.noFinal, options.commentStyle, options.seqDepth, options.jetpack,
-                options.preset, options.noFields, options.noMethods, options.publicOnly,
-                options.excludeExternal, options.excludePackage, options.relation, options.mode,
-                options.interactiveSvg, options.hiddenAnnotations, options.commentMaxLength);
+        UmlOverrides overrides = UmlOverrides.build(options);
         if (overrides == null) {
             return null;
         }

@@ -1,6 +1,5 @@
 package padtools.app.cli;
 
-import padtools.UmlOverrides;
 import padtools.core.formats.java.AndroidProjectScanner;
 import padtools.core.formats.uml.LifecycleSequenceDiagrams;
 import padtools.core.formats.uml.PlantUmlRenderer;

@@ -1,6 +1,5 @@
 package padtools.app.uml;
 
-import padtools.Main;
 import padtools.Setting;
 import padtools.core.formats.uml.DiagramStyle;
 import padtools.core.formats.uml.PlantUmlRenderer;

@@ -134,6 +134,8 @@ public final class TreeNodeIcon implements Icon {
                         g2.drawString(letter, tx, ty);
                     }
                     break;
+                default:
+                    break;
             }
         } finally {
             g2.dispose();

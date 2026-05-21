@@ -264,16 +264,24 @@ public class UmlMainFrame extends JFrame {
                 Main::saveSetting,
                 () -> syncThemeMenuSelection(PlantUmlRenderer.getStyle()));
 
-        projectLoader = new ProjectLoader(
-                cache, refIndexCache, state, treePanel, manifestSummaryPanel,
-                loadProgress, cancelLoadingItem, status, this,
-                token -> loadingCancelToken = token,
-                root -> currentProjectRoot = root,
-                root -> {
-                    persistAndRestoreProjectSettings(root);
-                    updateManifestSummary();
-                    refreshDiagram();
-                });
+        ProjectLoaderDeps loaderDeps = new ProjectLoaderDeps();
+        loaderDeps.cache = cache;
+        loaderDeps.refIndexCache = refIndexCache;
+        loaderDeps.state = state;
+        loaderDeps.treePanel = treePanel;
+        loaderDeps.manifestSummaryPanel = manifestSummaryPanel;
+        loaderDeps.loadProgress = loadProgress;
+        loaderDeps.cancelLoadingItem = cancelLoadingItem;
+        loaderDeps.statusLabel = status;
+        loaderDeps.parentFrame = this;
+        loaderDeps.cancelTokenSetter = token -> loadingCancelToken = token;
+        loaderDeps.projectRootSetter = root -> currentProjectRoot = root;
+        loaderDeps.onLoadSuccess = root -> {
+            persistAndRestoreProjectSettings(root);
+            updateManifestSummary();
+            refreshDiagram();
+        };
+        projectLoader = new ProjectLoader(loaderDeps);
     }
 
     private ProjectLoader projectLoader;

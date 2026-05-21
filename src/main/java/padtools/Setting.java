@@ -56,8 +56,8 @@ public class Setting {
     private boolean classDiagramPublicOnly = false;
     /** 外部ライブラリ (java.* / android.* / kotlin.* など) を除外するか。 */
     private boolean classDiagramExcludeExternal = false;
-    /** インラインコメントの最大文字数 (0 で非表示)。 */
-    private int classDiagramCommentMaxLength = 80;
+    /** コメントの最大文字数。INLINE では省略幅、NOTE では折り返し幅として使用 (0 で非表示)。 */
+    private int classDiagramCommentMaxLength = 60;
     /** 非表示アノテーション名の CSV (例: "Override,SuppressWarnings")。 */
     private String classDiagramHiddenAnnotations = "Override,SuppressWarnings";
 

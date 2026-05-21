@@ -209,7 +209,7 @@ public class SettingTest {
         assertTrue(s.isClassDiagramShowAnnotations());
         assertFalse(s.isClassDiagramPublicOnly());
         assertFalse(s.isClassDiagramExcludeExternal());
-        assertEquals(80, s.getClassDiagramCommentMaxLength());
+        assertEquals(60, s.getClassDiagramCommentMaxLength());
         assertEquals("Override,SuppressWarnings",
                 s.getClassDiagramHiddenAnnotations());
     }

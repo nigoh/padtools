@@ -1,6 +1,5 @@
 package padtools.core.dataflow;
 
-import java.util.List;
 
 /**
  * {@link RoomAnalyzer.Result} を Markdown レポートに整形する。

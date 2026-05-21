@@ -42,6 +42,14 @@ public class DiagramServiceTest {
                     + " void onClickItem() {"
                     + " getScreenManager().push(new DetailScreen(getCarContext())); } }");
         }
+        // Fragment トランザクションも同じ GUI 経路で検出されることを確認
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(new File(pkg, "MainActivity.java")),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write("package x; public class MainActivity {"
+                    + " void open() { getSupportFragmentManager().beginTransaction()"
+                    + " .replace(R.id.container, new ProfileFragment()).commit(); } }");
+        }
         ProjectAnalysisCache cache = new ProjectAnalysisCache();
         cache.load(tmp.getRoot(), padtools.util.ErrorListener.silent());
         String puml = DiagramService.generatePuml(
@@ -51,6 +59,8 @@ public class DiagramServiceTest {
         assertTrue(puml, puml.contains("@enduml"));
         assertTrue(puml, puml.contains("StartScreen"));
         assertTrue(puml, puml.contains("DetailScreen"));
+        // 新検出 (Fragment トランザクション) も GUI 経路に反映される
+        assertTrue(puml, puml.contains("ProfileFragment"));
     }
 
     private List<JavaClassInfo> sampleClasses() {

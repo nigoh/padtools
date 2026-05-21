@@ -109,30 +109,14 @@ public class UmlMainFrame extends JFrame {
     /** 右側のフラットタブバー (Home / 動的タブ / Manifest / Impact / References)。 */
     private JTabbedPane mainTabs;
 
-    private DiagramKind currentKind = DiagramKind.CLASS;
-    private String currentPuml;
+    /** 全可変状態。テスト互換のため currentKind のみ UmlMainFrame に直接残す。 */
+    private final DiagramState state = new DiagramState();
+
+    DiagramKind currentKind = DiagramKind.CLASS;
     /** 現在ロード中のプロジェクトルート。null なら未ロード。 */
     private File currentProjectRoot;
-    private String currentSvgXml;
-    /** 現在選択されているシーケンス図起点 ({@code Class.method})。null なら未設定。 */
-    private String sequenceEntry;
-    /** 現在選択されているアクティビティ図起点 ({@code Class.method})。null なら未設定。 */
-    private String activityEntry;
-    /** 現在選択されているコールグラフ起点 ({@code Class.method})。null なら未設定。 */
-    private String callGraphEntry;
-    /** 現在選択されている Layout 図のキー ({@link AndroidLayoutInfo#getKey()})。null なら未設定。 */
-    private String currentLayoutKey;
-    /** 現在選択されている Navigation 図のキー ({@link padtools.core.formats.android.AndroidNavigationGraphInfo#getKey()})。null なら未設定。 */
-    private String currentNavigationKey;
-    /** クラス図の現在の絞り込みスコープ。null なら全件表示。 */
-    private DiagramScope currentScope;
     /** 進行中のロード処理のキャンセル用 (null ならロード中ではない)。 */
     private CancelToken loadingCancelToken;
-    /**
-     * シーケンス図で隠す participant 名 (空ならフィルタ無し)。
-     * {@link SequenceParticipantFilterDialog} で設定する。
-     */
-    private final java.util.Set<String> sequenceHiddenParticipants = new java.util.LinkedHashSet<>();
 
     public UmlMainFrame(File initialProject) {
         super(WINDOW_TITLE);
@@ -335,8 +319,8 @@ public class UmlMainFrame extends JFrame {
         JMenuItem clearParticipantFilter =
                 new JMenuItem("Clear Sequence Participant Filter");
         clearParticipantFilter.addActionListener(e -> {
-            if (!sequenceHiddenParticipants.isEmpty()) {
-                sequenceHiddenParticipants.clear();
+            if (!state.sequenceHiddenParticipants.isEmpty()) {
+                state.sequenceHiddenParticipants.clear();
                 status.setText("Cleared sequence participant filter.");
                 refreshDiagram();
             }
@@ -358,7 +342,7 @@ public class UmlMainFrame extends JFrame {
         m.add(scope);
         JMenuItem clearScope = new JMenuItem("Clear Scope");
         clearScope.addActionListener(e -> {
-            currentScope = null;
+            state.currentScope = null;
             refreshDiagram();
         });
         m.add(clearScope);
@@ -401,11 +385,11 @@ public class UmlMainFrame extends JFrame {
      * 項目だけプリセットで書き換える。
      */
     private void applyPreset(DiagramPreset p) {
-        DiagramScope.Builder b = currentScope != null
-                ? currentScope.toBuilder()
+        DiagramScope.Builder b = state.currentScope != null
+                ? state.currentScope.toBuilder()
                 : DiagramScope.builder();
         p.applyTo(b);
-        currentScope = b.build();
+        state.currentScope = b.build();
         status.setText("Preset: " + p.getDisplayName());
         refreshDiagram();
     }
@@ -799,7 +783,7 @@ public class UmlMainFrame extends JFrame {
         }
         // SEQUENCE/ACTIVITY/LAYOUT は追加入力が必要。未指定なら入力ダイアログを誘導する。
         if (kind == DiagramKind.SEQUENCE
-                && (sequenceEntry == null || sequenceEntry.isEmpty())) {
+                && (state.sequenceEntry == null || state.sequenceEntry.isEmpty())) {
             if (cache.isLoaded()) {
                 pickSequenceEntry();
             } else {
@@ -808,7 +792,7 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         if (kind == DiagramKind.ACTIVITY
-                && (activityEntry == null || activityEntry.isEmpty())) {
+                && (state.activityEntry == null || state.activityEntry.isEmpty())) {
             if (cache.isLoaded()) {
                 pickActivityEntry();
             } else {
@@ -817,7 +801,7 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         if (kind == DiagramKind.CALLGRAPH
-                && (callGraphEntry == null || callGraphEntry.isEmpty())) {
+                && (state.callGraphEntry == null || state.callGraphEntry.isEmpty())) {
             if (cache.isLoaded()) {
                 pickCallGraphEntry();
             } else {
@@ -826,7 +810,7 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         if (kind == DiagramKind.LAYOUT
-                && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
+                && (state.currentLayoutKey == null || state.currentLayoutKey.isEmpty())) {
             if (cache.isLoaded()) {
                 pickLayoutFile();
             } else {
@@ -835,7 +819,7 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         if (kind == DiagramKind.NAVIGATION
-                && (currentNavigationKey == null || currentNavigationKey.isEmpty())) {
+                && (state.currentNavigationKey == null || state.currentNavigationKey.isEmpty())) {
             if (cache.isLoaded()) {
                 pickNavigationGraph();
             } else {
@@ -937,11 +921,11 @@ public class UmlMainFrame extends JFrame {
                 persistAndRestoreProjectSettings(root);
                 treePanel.populate(cache.getAnalysis(), cache.getClasses(),
                         root.getName(), cache.getClassToModule());
-                sequenceEntry = null;
-                activityEntry = null;
-                callGraphEntry = null;
-                sequenceHiddenParticipants.clear();
-                currentScope = null;
+                state.sequenceEntry = null;
+                state.activityEntry = null;
+                state.callGraphEntry = null;
+                state.sequenceHiddenParticipants.clear();
+                state.currentScope = null;
                 updateManifestSummary();
                 StringBuilder st = new StringBuilder();
                 st.append("Analyzed ").append(cache.getClasses().size())
@@ -980,7 +964,7 @@ public class UmlMainFrame extends JFrame {
         if (pkg == null || pkg.isEmpty() || "(default)".equals(pkg)) {
             return;
         }
-        currentScope = DiagramScope.builder().includePackage(pkg).build();
+        state.currentScope = DiagramScope.builder().includePackage(pkg).build();
         currentKind = DiagramKind.CLASS;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
         if (item != null) {
@@ -1005,7 +989,7 @@ public class UmlMainFrame extends JFrame {
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        currentScope = DiagramScope.builder()
+        state.currentScope = DiagramScope.builder()
                 .seed(fqn)
                 .neighborHops(1)
                 .build();
@@ -1029,7 +1013,7 @@ public class UmlMainFrame extends JFrame {
         if (module == null || module.isEmpty() || "(other)".equals(module)) {
             return;
         }
-        currentScope = DiagramScope.builder().includeModule(module).build();
+        state.currentScope = DiagramScope.builder().includeModule(module).build();
         currentKind = DiagramKind.CLASS;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
         if (item != null) {
@@ -1057,11 +1041,11 @@ public class UmlMainFrame extends JFrame {
             }
         }
         DiagramScopeDialog dlg = new DiagramScopeDialog(this,
-                List.copyOf(packages), List.copyOf(modules), currentScope);
+                List.copyOf(packages), List.copyOf(modules), state.currentScope);
         dlg.setVisible(true);
         DiagramScope picked = dlg.getResult();
         if (picked != null) {
-            currentScope = picked.isEmpty() ? null : picked;
+            state.currentScope = picked.isEmpty() ? null : picked;
             refreshDiagram();
         }
     }
@@ -1140,8 +1124,8 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         String entry = sel.getEntry();
-        activityEntry = entry;
-        callGraphEntry = entry;
+        state.activityEntry = entry;
+        state.callGraphEntry = entry;
         switchToSequenceDiagram(entry);
     }
 
@@ -1150,14 +1134,12 @@ public class UmlMainFrame extends JFrame {
      * これによりツールバーボタンでどの図種へ切り替えても再入力ダイアログが出ない。
      */
     private void setAllMethodEntries(String entry) {
-        sequenceEntry = entry;
-        activityEntry = entry;
-        callGraphEntry = entry;
+        state.setAllMethodEntries(entry);
     }
 
     /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
     private void switchToSequenceDiagram(String entry) {
-        sequenceEntry = entry;
+        state.sequenceEntry = entry;
         currentKind = DiagramKind.SEQUENCE;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
         if (item != null) {
@@ -1219,14 +1201,14 @@ public class UmlMainFrame extends JFrame {
             return;
         }
         String entry = sel.getEntry();
-        sequenceEntry = entry;
-        callGraphEntry = entry;
+        state.sequenceEntry = entry;
+        state.callGraphEntry = entry;
         switchToActivityDiagram(entry);
     }
 
     /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
     private void switchToActivityDiagram(String entry) {
-        activityEntry = entry;
+        state.activityEntry = entry;
         currentKind = DiagramKind.ACTIVITY;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
         if (item != null) {
@@ -1239,7 +1221,7 @@ public class UmlMainFrame extends JFrame {
 
     /** {@code Class.method} 起点をセットしてコールグラフモードへ切り替える。 */
     private void switchToCallGraphDiagram(String entry) {
-        callGraphEntry = entry;
+        state.callGraphEntry = entry;
         currentKind = DiagramKind.CALLGRAPH;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
         if (item != null) {
@@ -1314,7 +1296,7 @@ public class UmlMainFrame extends JFrame {
         DiagramScope.Builder b = DiagramScope.builder()
                 .seed(fqn).neighborHops(1);
         DiagramPreset.DETAILED.applyTo(b);
-        currentScope = b.build();
+        state.currentScope = b.build();
         currentKind = DiagramKind.CLASS;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
         if (item != null) {
@@ -1371,7 +1353,7 @@ public class UmlMainFrame extends JFrame {
 
     /** 指定フォーマットで保存ダイアログを開きエクスポートする。 */
     private void exportAs(UmlExporter.Format fmt) {
-        if (currentPuml == null || currentPuml.isEmpty()) {
+        if (state.currentPuml == null || state.currentPuml.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                     "No diagram to export yet.",
                     "Export", JOptionPane.INFORMATION_MESSAGE);
@@ -1399,9 +1381,9 @@ public class UmlMainFrame extends JFrame {
         try {
             BufferedImage pngImage = null;
             if (fmt == UmlExporter.Format.PNG) {
-                pngImage = PlantUmlImageRenderer.toBufferedImage(currentPuml);
+                pngImage = PlantUmlImageRenderer.toBufferedImage(state.currentPuml);
             }
-            UmlExporter.export(fmt, chosen, currentPuml, pngImage);
+            UmlExporter.export(fmt, chosen, state.currentPuml, pngImage);
             status.setText("Saved: " + chosen.getAbsolutePath());
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
@@ -1412,7 +1394,7 @@ public class UmlMainFrame extends JFrame {
 
     /** 現在の SVG XML 全体をクリップボードへコピーする。 */
     private void copySvgToClipboard() {
-        if (currentSvgXml == null || currentSvgXml.isEmpty()) {
+        if (state.currentSvgXml == null || state.currentSvgXml.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                     "No SVG to copy.",
                     "Export", JOptionPane.INFORMATION_MESSAGE);
@@ -1420,11 +1402,11 @@ public class UmlMainFrame extends JFrame {
         }
         try {
             java.awt.datatransfer.StringSelection sel =
-                    new java.awt.datatransfer.StringSelection(currentSvgXml);
+                    new java.awt.datatransfer.StringSelection(state.currentSvgXml);
             java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(sel, null);
             status.setText("SVG copied to clipboard ("
-                    + currentSvgXml.length() + " chars)");
+                    + state.currentSvgXml.length() + " chars)");
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
                     "Failed to copy SVG: " + ex.getMessage(),
@@ -1525,7 +1507,7 @@ public class UmlMainFrame extends JFrame {
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        currentScope = DiagramScope.builder().seed(fqn).neighborHops(1).build();
+        state.currentScope = DiagramScope.builder().seed(fqn).neighborHops(1).build();
         currentKind = DiagramKind.CLASS;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
         if (item != null) {
@@ -1585,8 +1567,8 @@ public class UmlMainFrame extends JFrame {
         if (picked != null) {
             // 起点が変わったら participant フィルタはリセットする
             // (旧起点の participant 名は新図に存在しない可能性があるため)
-            sequenceHiddenParticipants.clear();
-            sequenceEntry = picked;
+            state.sequenceHiddenParticipants.clear();
+            state.sequenceEntry = picked;
             currentKind = DiagramKind.SEQUENCE;
             JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
             if (item != null) {
@@ -1599,7 +1581,7 @@ public class UmlMainFrame extends JFrame {
 
     /**
      * 現在のシーケンス図起点に登場する participant をフィルタダイアログで選択できるようにする。
-     * 選択結果は {@link #sequenceHiddenParticipants} に保存され、再描画時の
+     * 選択結果は {@link #state.sequenceHiddenParticipants} に保存され、再描画時の
      * {@link DiagramRequest#getSequenceHiddenParticipants()} に渡される。
      */
     private void openParticipantFilterDialog() {
@@ -1609,34 +1591,34 @@ public class UmlMainFrame extends JFrame {
                     "No project", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        if (sequenceEntry == null || sequenceEntry.isEmpty()) {
+        if (state.sequenceEntry == null || state.sequenceEntry.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                     "Choose a sequence entry first (Diagram → Choose Sequence Entry...).",
                     "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        int dot = sequenceEntry.lastIndexOf('.');
+        int dot = state.sequenceEntry.lastIndexOf('.');
         if (dot < 0) {
             return;
         }
-        String cls = sequenceEntry.substring(0, dot);
-        String method = sequenceEntry.substring(dot + 1);
+        String cls = state.sequenceEntry.substring(0, dot);
+        String method = state.sequenceEntry.substring(dot + 1);
         java.util.Set<String> all =
                 padtools.core.formats.uml.PlantUmlSequenceDiagram.collectParticipants(
                         cache.getClasses(), cls, method, null);
         if (all.isEmpty()) {
             JOptionPane.showMessageDialog(this,
-                    "No participants found for " + sequenceEntry,
+                    "No participants found for " + state.sequenceEntry,
                     "Sequence participants", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
         java.util.Set<String> picked = SequenceParticipantFilterDialog.show(
-                this, sequenceEntry, all, sequenceHiddenParticipants);
+                this, state.sequenceEntry, all, state.sequenceHiddenParticipants);
         if (picked != null) {
-            sequenceHiddenParticipants.clear();
-            sequenceHiddenParticipants.addAll(picked);
+            state.sequenceHiddenParticipants.clear();
+            state.sequenceHiddenParticipants.addAll(picked);
             int total = all.size();
-            int hidden = sequenceHiddenParticipants.size();
+            int hidden = state.sequenceHiddenParticipants.size();
             status.setText("Sequence filter: showing " + (total - hidden) + "/" + total
                     + " participants");
             refreshDiagram();
@@ -1665,7 +1647,7 @@ public class UmlMainFrame extends JFrame {
         dlg.setVisible(true);
         String picked = dlg.getSelectedEntry();
         if (picked != null) {
-            activityEntry = picked;
+            state.activityEntry = picked;
             currentKind = DiagramKind.ACTIVITY;
             JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
             if (item != null) {
@@ -1694,7 +1676,7 @@ public class UmlMainFrame extends JFrame {
         dlg.setVisible(true);
         String picked = dlg.getSelectedEntry();
         if (picked != null) {
-            callGraphEntry = picked;
+            state.callGraphEntry = picked;
             currentKind = DiagramKind.CALLGRAPH;
             JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
             if (item != null) {
@@ -1709,7 +1691,7 @@ public class UmlMainFrame extends JFrame {
         if (picked == null) {
             return;
         }
-        currentLayoutKey = picked;
+        state.currentLayoutKey = picked;
         currentKind = DiagramKind.LAYOUT;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.LAYOUT);
         if (item != null) {
@@ -1723,7 +1705,7 @@ public class UmlMainFrame extends JFrame {
         if (picked == null) {
             return;
         }
-        currentNavigationKey = picked;
+        state.currentNavigationKey = picked;
         currentKind = DiagramKind.NAVIGATION;
         JRadioButtonMenuItem item = diagramItems.get(DiagramKind.NAVIGATION);
         if (item != null) {
@@ -1742,35 +1724,35 @@ public class UmlMainFrame extends JFrame {
         }
         final DiagramKind kind = currentKind;
         if (kind == DiagramKind.SEQUENCE
-                && (sequenceEntry == null || sequenceEntry.isEmpty())) {
+                && (state.sequenceEntry == null || state.sequenceEntry.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose a sequence entry from Diagram menu.");
             return;
         }
         if (kind == DiagramKind.ACTIVITY
-                && (activityEntry == null || activityEntry.isEmpty())) {
+                && (state.activityEntry == null || state.activityEntry.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose an activity method from Diagram menu.");
             return;
         }
         if (kind == DiagramKind.LAYOUT
-                && (currentLayoutKey == null || currentLayoutKey.isEmpty())) {
+                && (state.currentLayoutKey == null || state.currentLayoutKey.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose a layout file from Diagram menu.");
             return;
         }
         if (kind == DiagramKind.NAVIGATION
-                && (currentNavigationKey == null || currentNavigationKey.isEmpty())) {
+                && (state.currentNavigationKey == null || state.currentNavigationKey.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose a navigation file from Diagram menu.");
             return;
         }
         if (kind == DiagramKind.CALLGRAPH
-                && (callGraphEntry == null || callGraphEntry.isEmpty())) {
+                && (state.callGraphEntry == null || state.callGraphEntry.isEmpty())) {
             previewPanel.setSvgGraphicsNode(null, 0, 0);
             sourcePanel.setText("");
             status.setText("Choose a call graph entry from Diagram menu.");
@@ -1780,12 +1762,12 @@ public class UmlMainFrame extends JFrame {
         loadProgress.setString("Rendering...");
         loadProgress.setIndeterminate(true);
         loadProgress.setVisible(true);
-        final String entry = sequenceEntry;
-        final String activity = activityEntry;
-        final String callGraph = callGraphEntry;
-        final String layoutKey = currentLayoutKey;
-        final String navigationKey = currentNavigationKey;
-        final DiagramScope scope = currentScope;
+        final String entry = state.sequenceEntry;
+        final String activity = state.activityEntry;
+        final String callGraph = state.callGraphEntry;
+        final String layoutKey = state.currentLayoutKey;
+        final String navigationKey = state.currentNavigationKey;
+        final DiagramScope scope = state.currentScope;
         new SwingWorker<RenderResult, Void>() {
             private Throwable error;
             // レンダ前にキャプチャしておく puml。例外発生時も PlantUML Source タブに
@@ -1857,8 +1839,8 @@ public class UmlMainFrame extends JFrame {
                         status.setText(kind.getDisplayName() + ": (no diagram)");
                         return;
                     }
-                    currentPuml = r.puml;
-                    currentSvgXml = r.svg.getSvgXml();
+                    state.currentPuml = r.puml;
+                    state.currentSvgXml = r.svg.getSvgXml();
                     previewPanel.setSvgGraphicsNode(r.svg.getRoot(),
                             r.svg.getWidth(), r.svg.getHeight());
                     previewPanel.setLinkAreas(r.svg.getLinkAreas());
@@ -1883,8 +1865,8 @@ public class UmlMainFrame extends JFrame {
                     "Sequence entry must be in 'Class.method' format: " + entry);
         }
         // 隠す participant の集合をスナップショットして DiagramRequest に渡す
-        java.util.Set<String> hidden = sequenceHiddenParticipants.isEmpty()
-                ? null : new java.util.LinkedHashSet<>(sequenceHiddenParticipants);
+        java.util.Set<String> hidden = state.sequenceHiddenParticipants.isEmpty()
+                ? null : new java.util.LinkedHashSet<>(state.sequenceHiddenParticipants);
         return new DiagramRequest(DiagramKind.SEQUENCE,
                 entry.substring(0, dot), entry.substring(dot + 1), true,
                 null, false, null, hidden);
@@ -1911,7 +1893,7 @@ public class UmlMainFrame extends JFrame {
     }
 
     private void chooseAndExport() {
-        if (currentPuml == null || currentPuml.isEmpty()) {
+        if (state.currentPuml == null || state.currentPuml.isEmpty()) {
             JOptionPane.showMessageDialog(this,
                     "No diagram to export yet.",
                     "Export", JOptionPane.INFORMATION_MESSAGE);
@@ -1950,9 +1932,9 @@ public class UmlMainFrame extends JFrame {
             if (fmt == UmlExporter.Format.PNG) {
                 // プレビューはベクター SVG なので PNG エクスポート時にだけ
                 // 同じ PlantUML テキストから PNG をレンダリングする。
-                pngImage = PlantUmlImageRenderer.toBufferedImage(currentPuml);
+                pngImage = PlantUmlImageRenderer.toBufferedImage(state.currentPuml);
             }
-            UmlExporter.export(fmt, chosen, currentPuml, pngImage);
+            UmlExporter.export(fmt, chosen, state.currentPuml, pngImage);
             status.setText("Saved: " + chosen.getAbsolutePath());
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,

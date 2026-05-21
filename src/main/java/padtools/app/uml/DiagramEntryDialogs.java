@@ -1,7 +1,6 @@
 package padtools.app.uml;
 
 import javax.swing.JOptionPane;
-import javax.swing.JRadioButtonMenuItem;
 
 /**
  * 図のエントリ (シーケンス/アクティビティ/コールグラフ起点・レイアウト・ナビゲーション・
@@ -35,14 +34,7 @@ final class DiagramEntryDialogs {
             // 起点が変わったら participant フィルタはリセットする
             // (旧起点の participant 名は新図に存在しない可能性があるため)
             c.state.sequenceHiddenParticipants.clear();
-            c.state.sequenceEntry = picked;
-            c.setCurrentKind(DiagramKind.SEQUENCE);
-            JRadioButtonMenuItem item = c.diagramItems.get(DiagramKind.SEQUENCE);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            c.syncTreeToMethodByEntry(picked);
-            c.refreshDiagram.run();
+            c.openEntryDiagram(picked, DiagramKind.SEQUENCE);
         }
     }
 
@@ -88,7 +80,7 @@ final class DiagramEntryDialogs {
             int hidden = c.state.sequenceHiddenParticipants.size();
             c.statusLabel.setText("Sequence filter: showing " + (total - hidden) + "/" + total
                     + " participants");
-            c.refreshDiagram.run();
+            c.applyStateToActiveTab();
         }
     }
 
@@ -114,14 +106,7 @@ final class DiagramEntryDialogs {
         dlg.setVisible(true);
         String picked = dlg.getSelectedEntry();
         if (picked != null) {
-            c.state.activityEntry = picked;
-            c.setCurrentKind(DiagramKind.ACTIVITY);
-            JRadioButtonMenuItem item = c.diagramItems.get(DiagramKind.ACTIVITY);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            c.syncTreeToMethodByEntry(picked);
-            c.refreshDiagram.run();
+            c.openEntryDiagram(picked, DiagramKind.ACTIVITY);
         }
     }
 
@@ -143,13 +128,7 @@ final class DiagramEntryDialogs {
         dlg.setVisible(true);
         String picked = dlg.getSelectedEntry();
         if (picked != null) {
-            c.state.callGraphEntry = picked;
-            c.setCurrentKind(DiagramKind.CALLGRAPH);
-            JRadioButtonMenuItem item = c.diagramItems.get(DiagramKind.CALLGRAPH);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            c.refreshDiagram.run();
+            c.openEntryDiagram(picked, DiagramKind.CALLGRAPH);
         }
     }
 
@@ -158,13 +137,7 @@ final class DiagramEntryDialogs {
         if (picked == null) {
             return;
         }
-        c.state.currentLayoutKey = picked;
-        c.setCurrentKind(DiagramKind.LAYOUT);
-        JRadioButtonMenuItem item = c.diagramItems.get(DiagramKind.LAYOUT);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        c.refreshDiagram.run();
+        c.openLayoutDiagram(picked);
     }
 
     public void pickNavigationGraph() {
@@ -172,12 +145,6 @@ final class DiagramEntryDialogs {
         if (picked == null) {
             return;
         }
-        c.state.currentNavigationKey = picked;
-        c.setCurrentKind(DiagramKind.NAVIGATION);
-        JRadioButtonMenuItem item = c.diagramItems.get(DiagramKind.NAVIGATION);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        c.refreshDiagram.run();
+        c.openNavigationDiagram(picked);
     }
 }

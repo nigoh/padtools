@@ -62,36 +62,16 @@ public class DiagramControllerTest {
     }
 
     @Test
-    public void onTreeMethodSelected_setsSequenceEntryAndKind() {
+    public void onTreeMethodSelected_withoutTabPane_isSafeNoOp() {
+        // タブ中心モデル: ツリー選択はタブを開く操作 (tabPane へ委譲) であり、
+        // グローバル状態 (sequenceEntry / currentKind) を変更しない。tabPane 未配線では no-op。
         JavaClassInfo cls = new JavaClassInfo();
         cls.setSimpleName("Foo");
         JavaMethodInfo method = new JavaMethodInfo();
         method.setName("bar");
         controller.onTreeMethodSelected(new ProjectTreePanel.MethodSelection(cls, method));
-        assertEquals("Foo.bar", state.sequenceEntry);
-        assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
-        assertEquals(DiagramKind.SEQUENCE, lastKind.get());
-    }
-
-    @Test
-    public void onTreeMethodSelected_triggersRefresh() {
-        JavaClassInfo cls = new JavaClassInfo();
-        cls.setSimpleName("Foo");
-        JavaMethodInfo method = new JavaMethodInfo();
-        method.setName("bar");
-        controller.onTreeMethodSelected(new ProjectTreePanel.MethodSelection(cls, method));
-        assertEquals(1, refreshCount.get());
-    }
-
-    @Test
-    public void onTreeActivityMethodSelected_setsActivityEntryAndKind() {
-        JavaClassInfo cls = new JavaClassInfo();
-        cls.setSimpleName("Foo");
-        JavaMethodInfo method = new JavaMethodInfo();
-        method.setName("bar");
-        controller.onTreeActivityMethodSelected(new ProjectTreePanel.MethodSelection(cls, method));
-        assertEquals("Foo.bar", state.activityEntry);
-        assertEquals(DiagramKind.ACTIVITY, controller.currentKind);
+        assertNull(state.sequenceEntry);
+        assertEquals(DiagramKind.CLASS, controller.currentKind);
     }
 
     @Test
@@ -177,42 +157,26 @@ public class DiagramControllerTest {
     }
 
     @Test
-    public void revertKindSelection_restoresPreviousKindMenuAndToggle() {
-        // SEQUENCE に切り替わった状態を作る (トグル/メニューも SEQUENCE 選択)
-        controller.setCurrentKind(DiagramKind.SEQUENCE);
-        diagramItems.get(DiagramKind.SEQUENCE).setSelected(true);
-        diagramToggles.get(DiagramKind.SEQUENCE).setSelected(true);
-
-        controller.revertKindSelection(DiagramKind.CLASS);
-
-        assertEquals(DiagramKind.CLASS, controller.currentKind);
-        assertEquals(DiagramKind.CLASS, lastKind.get());
-        assertTrue(diagramItems.get(DiagramKind.CLASS).isSelected());
-        assertTrue(diagramToggles.get(DiagramKind.CLASS).isSelected());
+    public void reflectKindInToolbar_selectsMenuAndToggle() {
+        controller.reflectKindInToolbar(DiagramKind.PACKAGE);
+        assertTrue(diagramItems.get(DiagramKind.PACKAGE).isSelected());
+        assertTrue(diagramToggles.get(DiagramKind.PACKAGE).isSelected());
     }
 
     @Test
-    public void selectDiagramKind_nonEntryKind_commitsAndRefreshes() {
+    public void selectDiagramKind_reflectsKindInToolbar() {
+        // tabPane 未配線: 図種選択はツールバー/メニュー反映までを行う (タブ生成は production のみ)。
         controller.selectDiagramKind(DiagramKind.PACKAGE);
         assertEquals(DiagramKind.PACKAGE, controller.currentKind);
         assertTrue(diagramItems.get(DiagramKind.PACKAGE).isSelected());
-        assertEquals(1, refreshCount.get());
+        assertTrue(diagramToggles.get(DiagramKind.PACKAGE).isSelected());
     }
 
     @Test
-    public void selectDiagramKind_entryKindWithEntryPreset_commitsWithoutDialog() {
-        state.sequenceEntry = "Foo.bar";
+    public void selectDiagramKind_entryKind_reflectsKindInToolbar() {
         controller.selectDiagramKind(DiagramKind.SEQUENCE);
         assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
-        assertEquals(1, refreshCount.get());
-    }
-
-    @Test
-    public void selectDiagramKind_entryKindMissingEntryUnloadedCache_refreshesWithoutDialog() {
-        // cache 未ロードなのでダイアログは開かず refresh のみ (既存挙動を維持)
-        controller.selectDiagramKind(DiagramKind.SEQUENCE);
-        assertEquals(DiagramKind.SEQUENCE, controller.currentKind);
-        assertEquals(1, refreshCount.get());
+        assertTrue(diagramItems.get(DiagramKind.SEQUENCE).isSelected());
     }
 
     // --- 動的タブ ↔ ツリー連動 (syncToFocusedTab) ---

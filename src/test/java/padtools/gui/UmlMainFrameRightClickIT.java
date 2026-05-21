@@ -34,7 +34,6 @@ import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -166,9 +165,35 @@ public class UmlMainFrameRightClickIT {
         return value;
     }
 
-    /** UmlMainFrame 内の SvgPreviewPanel をフィールドアクセスで取得する。 */
-    private SvgPreviewPanel previewPanelOf(UmlMainFrame frame) throws Exception {
-        return getField(frame, "previewPanel");
+    /** アクティブなダイアグラムタブの SvgPreviewPanel を取得する (タブ中心モデル)。 */
+    private SvgPreviewPanel activePreview(UmlMainFrame frame) throws Exception {
+        Object tabPane = getField(frame, "tabPane");
+        return (SvgPreviewPanel) tabPane.getClass()
+                .getMethod("activePreviewPanel").invoke(tabPane);
+    }
+
+    /** controller.selectDiagramKind(kind) を EDT 上で呼ぶ。 */
+    private static void selectKind(Object controller, Object kind) {
+        GuiActionRunner.execute(() -> {
+            try {
+                controller.getClass()
+                        .getMethod("selectDiagramKind", kind.getClass())
+                        .invoke(controller, kind);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return null;
+        });
+    }
+
+    private static Object activeTabKind(Object tabPane) throws Exception {
+        return GuiActionRunner.execute(() -> {
+            try {
+                return tabPane.getClass().getMethod("activeTabKind").invoke(tabPane);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     /**
@@ -244,7 +269,7 @@ public class UmlMainFrameRightClickIT {
     }
 
     @Test
-    public void testClassDiagramRightClickToSequenceDiagram() throws Exception {
+    public void testClassDiagramLinkClickToSequenceTab() throws Exception {
         File project = buildSampleProject();
 
         // ---------- (1) UmlMainFrame 起動 ----------
@@ -256,69 +281,74 @@ public class UmlMainFrameRightClickIT {
             return f;
         });
 
-        // ---------- (2) 解析完了 + クラス図描画 + LinkAreas 反映を待つ ----------
-        SvgPreviewPanel preview = previewPanelOf(frame);
+        // ---------- (2) 解析完了を待ち、プロジェクト全体のクラス図タブを開く ----------
+        Object cache = getField(frame, "cache");
+        Object controller = getField(frame, "controller");
+        Object tabPane = getField(frame, "tabPane");
+        long loadDeadline = System.currentTimeMillis() + 60_000;
+        while (!(boolean) cache.getClass().getMethod("isLoaded").invoke(cache)) {
+            if (System.currentTimeMillis() > loadDeadline) {
+                throw new IllegalStateException("timeout: project did not load");
+            }
+            Thread.sleep(200);
+        }
+        Object classKind = Enum.valueOf(
+                (Class) Class.forName("padtools.app.uml.DiagramKind"), "CLASS");
+        selectKind(controller, classKind);
+
+        // ---------- (3) アクティブタブのクラス図に LinkAreas が反映されるのを待つ ----------
         long deadline = System.currentTimeMillis() + 60_000;
+        SvgPreviewPanel preview;
         List<LinkArea> areas;
         while (true) {
-            areas = preview.getLinkAreas();
-            Object cache = getField(frame, "cache");
-            boolean loaded = (boolean) cache.getClass()
-                    .getMethod("isLoaded").invoke(cache);
-            if (loaded && areas != null && !areas.isEmpty()) {
+            preview = activePreview(frame);
+            areas = preview != null ? preview.getLinkAreas() : null;
+            if (preview != null && areas != null && !areas.isEmpty()) {
                 break;
             }
             if (System.currentTimeMillis() > deadline) {
                 throw new IllegalStateException(
-                        "timeout: cache loaded=" + loaded
-                                + ", linkAreas=" + (areas == null ? -1 : areas.size()));
+                        "timeout: linkAreas=" + (areas == null ? -1 : areas.size()));
             }
             Thread.sleep(250);
         }
         capture("01-class-diagram.png");
 
-        // ---------- (3) MainActivity のリンク領域を特定して右クリックを発火 ----------
+        // ---------- (4) メソッドリンク (padtools://method/...) を特定して左クリックを発火 ----------
         LinkArea target = null;
         for (LinkArea a : areas) {
             String href = a.getHref();
-            if (href != null && href.contains("MainActivity")) {
+            if (href != null && href.startsWith("padtools://method/")) {
                 target = a;
                 break;
             }
         }
-        assertNotNull("MainActivity link not found in: " + areas, target);
+        assertNotNull("no padtools://method/ link in class diagram: " + areas, target);
 
         final LinkArea hit = target;
-        // SVG 座標 → パネル座標 (zoomLevel 倍)
-        double zoom = (double) preview.getClass()
-                .getMethod("getZoomLevel").invoke(preview);
+        final SvgPreviewPanel previewFinal = preview;
+        double zoom = (double) preview.getClass().getMethod("getZoomLevel").invoke(preview);
         int px = (int) Math.round((hit.getX() + hit.getWidth() / 2.0) * zoom);
         int py = (int) Math.round((hit.getY() + hit.getHeight() / 2.0) * zoom);
-
-        // ポップアップを表示する。SvgPreviewPanel#maybeFireLinkPopup 相当を
-        // listenerに直接渡すと心地よい (BUTTON3/popupTrigger 判定の差異を避ける)。
-        AtomicReference<JPopupMenu> popupRef = new AtomicReference<>();
         GuiActionRunner.execute(() -> {
             try {
-                Field listenerField =
-                        preview.getClass().getDeclaredField("linkPopupListener");
+                Field listenerField = previewFinal.getClass().getDeclaredField("linkClickListener");
                 listenerField.setAccessible(true);
                 @SuppressWarnings("unchecked")
                 java.util.function.BiConsumer<LinkArea, MouseEvent> listener =
                         (java.util.function.BiConsumer<LinkArea, MouseEvent>)
-                                listenerField.get(preview);
-                assertNotNull("preview has no linkPopupListener wired", listener);
-                MouseEvent ev = new MouseEvent(preview, MouseEvent.MOUSE_PRESSED,
-                        System.currentTimeMillis(),
-                        MouseEvent.BUTTON3_DOWN_MASK,
-                        px, py, 1, true /*popupTrigger*/, MouseEvent.BUTTON3);
+                                listenerField.get(previewFinal);
+                assertNotNull("active tab preview has no linkClickListener wired", listener);
+                MouseEvent ev = new MouseEvent(previewFinal, MouseEvent.MOUSE_CLICKED,
+                        System.currentTimeMillis(), MouseEvent.BUTTON1_DOWN_MASK,
+                        px, py, 1, false, MouseEvent.BUTTON1);
                 listener.accept(hit, ev);
             } catch (Exception ex) {
                 throw new IllegalStateException(ex);
             }
         });
 
-        // ---------- (4) ポップアップ表示を確認しスクショ ----------
+        // ---------- (5) Sequence/Activity 選択ポップアップ表示を確認しスクショ ----------
         JPopupMenu popup = null;
         long popupDeadline = System.currentTimeMillis() + 5_000;
         while (System.currentTimeMillis() < popupDeadline) {
@@ -328,64 +358,48 @@ public class UmlMainFrameRightClickIT {
             }
             Thread.sleep(100);
         }
-        assertNotNull("method popup did not appear", popup);
+        assertNotNull("method diagram popup did not appear", popup);
         assertTrue("popup should be visible", popup.isShowing());
-        assertTrue("popup must contain >= 1 method item",
-                popup.getComponentCount() > 0);
         capture("02-method-popup.png");
 
-        // ---------- (5) "onCreate" メニュー項目を発火 ----------
-        JMenuItem onCreate = null;
+        // ---------- (6) "Sequence Diagram" メニュー項目を発火 ----------
+        JMenuItem seqItem = null;
         for (Component c : popup.getComponents()) {
             if (c instanceof JMenuItem) {
                 JMenuItem mi = (JMenuItem) c;
-                if (mi.getText() != null && mi.getText().startsWith("onCreate")) {
-                    onCreate = mi;
+                if (mi.getText() != null && mi.getText().startsWith("Sequence")) {
+                    seqItem = mi;
                     break;
                 }
             }
         }
-        assertNotNull("onCreate menu item not found in popup", onCreate);
-        final JMenuItem toClick = onCreate;
+        assertNotNull("Sequence Diagram menu item not found in popup", seqItem);
+        final JMenuItem toClick = seqItem;
         GuiActionRunner.execute(() -> {
-            // ポップアップを閉じてから ActionEvent を発火する
             javax.swing.MenuSelectionManager.defaultManager().clearSelectedPath();
             toClick.getActionListeners()[0].actionPerformed(
                     new ActionEvent(toClick, ActionEvent.ACTION_PERFORMED,
                             toClick.getActionCommand()));
         });
 
-        // ---------- (6) シーケンス図モードへ切替→描画完了を待つ ----------
-        // 注意: refreshDiagram() は 300ms の Timer 越しに SwingWorker を起動するため
-        // currentPuml が "@startuml" になっても SVG はまだ前のクラス図のことがある。
-        // status JLabel が "Sequence Diagram rendered" に変化するまで待ち合わせる。
-        javax.swing.JLabel status = getField(frame, "status");
+        // ---------- (7) シーケンス図タブが開いてフォーカスされるのを待つ ----------
         long seqDeadline = System.currentTimeMillis() + 60_000;
         boolean ready = false;
         while (System.currentTimeMillis() < seqDeadline) {
-            String s = GuiActionRunner.execute(status::getText);
-            Object kind = getField(frame, "currentKind");
-            if ("SEQUENCE".equals(kind.toString())
-                    && s != null
-                    && s.contains("Sequence")
-                    && s.contains("rendered")) {
+            Object kind = activeTabKind(tabPane);
+            if (kind != null && "SEQUENCE".equals(kind.toString())) {
                 ready = true;
                 break;
             }
             Thread.sleep(200);
         }
-        assertTrue("sequence diagram render did not complete: status="
-                + GuiActionRunner.execute(status::getText), ready);
+        assertTrue("clicking a method link should open a focused SEQUENCE tab", ready);
         Object currentKindAfter = getField(frame, "currentKind");
-        assertEquals("currentKind should be SEQUENCE",
+        assertEquals("currentKind mirror should be SEQUENCE",
                 "SEQUENCE", currentKindAfter.toString());
-        // 念のため paint 1 サイクル分待つ
-        final SvgPreviewPanel previewForRepaint = preview;
-        GuiActionRunner.execute(() -> previewForRepaint.paintImmediately(
-                previewForRepaint.getBounds()));
         capture("03-sequence-diagram.png");
 
-        // ---------- (7) 後片付け ----------
+        // ---------- (8) 後片付け ----------
         GuiActionRunner.execute(frame::dispose);
     }
 }

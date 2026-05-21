@@ -1,7 +1,7 @@
 package padtools.app.uml;
 
-import padtools.app.uml.PlantUmlSvgRenderer.LinkArea;
 import padtools.core.formats.uml.JavaClassInfo;
+import padtools.core.formats.uml.JavaMethodInfo;
 
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -9,7 +9,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JToggleButton;
 import javax.swing.JTabbedPane;
-import java.awt.event.MouseEvent;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -18,6 +17,10 @@ import java.util.function.Supplier;
 
 /**
  * 図種の切り替え・ツリー選択ハンドラ・ダイアログ操作など図制御ロジックを集約するコントローラ。
+ *
+ * <p>VS Code 風タブ中心モデル: すべての図は対等な「タブ (= エディタ)」として
+ * {@link DiagramTabPane} が管理する。ツリー選択・ツールバー・メニュー操作は
+ * 「アクティブタブ」を起点に動く。共有 previewPanel の「Home ビュー」は存在しない。</p>
  *
  * <p>UI の構築は行わず、状態遷移と UI 同期のみを担当する。</p>
  */
@@ -37,7 +40,7 @@ public final class DiagramController {
     private final Consumer<DiagramKind> onKindChanged;
     private final DiagramEntryDialogs entryDialogs;
 
-    /** package-private — UmlMainFrame がミラー同期するために読む。 */
+    /** package-private — UmlMainFrame がミラー同期するために読む (アクティブタブの図種)。 */
     DiagramKind currentKind = DiagramKind.CLASS;
 
     public DiagramController(DiagramControllerDeps deps) {
@@ -66,72 +69,221 @@ public final class DiagramController {
     }
 
     // -------------------------------------------------------------------------
-    // ツリー選択ハンドラ
+    // ツリー選択ハンドラ — ノードを対応するダイアグラムタブとして開く/フォーカスする
     // -------------------------------------------------------------------------
 
     public void onTreePackageSelected(String pkg) {
-        if (pkg == null || pkg.isEmpty() || "(default)".equals(pkg)) {
+        if (pkg == null || pkg.isEmpty() || "(default)".equals(pkg) || tabPane == null) {
             return;
         }
-        state.currentScope = DiagramScope.builder().includePackage(pkg).build();
-        setCurrentKind(DiagramKind.CLASS);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        statusLabel.setText("Scope: package " + pkg);
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_PACKAGE);
-        showHomeTab();
-        refreshDiagram.run();
+        tabPane.addOrFocusTab(TreeNodeOpenRequest.pkg(pkg));
     }
 
-    /**
-     * 左ペインのツリーでクラスノードが選択された際のハンドラ。
-     * クラス図モードへ切り替え、当該クラスを seed として 1 ホップ近傍に絞ったスコープで再描画する。
-     */
     public void onTreeClassSelected(JavaClassInfo cls) {
-        if (cls == null) {
-            updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ALL);
+        if (cls == null || tabPane == null) {
             return;
         }
         String fqn = cls.getQualifiedName();
         if (fqn == null || fqn.isEmpty()) {
             return;
         }
-        state.currentScope = DiagramScope.builder()
-                .seed(fqn)
-                .neighborHops(1)
-                .build();
-        setCurrentKind(DiagramKind.CLASS);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
+        tabPane.addOrFocusTab(TreeNodeOpenRequest.classNode(cls));
+    }
+
+    public void onTreeModuleSelected(String module) {
+        if (module == null || module.isEmpty() || "(other)".equals(module) || tabPane == null) {
+            return;
         }
-        statusLabel.setText("Scope: class " + cls.getSimpleName() + " (+1 hop)");
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_JAVA_TYPE);
-        showHomeTab();
-        refreshDiagram.run();
+        tabPane.addOrFocusTab(TreeNodeOpenRequest.module(module));
     }
 
     /**
-     * 左ペインのツリーでモジュールノードが選択された際のハンドラ。
-     * クラス図モードへ切り替え、当該モジュールに含まれるクラスだけに絞って再描画する。
-     * <p>"(other)" のようなプレースホルダ名は無視する。</p>
+     * 左ペインのツリーでメソッドが選択されたら、そのメソッドのシーケンス図タブを開く。
      */
-    public void onTreeModuleSelected(String module) {
-        if (module == null || module.isEmpty() || "(other)".equals(module)) {
+    public void onTreeMethodSelected(ProjectTreePanel.MethodSelection sel) {
+        if (sel == null || tabPane == null) {
             return;
         }
-        state.currentScope = DiagramScope.builder().includeModule(module).build();
-        setCurrentKind(DiagramKind.CLASS);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
+        tabPane.addOrFocusTab(
+                TreeNodeOpenRequest.method(sel.getOwner(), sel.getMethod(), DiagramKind.SEQUENCE));
+    }
+
+    /**
+     * 後方互換: アクティビティ図リーフ選択ハンドラ。当該メソッドのアクティビティ図タブを開く。
+     */
+    public void onTreeActivityMethodSelected(ProjectTreePanel.MethodSelection sel) {
+        if (sel == null || tabPane == null) {
+            return;
         }
-        statusLabel.setText("Scope: module " + module);
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_MODULE);
-        showHomeTab();
-        refreshDiagram.run();
+        tabPane.addOrFocusTab(
+                TreeNodeOpenRequest.method(sel.getOwner(), sel.getMethod(), DiagramKind.ACTIVITY));
+    }
+
+    public void onTreeManifestSelected(padtools.core.formats.android.AndroidManifestInfo m) {
+        openManifestDiagram();
+    }
+
+    public void onTreeComponentSelected(
+            padtools.core.formats.android.AndroidComponentInfo c) {
+        openManifestDiagram();
+    }
+
+    /** 3 エントリを同じメソッドに揃える (DiagramState のヘルパへ委譲)。 */
+    public void setAllMethodEntries(String entry) {
+        state.setAllMethodEntries(entry);
+    }
+
+    /**
+     * 左ペインで中クリック / ダブルクリックされたノードをタブとして開くハンドラ。
+     */
+    public void onTreeOpenInNewTab(TreeNodeOpenRequest req) {
+        if (req == null || tabPane == null) {
+            return;
+        }
+        tabPane.addOrFocusTab(req);
+    }
+
+    // -------------------------------------------------------------------------
+    // タブを開く補助 (図種・スコープごと)
+    // -------------------------------------------------------------------------
+
+    /** プロジェクト全体を対象とする図種 (Class/Common/Inheritance/Package/Module 等) をタブで開く。 */
+    void openProjectWide(DiagramKind kind) {
+        if (tabPane == null) {
+            return;
+        }
+        boolean links = kind == DiagramKind.CLASS || kind == DiagramKind.INHERITANCE;
+        DiagramRequest spec = new DiagramRequest(kind, null, null, true, null, links);
+        tabPane.openDiagram("KIND:" + kind.name(),
+                ToolBarBuilder.toolbarLabel(kind), iconForKind(kind), spec, null);
+    }
+
+    /** Manifest 図をタブで開く。 */
+    void openManifestDiagram() {
+        if (tabPane == null) {
+            return;
+        }
+        tabPane.openDiagram("KIND:MANIFEST", "Manifest", TreeNodeIcon.MANIFEST,
+                new DiagramRequest(DiagramKind.MANIFEST), null);
+    }
+
+    /** {@code Class.method} 起点の Sequence/Activity/CallGraph 図をタブで開く。 */
+    void openEntryDiagram(String entry, DiagramKind kind) {
+        if (tabPane == null || entry == null) {
+            return;
+        }
+        int dot = entry.lastIndexOf('.');
+        if (dot < 0) {
+            return;
+        }
+        String simple = entry.substring(0, dot);
+        String method = entry.substring(dot + 1);
+        JavaClassInfo ci = findClassBySimpleName(simple);
+        if (ci == null) {
+            ci = new JavaClassInfo();
+            ci.setSimpleName(simple);
+        }
+        JavaMethodInfo mi = new JavaMethodInfo();
+        mi.setName(method);
+        tabPane.addOrFocusTab(TreeNodeOpenRequest.method(ci, mi, kind));
+    }
+
+    void openLayoutDiagram(String layoutKey) {
+        if (tabPane == null || layoutKey == null) {
+            return;
+        }
+        tabPane.openDiagram("LAYOUT:" + layoutKey, shortKeyLabel(layoutKey),
+                TreeNodeIcon.COMPONENT_GROUP, DiagramRequest.forLayout(layoutKey, true), null);
+    }
+
+    void openNavigationDiagram(String navKey) {
+        if (tabPane == null || navKey == null) {
+            return;
+        }
+        tabPane.openDiagram("NAV:" + navKey, shortKeyLabel(navKey),
+                TreeNodeIcon.COMPONENT_GROUP,
+                DiagramRequest.forNavigationGraph(navKey, true), null);
+    }
+
+    /** プロジェクトロード後に開く既定タブ (Common = 代表的な構成図)。 */
+    public void openDefaultDiagram() {
+        openProjectWide(DiagramKind.COMMON);
+    }
+
+    private JavaClassInfo findClassBySimpleName(String simple) {
+        if (simple == null || !cache().isLoaded()) {
+            return null;
+        }
+        for (JavaClassInfo c : cache().getClasses()) {
+            if (simple.equals(c.getSimpleName())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static TreeNodeIcon iconForKind(DiagramKind kind) {
+        switch (kind) {
+            case PACKAGE:   return TreeNodeIcon.PACKAGE;
+            case MODULE:    return TreeNodeIcon.MODULE;
+            case MANIFEST:  return TreeNodeIcon.MANIFEST;
+            case SEQUENCE:  return TreeNodeIcon.SEQUENCE;
+            case ACTIVITY:  return TreeNodeIcon.ACTIVITY;
+            case CALLGRAPH: return TreeNodeIcon.METHOD;
+            case COMPONENT: return TreeNodeIcon.COMPONENT_GROUP;
+            default:        return TreeNodeIcon.CLASS;
+        }
+    }
+
+    private static String shortKeyLabel(String key) {
+        if (key == null) {
+            return "";
+        }
+        int sep = key.lastIndexOf("::");
+        return sep >= 0 ? key.substring(sep + 2) : key;
+    }
+
+    // -------------------------------------------------------------------------
+    // アクティブタブへの操作 (スコープ・プリセット・participant フィルタ・再描画)
+    // -------------------------------------------------------------------------
+
+    /**
+     * 共有 {@link DiagramState} の現在値からアクティブタブの {@link DiagramRequest} を
+     * 再構築し、再描画する。スコープ/プリセット/participant フィルタ変更後に呼ぶ。
+     */
+    public void applyStateToActiveTab() {
+        if (tabPane == null || !tabPane.hasActiveTab()) {
+            return;
+        }
+        DiagramKind k = tabPane.activeTabKind();
+        DiagramRequest spec = buildSpecForKind(k);
+        if (spec != null) {
+            tabPane.setActiveTabSpecAndRender(spec);
+        }
+    }
+
+    /** アクティブタブの図種と共有状態から {@link DiagramRequest} を組み立てる。 */
+    private DiagramRequest buildSpecForKind(DiagramKind k) {
+        if (k == null) {
+            return null;
+        }
+        switch (k) {
+            case SEQUENCE:
+                return isBlank(state.sequenceEntry) ? null : buildSequenceRequest(state.sequenceEntry);
+            case ACTIVITY:
+                return isBlank(state.activityEntry) ? null : buildActivityRequest(state.activityEntry);
+            case CALLGRAPH:
+                return isBlank(state.callGraphEntry) ? null : buildCallGraphRequest(state.callGraphEntry);
+            case LAYOUT:
+                return isBlank(state.currentLayoutKey) ? null
+                        : DiagramRequest.forLayout(state.currentLayoutKey, true);
+            case NAVIGATION:
+                return isBlank(state.currentNavigationKey) ? null
+                        : DiagramRequest.forNavigationGraph(state.currentNavigationKey, true);
+            default:
+                boolean links = k == DiagramKind.CLASS || k == DiagramKind.INHERITANCE;
+                return new DiagramRequest(k, null, null, true, state.currentScope, links);
+        }
     }
 
     public void openScopeDialog() {
@@ -143,7 +295,7 @@ public final class DiagramController {
         }
         java.util.Set<String> packages = new java.util.TreeSet<>();
         java.util.Set<String> modules = new java.util.TreeSet<>(cache().getClassToModule().values());
-        for (padtools.core.formats.uml.JavaClassInfo c : cache().getClasses()) {
+        for (JavaClassInfo c : cache().getClasses()) {
             String p = c.getPackageName();
             if (p != null && !p.isEmpty()) {
                 packages.add(p);
@@ -155,247 +307,8 @@ public final class DiagramController {
         DiagramScope picked = dlg.getResult();
         if (picked != null) {
             state.currentScope = picked.isEmpty() ? null : picked;
-            refreshDiagram.run();
+            applyStateToActiveTab();
         }
-    }
-
-    /**
-     * 左ペインのツリーで Manifest ノード (または配下の Permissions / Features
-     * グループ) が選択されたら Manifest 図モードへ切り替える。
-     */
-    public void onTreeManifestSelected(padtools.core.formats.android.AndroidManifestInfo m) {
-        switchToManifestDiagram();
-    }
-
-    /**
-     * 左ペインのツリーで Manifest 配下の個別コンポーネントが選択されたら
-     * Manifest 図モードへ切り替える (将来的に該当ノードへ強調表示を入れる余地)。
-     */
-    public void onTreeComponentSelected(
-            padtools.core.formats.android.AndroidComponentInfo c) {
-        switchToManifestDiagram();
-    }
-
-    private void switchToManifestDiagram() {
-        setCurrentKind(DiagramKind.MANIFEST);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.MANIFEST);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_ANDROID);
-        showHomeTab();
-        refreshDiagram.run();
-    }
-
-    /**
-     * 左ペインのツリーでメソッドが選択された際のハンドラ。
-     * シーケンス図モードへ切り替え、かつ Activity / CallGraph 起点も同じメソッドに同期する。
-     * これにより、ツールバーの Sequence / Activity / Call Graph ボタンを押すだけで
-     * ダイアログを開かずに切り替えられる。
-     */
-    public void onTreeMethodSelected(ProjectTreePanel.MethodSelection sel) {
-        if (sel == null) {
-            return;
-        }
-        String entry = sel.getEntry();
-        state.activityEntry = entry;
-        state.callGraphEntry = entry;
-        switchToSequenceDiagram(entry);
-    }
-
-    /**
-     * sequence / activity / callgraph の 3 エントリを同じメソッドに揃える。
-     * これによりツールバーボタンでどの図種へ切り替えても再入力ダイアログが出ない。
-     */
-    public void setAllMethodEntries(String entry) {
-        state.setAllMethodEntries(entry);
-    }
-
-    /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
-    private void switchToSequenceDiagram(String entry) {
-        state.sequenceEntry = entry;
-        setCurrentKind(DiagramKind.SEQUENCE);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.SEQUENCE);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram.run();
-    }
-
-    /**
-     * 左ペインで中クリックされたノードを「新しいタブ」として開くハンドラ。
-     * 機能 2 (動的タブ) で {@link DiagramTabPane} に委譲するが、現状は単に
-     * その図種に切り替える (タブ追加は別実装)。
-     */
-    public void onTreeOpenInNewTab(TreeNodeOpenRequest req) {
-        if (req == null) {
-            return;
-        }
-        if (tabPane != null) {
-            tabPane.addOrFocusTab(req);
-            return;
-        }
-        applyOpenRequest(req);
-    }
-
-    /** タブ未配線時の挙動: 現在ビューを差し替える。 */
-    public void applyOpenRequest(TreeNodeOpenRequest req) {
-        switch (req.target) {
-            case METHOD:
-                String entry = req.classInfo.getSimpleName() + "." + req.methodInfo.getName();
-                if (req.kind == DiagramKind.ACTIVITY) {
-                    switchToActivityDiagram(entry);
-                } else {
-                    switchToSequenceDiagram(entry);
-                }
-                break;
-            case CLASS:
-                onTreeClassSelected(req.classInfo);
-                break;
-            case PACKAGE:
-                onTreePackageSelected(req.name);
-                break;
-            case MODULE:
-                onTreeModuleSelected(req.name);
-                break;
-            default:
-                break;
-        }
-    }
-
-    /**
-     * 左ペインのアクティビティ図リーフが選択された際のハンドラ (後方互換)。
-     * 現在はツリーからこのハンドラを呼ぶ経路はないが、中クリック等の内部処理で
-     * 引き続き利用するため残している。
-     */
-    public void onTreeActivityMethodSelected(ProjectTreePanel.MethodSelection sel) {
-        if (sel == null) {
-            return;
-        }
-        String entry = sel.getEntry();
-        state.sequenceEntry = entry;
-        state.callGraphEntry = entry;
-        switchToActivityDiagram(entry);
-    }
-
-    /** {@code Class.method} 起点をセットしてアクティビティ図モードへ切り替える。 */
-    private void switchToActivityDiagram(String entry) {
-        state.activityEntry = entry;
-        setCurrentKind(DiagramKind.ACTIVITY);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.ACTIVITY);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram.run();
-    }
-
-    /** {@code Class.method} 起点をセットしてコールグラフモードへ切り替える。 */
-    private void switchToCallGraphDiagram(String entry) {
-        state.callGraphEntry = entry;
-        setCurrentKind(DiagramKind.CALLGRAPH);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CALLGRAPH);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        updateAvailableDiagrams(ToolBarBuilder.DIAGRAMS_METHOD);
-        showHomeTab();
-        refreshDiagram.run();
-    }
-
-    // -------------------------------------------------------------------------
-    // プレビューリンクハンドラ
-    // -------------------------------------------------------------------------
-
-    /**
-     * クラス図プレビュー上で左クリックされたとき:
-     * - {@code padtools://method/<FQN>#<method>} リンクならシーケンス/アクティビティ図選択メニュー
-     * - {@code padtools://class/<FQN>} リンクならドリルダウン
-     */
-    public void onPreviewLinkClick(LinkArea link, MouseEvent event) {
-        if (link == null) {
-            return;
-        }
-        String href = link.getHref();
-        if (href != null && href.startsWith("padtools://method/")) {
-            showMethodDiagramMenu(href, event);
-            return;
-        }
-        String fqn = parseClassFqnFromHref(href);
-        if (fqn == null) {
-            return;
-        }
-        drillDownToClass(fqn);
-    }
-
-    /**
-     * メソッドリンク ({@code padtools://method/<FQN>#<methodName>}) がクリックされたとき、
-     * シーケンス図またはアクティビティ図へ遷移するサブメニューを表示する。
-     */
-    private void showMethodDiagramMenu(String href, MouseEvent event) {
-        String path = href.substring("padtools://method/".length());
-        int hash = path.lastIndexOf('#');
-        if (hash < 0) {
-            return;
-        }
-        String classFqn = path.substring(0, hash);
-        String methodName = path.substring(hash + 1);
-        if (classFqn.isEmpty() || methodName.isEmpty()) {
-            return;
-        }
-        String simpleName = extractSimpleClass(classFqn);
-        String entry = simpleName + "." + methodName;
-        JPopupMenu menu = new JPopupMenu();
-        JMenuItem seqItem = new JMenuItem("Sequence Diagram");
-        seqItem.addActionListener(e -> {
-            setAllMethodEntries(entry);
-            switchToSequenceDiagram(entry);
-            treePanel.selectMethodNode(classFqn, methodName);
-        });
-        menu.add(seqItem);
-        JMenuItem actItem = new JMenuItem("Activity Diagram");
-        actItem.addActionListener(e -> {
-            setAllMethodEntries(entry);
-            switchToActivityDiagram(entry);
-            treePanel.selectMethodNode(classFqn, methodName);
-        });
-        menu.add(actItem);
-        menu.show(event.getComponent(), event.getX(), event.getY());
-    }
-
-    /** 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。 */
-    private void drillDownToClass(String fqn) {
-        if (fqn == null || fqn.isEmpty()) {
-            return;
-        }
-        DiagramScope.Builder b = DiagramScope.builder()
-                .seed(fqn).neighborHops(1);
-        DiagramPreset.DETAILED.applyTo(b);
-        state.currentScope = b.build();
-        setCurrentKind(DiagramKind.CLASS);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        statusLabel.setText("Drill-down: " + fqn);
-        treePanel.selectClassNode(fqn);
-        refreshDiagram.run();
-    }
-
-    /** href 文字列から {@code padtools://class/<FQN>} の FQN 部分を取り出す。 */
-    public static String parseClassFqnFromHref(String href) {
-        if (href == null) {
-            return null;
-        }
-        final String prefix = "padtools://class/";
-        if (href.startsWith(prefix)) {
-            String s = href.substring(prefix.length()).trim();
-            return s.isEmpty() ? null : s;
-        }
-        return null;
     }
 
     // -------------------------------------------------------------------------
@@ -403,34 +316,33 @@ public final class DiagramController {
     // -------------------------------------------------------------------------
 
     /**
-     * ノード選択に応じてツールバーの図種ボタンを有効/無効化する。
-     *
-     * <p>{@code allowed} に含まれない図種のボタンは押下不可になる。
-     * 現在の選択図種が無効になった場合、{@code allowed} の先頭図種に自動切替する。</p>
+     * ノード選択に応じてツールバーの図種ボタンを表示/非表示する (補助 API)。
+     * VS Code 化後は自動呼び出しされないが、図種セットの可視制御に利用できる。
      */
     public void updateAvailableDiagrams(EnumSet<DiagramKind> allowed) {
         for (java.util.Map.Entry<DiagramKind, JToggleButton> e : diagramToggles.entrySet()) {
             e.getValue().setVisible(allowed.contains(e.getKey()));
         }
-        if (!allowed.contains(currentKind)) {
-            DiagramKind fallback = allowed.iterator().next();
-            setCurrentKind(fallback);
-            JToggleButton btn = diagramToggles.get(fallback);
-            if (btn != null) {
-                btn.setSelected(true);
-            }
-            JRadioButtonMenuItem item = diagramItems.get(fallback);
-            if (item != null) {
-                item.setSelected(true);
-            }
-            refreshDiagram.run();
+    }
+
+    /**
+     * 動的タブにフォーカスが移ったときの一括同期: ツリーハイライト + 図種ミラー +
+     * ツールバー/メニュー反映。
+     */
+    public void onTabFocused(DiagramTabPane.FocusedTab info) {
+        if (info == null) {
+            return;
+        }
+        syncToFocusedTab(info.treeSync);
+        if (info.kind != null) {
+            setCurrentKind(info.kind);
+            reflectKindInToolbar(info.kind);
         }
     }
 
     /**
-     * 動的ダイアグラムタブにフォーカスが移ったとき、その由来ノードを左ツリーで
-     * ハイライトして「タブ ↔ リスト」を連動させる。選択コールバックは発火しない
-     * ({@code select*Node} は suppressNotify) ため Home の図には影響しない。
+     * 動的ダイアグラムタブの由来ノードを左ツリーでハイライトして連動させる。
+     * {@code select*Node} は suppressNotify なので選択コールバックは発火しない。
      */
     public void syncToFocusedTab(TreeNodeOpenRequest req) {
         if (req == null) {
@@ -457,16 +369,9 @@ public final class DiagramController {
             default:
                 break;
         }
-        // ツールバー/メニューの図種選択をフォーカス中タブの図種に合わせる (見た目のみ)。
-        DiagramKind tabKind = req.target == TreeNodeOpenRequest.Target.METHOD
-                ? req.kind : DiagramKind.CLASS;
-        reflectKindInToolbar(tabKind);
     }
 
-    /**
-     * メニューラジオ/ツールバートグルの選択を {@code kind} に合わせる (見た目のみ)。
-     * {@code currentKind} (Home の描画図種) は変更しないため Home に副作用を与えない。
-     */
+    /** メニューラジオ/ツールバートグルの選択を {@code kind} に合わせる (見た目のみ)。 */
     void reflectKindInToolbar(DiagramKind kind) {
         JRadioButtonMenuItem item = diagramItems.get(kind);
         if (item != null) {
@@ -475,21 +380,12 @@ public final class DiagramController {
         syncDiagramToggle(kind);
     }
 
-    /** ツリーノードの左クリック後に Home タブ (index 0) を前面に出す。 */
-    private void showHomeTab() {
-        if (mainTabs != null && mainTabs.getTabCount() > 0 && mainTabs.getSelectedIndex() != 0) {
-            mainTabs.setSelectedIndex(0);
-        }
-    }
-
     /**
-     * ツールバーの図種ボタンが押されたときのハンドラ。
-     * 図種に応じて必要な追加入力ダイアログを開く (シーケンス起点未指定など)。
+     * ツールバー/メニューの図種ボタンが押されたときのハンドラ。
+     * VS Code 風: アクティブタブを起点に、選んだ図種をタブとして開く / フォーカスする。
      */
     public void selectDiagramKind(DiagramKind kind) {
-        // VS Code 風: 動的タブにフォーカス中はツールバーがそのタブの題材に作用する。
-        // メソッドタブなら同じ Class.method の別図種 (Sequence/Activity/CallGraph) を
-        // 新規 or 既存タブとして開く。適用外の図種は Home に切り替えて従来処理に委ねる。
+        // メソッドタブにフォーカス中なら、同じ Class.method の別図種を開く。
         if (tabPane != null && tabPane.dynamicTabFocused()) {
             TreeNodeOpenRequest focused = tabPane.focusedTabRequest();
             if (focused != null
@@ -499,34 +395,63 @@ public final class DiagramController {
                         focused.classInfo, focused.methodInfo, kind));
                 return;
             }
-            showHomeTab();
         }
-        DiagramKind previousKind = currentKind;
+        // 図種選択をツールバー/メニューへ反映 (テスト・未ロード時はここまで)。
         setCurrentKind(kind);
-        JRadioButtonMenuItem item = diagramItems.get(kind);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        // SEQUENCE/ACTIVITY/CALLGRAPH/LAYOUT/NAVIGATION は追加入力 (起点・対象キー) が必要。
-        // 未指定なら入力ダイアログを誘導する。
-        if (entryMissingFor(kind)) {
-            if (cache().isLoaded()) {
-                promptForEntry(kind);
-                // 起点未指定のままダイアログがキャンセルされたら図種選択を元に戻す。
-                // そうしないとツールバー/メニューだけ新図種に固定され、表示は旧図のまま、
-                // という不整合な状態 (新図種で表示すべき図が無いのに選択済み) が残る。
-                if (currentKind == kind && entryMissingFor(kind)) {
-                    revertKindSelection(previousKind);
-                }
-            } else {
-                refreshDiagram.run();
-            }
+        reflectKindInToolbar(kind);
+        if (tabPane == null) {
             return;
         }
-        refreshDiagram.run();
+        openKindAsTab(kind);
+        // タブを開かなかった場合 (ダイアログキャンセル等) はアクティブタブの図種へ戻す。
+        if (tabPane.hasActiveTab()) {
+            reflectKindInToolbar(tabPane.activeTabKind());
+        }
     }
 
-    /** kind が起点/対象キーを必要とし、かつそれが未指定かどうか。 */
+    /** 図種に応じてタブを開く / 追加入力ダイアログを誘導する。 */
+    private void openKindAsTab(DiagramKind kind) {
+        switch (kind) {
+            case SEQUENCE:
+            case ACTIVITY:
+            case CALLGRAPH:
+                openMethodKind(kind);
+                break;
+            case LAYOUT:
+                pickLayoutFile();
+                break;
+            case NAVIGATION:
+                pickNavigationGraph();
+                break;
+            case MANIFEST:
+                openManifestDiagram();
+                break;
+            default:
+                openProjectWide(kind);
+                break;
+        }
+    }
+
+    /** Sequence/Activity/CallGraph: アクティブタブのメソッドを流用、無ければ入力ダイアログ。 */
+    private void openMethodKind(DiagramKind kind) {
+        TreeNodeOpenRequest focused = tabPane.focusedTabRequest();
+        if (focused != null && focused.target == TreeNodeOpenRequest.Target.METHOD) {
+            tabPane.addOrFocusTab(TreeNodeOpenRequest.method(
+                    focused.classInfo, focused.methodInfo, kind));
+            return;
+        }
+        if (!cache().isLoaded()) {
+            return;
+        }
+        switch (kind) {
+            case SEQUENCE:  pickSequenceEntry(); break;
+            case ACTIVITY:  pickActivityEntry(); break;
+            case CALLGRAPH: pickCallGraphEntry(); break;
+            default: break;
+        }
+    }
+
+    /** kind が起点/対象キーを必要とし、かつそれが未指定かどうか (補助 API)。 */
     boolean entryMissingFor(DiagramKind kind) {
         switch (kind) {
             case SEQUENCE:   return isBlank(state.sequenceEntry);
@@ -542,35 +467,8 @@ public final class DiagramController {
         return s == null || s.isEmpty();
     }
 
-    /** 図種に応じた起点/対象選択ダイアログを開く。成功時は各 pick* が状態を確定する。 */
-    private void promptForEntry(DiagramKind kind) {
-        switch (kind) {
-            case SEQUENCE:   pickSequenceEntry(); break;
-            case ACTIVITY:   pickActivityEntry(); break;
-            case CALLGRAPH:  pickCallGraphEntry(); break;
-            case LAYOUT:     pickLayoutFile(); break;
-            case NAVIGATION: pickNavigationGraph(); break;
-            default: break;
-        }
-    }
-
     /**
-     * 図種選択を {@code previous} に戻す (currentKind・メニューラジオ・ツールバートグルを同期)。
-     * 表示中の図は前回のまま据え置かれているため再描画は行わない。
-     */
-    void revertKindSelection(DiagramKind previous) {
-        setCurrentKind(previous);
-        JRadioButtonMenuItem item = diagramItems.get(previous);
-        if (item != null) {
-            item.setSelected(true);
-        }
-        syncDiagramToggle(previous);
-    }
-
-    /**
-     * ツールバーのトグルボタン側で現在の図種を反映する。メニュー (ラジオボタン) と
-     * 双方向に同期するため、各 onTree*Selected / drillDown 等で
-     * {@code diagramItems} を更新する場所で同時に呼ぶ。
+     * ツールバーのトグルボタン側で現在の図種を反映する (メニューラジオと双方向同期)。
      */
     public void syncDiagramToggle(DiagramKind kind) {
         JToggleButton b = diagramToggles.get(kind);
@@ -580,19 +478,9 @@ public final class DiagramController {
     }
 
     // -------------------------------------------------------------------------
-    // エンティティ検索・スコープ操作
+    // エンティティ検索・ドリルダウン
     // -------------------------------------------------------------------------
 
-    /**
-     * クラス・メソッド・フィールドの横断検索ダイアログを開き、結果に応じて
-     * クラス図 / シーケンス図に切り替える。
-     *
-     * <ul>
-     *   <li>CLASS 選択 → クラス図モードへ切り替え、当該クラスを seed に 1 ホップでスコープ</li>
-     *   <li>METHOD 選択 → 当該メソッドを起点とするシーケンス図モード</li>
-     *   <li>FIELD 選択 → 所属クラスを seed に 1 ホップしたクラス図 (フィールド型まで含む)</li>
-     * </ul>
-     */
     public void openEntitySearch() {
         if (!cache().isLoaded()) {
             JOptionPane.showMessageDialog(parentFrame,
@@ -613,83 +501,59 @@ public final class DiagramController {
             return;
         }
         if (dlg.isDrillDownRequested()) {
-            // Drill-down ボタンを押された場合は kind に関係なく ownerQn のクラスへ
-            // DETAILED プリセットで遷移する。
             drillDownToClass(result.ownerQn);
             return;
         }
         switch (result.kind) {
             case CLASS:
-                scopeToClass(result.ownerQn, result.simpleName);
+                scopeToClass(result.ownerQn);
                 break;
             case METHOD: {
                 String simple = extractSimpleClass(result.ownerQn);
                 String methodEntry = simple + "." + result.simpleName;
-                String ownerFqn = result.ownerQn;
-                String methodName = result.simpleName;
                 JPopupMenu menu = new JPopupMenu();
                 JMenuItem seqItem = new JMenuItem("Sequence Diagram");
-                seqItem.addActionListener(e -> {
-                    setAllMethodEntries(methodEntry);
-                    switchToSequenceDiagram(methodEntry);
-                    treePanel.selectMethodNode(ownerFqn, methodName);
-                });
+                seqItem.addActionListener(e -> openEntryDiagram(methodEntry, DiagramKind.SEQUENCE));
                 menu.add(seqItem);
                 JMenuItem actItem = new JMenuItem("Activity Diagram");
-                actItem.addActionListener(e -> {
-                    setAllMethodEntries(methodEntry);
-                    switchToActivityDiagram(methodEntry);
-                    treePanel.selectMethodNode(ownerFqn, methodName);
-                });
+                actItem.addActionListener(e -> openEntryDiagram(methodEntry, DiagramKind.ACTIVITY));
                 menu.add(actItem);
                 menu.show(parentFrame, parentFrame.getWidth() / 2, parentFrame.getHeight() / 2);
                 break;
             }
             case FIELD:
-                scopeToClass(result.ownerQn,
-                        extractSimpleClass(result.ownerQn) + "." + result.simpleName);
+                scopeToClass(result.ownerQn);
                 break;
             default:
                 break;
         }
     }
 
-    /** クラス図モードへ切り替え、FQN を seed として 1 ホップ近傍でスコープする。 */
-    public void scopeToClass(String fqn, String label) {
-        if (fqn == null || fqn.isEmpty()) {
+    /** クラス図タブを開く (FQN を seed として 1 ホップ近傍)。 */
+    public void scopeToClass(String fqn) {
+        if (fqn == null || fqn.isEmpty() || tabPane == null) {
             return;
         }
-        state.currentScope = DiagramScope.builder().seed(fqn).neighborHops(1).build();
-        setCurrentKind(DiagramKind.CLASS);
-        JRadioButtonMenuItem item = diagramItems.get(DiagramKind.CLASS);
-        if (item != null) {
-            item.setSelected(true);
+        JavaClassInfo ci = cache().getIndex().header(fqn).orElse(null);
+        if (ci == null) {
+            return;
         }
-        statusLabel.setText("Scope: " + label + " (+1 hop)");
-        treePanel.selectClassNode(fqn);
-        refreshDiagram.run();
+        tabPane.addOrFocusTab(TreeNodeOpenRequest.classNode(ci));
     }
 
-    /**
-     * "SimpleClass.method" 形式のエントリからクラスの FQN を検索し、
-     * 左ツリーパネルの対応するメソッドノードを選択する。
-     */
-    public void syncTreeToMethodByEntry(String entry) {
-        if (entry == null || !cache().isLoaded()) {
+    /** 指定された FQN を seed として DETAILED プリセットのクラス図タブを開く。 */
+    private void drillDownToClass(String fqn) {
+        if (fqn == null || fqn.isEmpty() || tabPane == null) {
             return;
         }
-        int dot = entry.lastIndexOf('.');
-        if (dot < 0) {
-            return;
-        }
-        String simpleName = entry.substring(0, dot);
-        String methodName = entry.substring(dot + 1);
-        for (padtools.core.formats.uml.JavaClassInfo c : cache().getClasses()) {
-            if (simpleName.equals(c.getSimpleName())) {
-                treePanel.selectMethodNode(c.getQualifiedName(), methodName);
-                return;
-            }
-        }
+        JavaClassInfo ci = cache().getIndex().header(fqn).orElse(null);
+        DiagramScope.Builder b = DiagramScope.builder().seed(fqn).neighborHops(1);
+        DiagramPreset.DETAILED.applyTo(b);
+        DiagramRequest spec = new DiagramRequest(DiagramKind.CLASS, null, null, true, b.build(), true);
+        String label = ci != null ? ci.getSimpleName() : extractSimpleClass(fqn);
+        tabPane.openDiagram("CLASS:" + fqn, label, TreeNodeIcon.CLASS, spec,
+                ci != null ? TreeNodeOpenRequest.classNode(ci) : null);
+        treePanel.selectClassNode(fqn);
     }
 
     public static String extractSimpleClass(String qn) {
@@ -700,8 +564,6 @@ public final class DiagramController {
         return dot < 0 ? qn : qn.substring(dot + 1);
     }
 
-    // -------------------------------------------------------------------------
-    // エントリ選択ダイアログ
     // -------------------------------------------------------------------------
     // エントリ選択ダイアログ (DiagramEntryDialogs へ委譲)
     // -------------------------------------------------------------------------
@@ -731,7 +593,7 @@ public final class DiagramController {
     }
 
     // -------------------------------------------------------------------------
-    // DiagramRequest ビルダ (public — refreshDiagramNow から呼ばれる)
+    // DiagramRequest ビルダ
     // -------------------------------------------------------------------------
 
     public DiagramRequest buildSequenceRequest(String entry) {
@@ -740,7 +602,6 @@ public final class DiagramController {
             throw new IllegalArgumentException(
                     "Sequence entry must be in 'Class.method' format: " + entry);
         }
-        // 隠す participant の集合をスナップショットして DiagramRequest に渡す
         java.util.Set<String> hidden = state.sequenceHiddenParticipants.isEmpty()
                 ? null : new java.util.LinkedHashSet<>(state.sequenceHiddenParticipants);
         return new DiagramRequest(DiagramKind.SEQUENCE,

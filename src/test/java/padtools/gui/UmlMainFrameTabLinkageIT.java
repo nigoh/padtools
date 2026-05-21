@@ -167,12 +167,14 @@ public class UmlMainFrameTabLinkageIT {
         JavaClassInfo bar = classes.stream()
                 .filter(c -> "Bar".equals(c.getSimpleName())).findFirst().orElseThrow();
 
+        // 起動直後に既定タブ (Common) が 1 枚開いているため、ここを基準に増分で検証する。
         int baseTabs = GuiActionRunner.execute(mainTabs::getTabCount);
+        int baseOpen = openTabs.size();
 
         // --- open Foo as a tab; it is auto-focused -> tree should highlight Foo ---
         openInNewTab(controller, TreeNodeOpenRequest.classNode(foo));
         Thread.sleep(800);
-        assertEquals("one dynamic tab expected", 1, openTabs.size());
+        assertEquals("one more dynamic tab expected", baseOpen + 1, openTabs.size());
         assertEquals("tab count should grow by one",
                 baseTabs + 1, (int) GuiActionRunner.execute(mainTabs::getTabCount));
         assertTrue("focusing Foo tab should highlight Foo node, got " + selectionLabel(tree),
@@ -181,14 +183,14 @@ public class UmlMainFrameTabLinkageIT {
         // --- open Bar as a tab; focus moves to Bar -> tree should highlight Bar ---
         openInNewTab(controller, TreeNodeOpenRequest.classNode(bar));
         Thread.sleep(800);
-        assertEquals(2, openTabs.size());
+        assertEquals(baseOpen + 2, openTabs.size());
         assertTrue("focusing Bar tab should highlight Bar node, got " + selectionLabel(tree),
                 selectionLabel(tree).contains("Bar"));
 
         // --- reopen Foo: existing tab is re-focused, no new tab, tree back to Foo ---
         openInNewTab(controller, TreeNodeOpenRequest.classNode(foo));
         Thread.sleep(800);
-        assertEquals("reopening Foo must not create a new tab", 2, openTabs.size());
+        assertEquals("reopening Foo must not create a new tab", baseOpen + 2, openTabs.size());
         assertTrue("re-focusing Foo tab should highlight Foo node, got " + selectionLabel(tree),
                 selectionLabel(tree).contains("Foo"));
     }
@@ -224,28 +226,31 @@ public class UmlMainFrameTabLinkageIT {
                 .filter(c -> "Foo".equals(c.getSimpleName())).findFirst().orElseThrow();
         JavaMethodInfo hello = foo.getMethods().get(0);
 
+        // 起動直後に既定タブ (Common) が 1 枚開いているため、ここを基準に増分で検証する。
+        int baseOpen = openTabs.size();
+
         // open Foo.hello as a sequence tab
         openInNewTab(controller, TreeNodeOpenRequest.method(foo, hello, DiagramKind.SEQUENCE));
         Thread.sleep(800);
-        assertEquals(1, openTabs.size());
+        assertEquals(baseOpen + 1, openTabs.size());
 
         // with the method tab focused, the toolbar opens the same method's other diagrams
         selectKind(controller, DiagramKind.ACTIVITY);
         Thread.sleep(800);
-        assertEquals("Activity should open as a new tab", 2, openTabs.size());
+        assertEquals("Activity should open as a new tab", baseOpen + 2, openTabs.size());
         assertTrue("focused tab should be the activity view, got " + focusedTitle(mainTabs),
                 focusedTitle(mainTabs).contains("(act)"));
 
         selectKind(controller, DiagramKind.CALLGRAPH);
         Thread.sleep(800);
-        assertEquals("Call graph should open as a new tab", 3, openTabs.size());
+        assertEquals("Call graph should open as a new tab", baseOpen + 3, openTabs.size());
         assertTrue("focused tab should be the call-graph view, got " + focusedTitle(mainTabs),
                 focusedTitle(mainTabs).contains("(cg)"));
 
         // re-selecting an already-open kind just focuses the existing tab (dedupe)
         selectKind(controller, DiagramKind.ACTIVITY);
         Thread.sleep(600);
-        assertEquals("re-selecting Activity must not create a new tab", 3, openTabs.size());
+        assertEquals("re-selecting Activity must not create a new tab", baseOpen + 3, openTabs.size());
         assertTrue(focusedTitle(mainTabs).contains("(act)"));
     }
 }

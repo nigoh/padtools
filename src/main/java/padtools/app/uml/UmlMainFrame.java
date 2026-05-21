@@ -1145,6 +1145,16 @@ public class UmlMainFrame extends JFrame {
         switchToSequenceDiagram(entry);
     }
 
+    /**
+     * sequence / activity / callgraph の 3 エントリを同じメソッドに揃える。
+     * これによりツールバーボタンでどの図種へ切り替えても再入力ダイアログが出ない。
+     */
+    private void setAllMethodEntries(String entry) {
+        sequenceEntry = entry;
+        activityEntry = entry;
+        callGraphEntry = entry;
+    }
+
     /** {@code Class.method} 起点をセットしてシーケンス図モードへ切り替える。 */
     private void switchToSequenceDiagram(String entry) {
         sequenceEntry = entry;
@@ -1281,12 +1291,14 @@ public class UmlMainFrame extends JFrame {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem seqItem = new JMenuItem("Sequence Diagram");
         seqItem.addActionListener(e -> {
+            setAllMethodEntries(entry);
             switchToSequenceDiagram(entry);
             treePanel.selectMethodNode(classFqn, methodName);
         });
         menu.add(seqItem);
         JMenuItem actItem = new JMenuItem("Activity Diagram");
         actItem.addActionListener(e -> {
+            setAllMethodEntries(entry);
             switchToActivityDiagram(entry);
             treePanel.selectMethodNode(classFqn, methodName);
         });
@@ -1484,12 +1496,14 @@ public class UmlMainFrame extends JFrame {
                 JPopupMenu menu = new JPopupMenu();
                 JMenuItem seqItem = new JMenuItem("Sequence Diagram");
                 seqItem.addActionListener(e -> {
+                    setAllMethodEntries(methodEntry);
                     switchToSequenceDiagram(methodEntry);
                     treePanel.selectMethodNode(ownerFqn, methodName);
                 });
                 menu.add(seqItem);
                 JMenuItem actItem = new JMenuItem("Activity Diagram");
                 actItem.addActionListener(e -> {
+                    setAllMethodEntries(methodEntry);
                     switchToActivityDiagram(methodEntry);
                     treePanel.selectMethodNode(ownerFqn, methodName);
                 });

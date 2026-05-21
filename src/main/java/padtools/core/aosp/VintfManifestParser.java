@@ -192,18 +192,14 @@ public final class VintfManifestParser {
     private static DocumentBuilder createSecureBuilder() throws ParserConfigurationException {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(false);
-        try {
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature(
-                    "http://xml.org/sax/features/external-general-entities", false);
-            factory.setFeature(
-                    "http://xml.org/sax/features/external-parameter-entities", false);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-        } catch (Exception ignore) {
-            // 古い XML パーサで feature 未対応の場合はベスト努力で続行
-        }
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature(
+                "http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature(
+                "http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
         return factory.newDocumentBuilder();
     }
 

@@ -198,8 +198,7 @@ public final class PlantUmlSequenceDiagram {
 
             Set<String> stack = new HashSet<>();
             stack.add(cls.getSimpleName() + "." + method.getName());
-            walkStatements(method.getStatements(), cls, classes, participants,
-                    inlineParticipants, participantMethods, body, stack, 1, o, "");
+            walkStatements(method.getStatements(), cls, 1, "", new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, o));
             stack.remove(cls.getSimpleName() + "." + method.getName());
 
             body.append("deactivate ").append(cls.getSimpleName()).append('\n');
@@ -299,8 +298,7 @@ public final class PlantUmlSequenceDiagram {
         stack.add(cls.getSimpleName() + "." + method.getName());
         // body は捨てる。participants だけ取り出す。
         StringBuilder discard = new StringBuilder();
-        walkStatements(method.getStatements(), cls, classes, result,
-                new HashSet<>(), participantMethods, discard, stack, 1, scanOpts, "");
+        walkStatements(method.getStatements(), cls, 1, "", new SeqRender(classes, result, new HashSet<>(), participantMethods, discard, stack, scanOpts));
         return result;
     }
 
@@ -392,22 +390,18 @@ public final class PlantUmlSequenceDiagram {
     }
 
     /** 文ツリーを順に走査して、呼び出しと制御ブロックを emit する。 */
-    private static void walkStatements(List<JavaMethodInfo.Statement> stmts,
-                                        JavaClassInfo currentClass,
-                                        List<JavaClassInfo> classes,
-                                        Set<String> participants,
-                                        Set<String> inlineParticipants,
-                                        Map<String, LinkedHashSet<String>> participantMethods,
-                                        StringBuilder body,
-                                        Set<String> stack,
-                                        int depth,
-                                        Options opts,
-                                        String indent) {
+    private static void walkStatements(List<JavaMethodInfo.Statement> stmts, JavaClassInfo currentClass, int depth, String indent, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         for (JavaMethodInfo.Statement s : stmts) {
             if (s instanceof JavaMethodInfo.Call) {
-                emitCall((JavaMethodInfo.Call) s, currentClass, classes,
-                        participants, inlineParticipants, participantMethods,
-                        body, stack, depth, opts, indent);
+                emitCall((JavaMethodInfo.Call) s, currentClass, depth, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             } else if (s instanceof JavaMethodInfo.Return) {
                 emitReturnStatement((JavaMethodInfo.Return) s,
                         currentClass.getSimpleName(), body, indent);
@@ -415,9 +409,7 @@ public final class PlantUmlSequenceDiagram {
                 emitThrowStatement((JavaMethodInfo.Throw) s,
                         currentClass.getSimpleName(), body, indent);
             } else if (s instanceof JavaMethodInfo.Block) {
-                emitBlock((JavaMethodInfo.Block) s, currentClass, classes,
-                        participants, inlineParticipants, participantMethods,
-                        body, stack, depth, opts, indent);
+                emitBlock((JavaMethodInfo.Block) s, currentClass, depth, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             }
         }
     }
@@ -448,17 +440,15 @@ public final class PlantUmlSequenceDiagram {
                 .append(" : ").append(text).append('\n');
     }
 
-    private static void emitCall(JavaMethodInfo.Call call,
-                                  JavaClassInfo currentClass,
-                                  List<JavaClassInfo> classes,
-                                  Set<String> participants,
-                                  Set<String> inlineParticipants,
-                                  Map<String, LinkedHashSet<String>> participantMethods,
-                                  StringBuilder body,
-                                  Set<String> stack,
-                                  int depth,
-                                  Options opts,
-                                  String indent) {
+    private static void emitCall(JavaMethodInfo.Call call, JavaClassInfo currentClass, int depth, String indent, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         String target = resolveTarget(currentClass, call, opts);
         if (target.equals(currentClass.getSimpleName()) && !opts.inlineSelfCalls) {
             return;
@@ -525,9 +515,7 @@ public final class PlantUmlSequenceDiagram {
                 body.append(indent).append("activate ").append(quote(inlineName)).append('\n');
                 stack.add(inlineKey);
                 // inline body 内の `this.foo()` を定義元クラスに解決させるため currentClass を保つ
-                walkStatements(inline.getStatements(), currentClass, classes,
-                        participants, inlineParticipants, participantMethods,
-                        body, stack, depth + 1, opts, isLoop ? indent + "    " : indent + "  ");
+                walkStatements(inline.getStatements(), currentClass, depth + 1, isLoop ? indent + "    " : indent + "  ", new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 stack.remove(inlineKey);
                 body.append(indent).append("deactivate ").append(quote(inlineName)).append('\n');
             }
@@ -552,9 +540,7 @@ public final class PlantUmlSequenceDiagram {
             body.append(indent).append("activate ").append(target).append('\n');
             stack.add(inlineKey);
             // inline body 内の `this.foo()` を呼び出し元クラスに解決させるため currentClass を保つ
-            walkStatements(inline.getStatements(), currentClass, classes,
-                    participants, inlineParticipants, participantMethods,
-                    body, stack, depth + 1, opts, indent);
+            walkStatements(inline.getStatements(), currentClass, depth + 1, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             stack.remove(inlineKey);
             body.append(indent).append("deactivate ").append(target).append('\n');
             return;
@@ -572,9 +558,7 @@ public final class PlantUmlSequenceDiagram {
         }
         body.append(indent).append("activate ").append(target).append('\n');
         stack.add(key);
-        walkStatements(nextMethod.getStatements(), nextCls, classes,
-                participants, inlineParticipants, participantMethods,
-                body, stack, depth + 1, opts, indent);
+        walkStatements(nextMethod.getStatements(), nextCls, depth + 1, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         stack.remove(key);
         body.append(indent).append("deactivate ").append(target).append('\n');
     }
@@ -760,17 +744,15 @@ public final class PlantUmlSequenceDiagram {
         body.append(indent).append("end note\n");
     }
 
-    private static void emitBlock(JavaMethodInfo.Block block,
-                                   JavaClassInfo currentClass,
-                                   List<JavaClassInfo> classes,
-                                   Set<String> participants,
-                                   Set<String> inlineParticipants,
-                                   Map<String, LinkedHashSet<String>> participantMethods,
-                                   StringBuilder body,
-                                   Set<String> stack,
-                                   int depth,
-                                   Options opts,
-                                   String indent) {
+    private static void emitBlock(JavaMethodInfo.Block block, JavaClassInfo currentClass, int depth, String indent, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         List<JavaMethodInfo.Branch> bs = block.getBranches();
         if (bs.isEmpty()) {
             return;
@@ -778,58 +760,48 @@ public final class PlantUmlSequenceDiagram {
         String inner = indent + "    ";
         switch (block.getKind()) {
             case IF:
-                emitIf(bs, currentClass, classes, participants, inlineParticipants,
-                        participantMethods, body, stack, depth, opts, indent, inner);
+                emitIf(bs, currentClass, depth, indent, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 break;
             case WHILE:
             case FOR:
             case DO_WHILE:
-                emitLoop(block, bs.get(0), currentClass, classes, participants,
-                        inlineParticipants, participantMethods, body, stack, depth, opts, indent, inner);
+                emitLoop(block, bs.get(0), currentClass, depth, indent, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 break;
             case SWITCH:
-                emitSwitch(bs, currentClass, classes, participants, inlineParticipants,
-                        participantMethods, body, stack, depth, opts, indent, inner);
+                emitSwitch(bs, currentClass, depth, indent, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 break;
             case TRY:
-                emitTry(bs, currentClass, classes, participants, inlineParticipants,
-                        participantMethods, body, stack, depth, opts, indent, inner);
+                emitTry(bs, currentClass, depth, indent, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 break;
             case SYNCHRONIZED:
-                emitSynchronized(bs.get(0), currentClass, classes, participants,
-                        inlineParticipants, participantMethods, body, stack, depth, opts, indent, inner);
+                emitSynchronized(bs.get(0), currentClass, depth, indent, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
                 break;
             default:
                 break;
         }
     }
 
-    private static void emitIf(List<JavaMethodInfo.Branch> bs,
-                                JavaClassInfo currentClass,
-                                List<JavaClassInfo> classes,
-                                Set<String> participants,
-                                Set<String> inlineParticipants,
-                                Map<String, LinkedHashSet<String>> participantMethods,
-                                StringBuilder body,
-                                Set<String> stack,
-                                int depth,
-                                Options opts,
-                                String indent,
-                                String inner) {
+    private static void emitIf(List<JavaMethodInfo.Branch> bs, JavaClassInfo currentClass, int depth, String indent, String inner, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         JavaMethodInfo.Branch first = bs.get(0);
         boolean hasElseChain = bs.size() > 1;
         if (!hasElseChain) {
             // 単一分岐 → opt
             body.append(indent).append("opt ").append(escapeLabel(first.getLabel())).append('\n');
-            walkStatements(first.getBody(), currentClass, classes, participants,
-                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+            walkStatements(first.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             body.append(indent).append("end\n");
             return;
         }
         // 複数分岐 → alt + else
         body.append(indent).append("alt ").append(escapeLabel(first.getLabel())).append('\n');
-        walkStatements(first.getBody(), currentClass, classes, participants,
-                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+        walkStatements(first.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         for (int i = 1; i < bs.size(); i++) {
             JavaMethodInfo.Branch b = bs.get(i);
             if ("else if".equals(b.getType())) {
@@ -837,25 +809,20 @@ public final class PlantUmlSequenceDiagram {
             } else {
                 body.append(indent).append("else\n");
             }
-            walkStatements(b.getBody(), currentClass, classes, participants,
-                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+            walkStatements(b.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         }
         body.append(indent).append("end\n");
     }
 
-    private static void emitLoop(JavaMethodInfo.Block block,
-                                  JavaMethodInfo.Branch br,
-                                  JavaClassInfo currentClass,
-                                  List<JavaClassInfo> classes,
-                                  Set<String> participants,
-                                  Set<String> inlineParticipants,
-                                  Map<String, LinkedHashSet<String>> participantMethods,
-                                  StringBuilder body,
-                                  Set<String> stack,
-                                  int depth,
-                                  Options opts,
-                                  String indent,
-                                  String inner) {
+    private static void emitLoop(JavaMethodInfo.Block block, JavaMethodInfo.Branch br, JavaClassInfo currentClass, int depth, String indent, String inner, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         String label;
         switch (block.getKind()) {
             case WHILE:
@@ -872,23 +839,19 @@ public final class PlantUmlSequenceDiagram {
                 break;
         }
         body.append(indent).append("loop ").append(escapeLabel(label)).append('\n');
-        walkStatements(br.getBody(), currentClass, classes, participants,
-                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+        walkStatements(br.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         body.append(indent).append("end\n");
     }
 
-    private static void emitSwitch(List<JavaMethodInfo.Branch> bs,
-                                    JavaClassInfo currentClass,
-                                    List<JavaClassInfo> classes,
-                                    Set<String> participants,
-                                    Set<String> inlineParticipants,
-                                    Map<String, LinkedHashSet<String>> participantMethods,
-                                    StringBuilder body,
-                                    Set<String> stack,
-                                    int depth,
-                                    Options opts,
-                                    String indent,
-                                    String inner) {
+    private static void emitSwitch(List<JavaMethodInfo.Branch> bs, JavaClassInfo currentClass, int depth, String indent, String inner, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         // bs[0] は switch ヘッダ ("switch", cond)、残りが case/default
         JavaMethodInfo.Branch head = bs.get(0);
         if (bs.size() <= 1) {
@@ -911,60 +874,49 @@ public final class PlantUmlSequenceDiagram {
             } else {
                 body.append(indent).append("else ").append(escapeLabel(caseLabel)).append('\n');
             }
-            walkStatements(b.getBody(), currentClass, classes, participants,
-                    inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+            walkStatements(b.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         }
         if (openedAlt) {
             body.append(indent).append("end\n");
         }
     }
 
-    private static void emitTry(List<JavaMethodInfo.Branch> bs,
-                                 JavaClassInfo currentClass,
-                                 List<JavaClassInfo> classes,
-                                 Set<String> participants,
-                                 Set<String> inlineParticipants,
-                                 Map<String, LinkedHashSet<String>> participantMethods,
-                                 StringBuilder body,
-                                 Set<String> stack,
-                                 int depth,
-                                 Options opts,
-                                 String indent,
-                                 String inner) {
+    private static void emitTry(List<JavaMethodInfo.Branch> bs, JavaClassInfo currentClass, int depth, String indent, String inner, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         body.append(indent).append("group try\n");
         for (JavaMethodInfo.Branch b : bs) {
             if ("try".equals(b.getType())) {
-                walkStatements(b.getBody(), currentClass, classes, participants,
-                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+                walkStatements(b.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             } else if ("catch".equals(b.getType())) {
                 body.append(indent).append("else catch ").append(escapeLabel(b.getLabel())).append('\n');
-                walkStatements(b.getBody(), currentClass, classes, participants,
-                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+                walkStatements(b.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             } else if ("finally".equals(b.getType())) {
                 body.append(indent).append("else finally\n");
-                walkStatements(b.getBody(), currentClass, classes, participants,
-                        inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+                walkStatements(b.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             }
         }
         body.append(indent).append("end\n");
     }
 
-    private static void emitSynchronized(JavaMethodInfo.Branch br,
-                                          JavaClassInfo currentClass,
-                                          List<JavaClassInfo> classes,
-                                          Set<String> participants,
-                                          Set<String> inlineParticipants,
-                                          Map<String, LinkedHashSet<String>> participantMethods,
-                                          StringBuilder body,
-                                          Set<String> stack,
-                                          int depth,
-                                          Options opts,
-                                          String indent,
-                                          String inner) {
+    private static void emitSynchronized(JavaMethodInfo.Branch br, JavaClassInfo currentClass, int depth, String indent, String inner, SeqRender r) {
+            List<JavaClassInfo> classes = r.classes;
+            Set<String> participants = r.participants;
+            Set<String> inlineParticipants = r.inlineParticipants;
+            Map<String, LinkedHashSet<String>> participantMethods = r.participantMethods;
+            StringBuilder body = r.body;
+            Set<String> stack = r.stack;
+            Options opts = r.opts;
+
         body.append(indent).append("critical synchronized(")
                 .append(escapeLabel(br.getLabel())).append(")\n");
-        walkStatements(br.getBody(), currentClass, classes, participants,
-                inlineParticipants, participantMethods, body, stack, depth, opts, inner);
+        walkStatements(br.getBody(), currentClass, depth, inner, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         body.append(indent).append("end\n");
     }
 

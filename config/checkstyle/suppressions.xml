@@ -8,11 +8,9 @@
     <suppress checks="LocalVariableName" files="ViewListView\.java" />
     <suppress checks="MethodName" files="SwitchView\.java" />
 
-    <!-- PlantUmlSequenceDiagram の内部ヘルパは PlantUML テキスト・呼び出しスタック・visited
-         セットなどを多数受け渡す必要があり、パラメータ数 8 を超える。外部 API は維持。
-         注釈/コメント/フィルタ/再帰展開/制御構造ハンドラが集約された生成器であり、
-         分割よりも 1 ファイルで読める方が保守性が高いためファイル長も許可。 -->
-    <suppress checks="ParameterNumber" files="PlantUmlSequenceDiagram\.java" />
+    <!-- PlantUmlSequenceDiagram は注釈/コメント/フィルタ/再帰展開/制御構造ハンドラが
+         集約されたシーケンス図生成器。emit* の引数束は SeqRender に集約済みだが、
+         ファイル全体は 800 行を超える。分割途上のためファイル長のみ暫定的に許可する。 -->
     <suppress checks="FileLength" files="PlantUmlSequenceDiagram\.java" />
 
     <!-- StyleSettingsDialog.buildForm は GridBag フォームの行を順に積むため、

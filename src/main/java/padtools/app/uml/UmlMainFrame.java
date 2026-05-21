@@ -1294,10 +1294,7 @@ public class UmlMainFrame extends JFrame {
         menu.show(event.getComponent(), event.getX(), event.getY());
     }
 
-    /**
-     * 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。
-     * 現在のスコープは履歴に push され、Back メニューで戻せる。
-     */
+    /** 指定された FQN を seed として 1 ホップ近傍の詳細クラス図に遷移する。 */
     private void drillDownToClass(String fqn) {
         if (fqn == null || fqn.isEmpty()) {
             return;

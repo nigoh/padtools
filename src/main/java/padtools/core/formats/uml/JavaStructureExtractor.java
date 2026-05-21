@@ -27,10 +27,24 @@ public final class JavaStructureExtractor {
         return extract(source, null);
     }
 
+    /**
+     * 使用する Java パーサー実装。
+     * {@code -Dpadtools.java.parser=javaparser} で JavaParser フロントエンドに切り替わる。
+     * 既定は従来の手書きパーサー ({@code legacy})。
+     */
+    private static boolean useJavaParser() {
+        return "javaparser".equalsIgnoreCase(
+                System.getProperty("padtools.java.parser", "legacy"));
+    }
+
     /** エラーリスナー付き。 */
     public static List<JavaClassInfo> extract(String source, ErrorListener listener) {
         if (source == null) {
             throw new IllegalArgumentException("source is null");
+        }
+        if (useJavaParser()) {
+            return padtools.core.formats.java.jp.JavaParserFrontend.parse(
+                    source, listener != null ? listener : ErrorListener.silent());
         }
         // Java の Unicode エスケープは字句解析の前に展開される (JLS 3.3)。
         // 識別子・キーワードを含むエスケープを正しく扱うため、入口で 1 度だけ展開する。

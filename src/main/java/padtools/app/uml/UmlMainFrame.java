@@ -66,6 +66,7 @@ public class UmlMainFrame extends JFrame {
     private final padtools.app.uml.explore.FuncDiffPanel funcDiffPanel
             = new padtools.app.uml.explore.FuncDiffPanel();
     private final MethodListPanel methodListPanel = new MethodListPanel();
+    private final MemberListPanel memberListPanel = new MemberListPanel();
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
@@ -191,27 +192,30 @@ public class UmlMainFrame extends JFrame {
     /** 中央のツリー + タブ (動的ダイアグラムタブ + 末尾の固定ユーティリティタブ) を構築する。 */
     private void buildCenterTabs() {
         // 右側: VS Code 風のフラットタブバー
-        // [動的ダイアグラムタブ…] [Manifest] [Impact] [References] [Func Diff] [Functions]
+        // [動的ダイアグラムタブ…] [Manifest] [Impact] [References] [Func Diff] [Functions] [Members]
         // 特別扱いの「Home タブ」は持たない。
         mainTabs = new JTabbedPane(JTabbedPane.TOP);
         // タブ多数でも 1 段スクロール表示にし、多段折り返しで図領域が潰れるのを防ぐ。
         mainTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 
-        // ユーティリティタブ (固定・末尾 5 本)
+        // ユーティリティタブ (固定・末尾 6 本)
         mainTabs.addTab("Manifest", manifestSummaryPanel);
         mainTabs.addTab("Impact", impactPanel);
         mainTabs.addTab("References", referencesPanel);
         mainTabs.addTab("Func Diff", funcDiffPanel);
         mainTabs.addTab("Functions", methodListPanel);
+        mainTabs.addTab("Members", memberListPanel);
 
-        // 動的タブマネージャ (fixedSuffix=5 で末尾ユーティリティタブの手前に挿入)
-        tabPane = new DiagramTabPane(mainTabs, 5, cache, state,
+        // 動的タブマネージャ (fixedSuffix=6 で末尾ユーティリティタブの手前に挿入)
+        tabPane = new DiagramTabPane(mainTabs, 6, cache, state,
                 status::setText, this::updateZoomLabelFromValue);
 
-        // Functions タブ表示時は一覧を遅延生成
+        // Functions / Members タブ表示時は一覧を遅延生成
         mainTabs.addChangeListener(ev -> {
             if (mainTabs.getSelectedComponent() == methodListPanel) {
                 updateFunctionList();
+            } else if (mainTabs.getSelectedComponent() == memberListPanel) {
+                updateMemberList();
             }
         });
 
@@ -491,6 +495,13 @@ public class UmlMainFrame extends JFrame {
         methodListPanel.setText(cache.isLoaded()
                 ? buildFunctionListReport(
                         padtools.core.formats.uml.MethodUsageReport.Format.TABLE)
+                : "");
+    }
+
+    /** 「Members」タブに全クラスの純粋なメンバー一覧を表示する (タブ選択時に遅延生成)。 */
+    private void updateMemberList() {
+        memberListPanel.setText(cache.isLoaded()
+                ? padtools.core.formats.uml.ClassMemberReport.render(cache.getClasses())
                 : "");
     }
 

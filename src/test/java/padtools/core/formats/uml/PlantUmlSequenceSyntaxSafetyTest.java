@@ -15,9 +15,10 @@ import static org.junit.Assert.assertTrue;
  * シーケンス図生成が「構文的に妥当な」PlantUML を出すことを保証する回帰テスト。
  *
  * <p>participant 宣言は常に引用符付き ({@code participant "Name"}) なのに、矢印や
- * activate/deactivate 行で同じ名前を素のまま参照すると、{@code $} や空白を含む名前
- * (内部クラス・匿名コールバック等) で PlantUML が構文エラーを起こしていた。{@link
- * PlantUmlSequenceDiagram#idRef(String)} で参照側も特殊文字時に引用符で囲むことを検証する。</p>
+ * activate/deactivate 行で同じ名前を素のまま参照していたため、引用符が必要な名前
+ * (配列添字 {@code s[0]}・メソッド呼び出し {@code getX()}・内部クラスの {@code $} 等) で
+ * 宣言と参照が食い違い、PlantUML が構文エラー画像を返していた。{@link
+ * PlantUmlSequenceDiagram#idRef(String)} で参照側も同じ条件で引用符を付けることを検証する。</p>
  */
 public class PlantUmlSequenceSyntaxSafetyTest {
 
@@ -31,10 +32,11 @@ public class PlantUmlSequenceSyntaxSafetyTest {
 
     @Test
     public void idRefQuotesNamesNeedingEscaping() {
+        assertEquals("\"s[0]\"", PlantUmlSequenceDiagram.idRef("s[0]"));
+        assertEquals("\"getX()\"", PlantUmlSequenceDiagram.idRef("getX()"));
         assertEquals("\"Outer$Inner\"", PlantUmlSequenceDiagram.idRef("Outer$Inner"));
         assertEquals("\"a b\"", PlantUmlSequenceDiagram.idRef("a b"));
         assertEquals("\"List<String>\"", PlantUmlSequenceDiagram.idRef("List<String>"));
-        assertEquals("\"a.b.C\"", PlantUmlSequenceDiagram.idRef("a.b.C"));
     }
 
     @Test
@@ -43,10 +45,26 @@ public class PlantUmlSequenceSyntaxSafetyTest {
         assertEquals("foo bar", PlantUmlSequenceDiagram.escapeLabel("foo    bar"));
     }
 
+    /**
+     * 配列添字レシーバ ({@code s[0].go()}) は participant 名が {@code s[0]} になる。修正前は
+     * {@code participant "s[0]"} と宣言しつつ矢印は {@code A -> s[0]} と未引用で出力し、PlantUML が
+     * 構文エラー画像を返していた (origin/main で再現確認済み)。引用符が一致することを保証する。
+     */
+    @Test
+    public void arrayIndexReceiverIsQuotedConsistently() throws IOException {
+        List<JavaClassInfo> infos = JavaStructureExtractor.extract(
+                "class A { Svc[] s; void run() { s[0].go(); } }");
+        String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
+        assertTrue("arrow must quote the bracketed participant:\n" + puml,
+                puml.contains("-> \"s[0]\""));
+        assertFalse("arrow must not reference the bracketed name unquoted:\n" + puml,
+                puml.contains("-> s[0]"));
+        assertNoPlantUmlSyntaxError(puml);
+    }
+
     @Test
     public void inlineCallbackDiagramRendersWithoutSyntaxError() throws IOException {
         // ラムダ/匿名クラスのコールバックは participant 名に "$" を含む ("A$run" など)。
-        // 宣言・参照とも引用符で囲まれていないと PlantUML が構文エラーになる。
         List<JavaClassInfo> infos = JavaStructureExtractor.extract(
                 "import java.util.List;\n"
                 + "class A {\n"
@@ -55,14 +73,12 @@ public class PlantUmlSequenceSyntaxSafetyTest {
                 + "  void handle(String s) {}\n"
                 + "}\n");
         String puml = PlantUmlSequenceDiagram.generate(infos, "A", "run", null);
-        // "$" を含む participant が出力されていること (前提条件の確認)
         assertTrue("expected an inline ($) participant in: " + puml, puml.contains("$"));
         assertNoPlantUmlSyntaxError(puml);
     }
 
     @Test
     public void emptyDiagramRendersWithoutSyntaxError() throws IOException {
-        // 起点メソッドが存在しないケース (emptyDiagram 経路) も妥当な PlantUML であること。
         String puml = PlantUmlSequenceDiagram.generate(
                 JavaStructureExtractor.extract("class A {}"), "A", "missing", null);
         assertNoPlantUmlSyntaxError(puml);

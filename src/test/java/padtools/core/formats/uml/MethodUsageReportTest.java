@@ -31,7 +31,7 @@ public class MethodUsageReportTest {
         String csv = MethodUsageReport.render(classes, null, Collections.emptyList(),
                 MethodUsageReport.Format.CSV);
         assertTrue(csv, csv.startsWith(
-                "category,class,class_name,kind,signature,file,line,callers,conditions,reason"));
+                "区分,クラス,クラス名,種別,関数,ファイル,行,利用側,実行条件,理由"));
         // 署名にカンマを含むためクォートされる
         assertTrue(csv, csv.contains("\"+ add(a: int, b: int): int\""));
         // class 列は FQN、class_name 列は単純名

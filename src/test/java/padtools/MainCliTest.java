@@ -527,7 +527,7 @@ public class MainCliTest {
                 "-o", out.getAbsolutePath(), root.getAbsolutePath()});
         String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue(csv, csv.startsWith(
-                "category,class,class_name,kind,signature,file,line,callers,conditions,reason"));
+                "区分,クラス,クラス名,種別,関数,ファイル,行,利用側,実行条件,理由"));
         // class 列は FQN、class_name 列は単純名
         assertTrue(csv, csv.contains("method,x.Svc,Svc,CLASS,"));
         // file 列・line 列に定義位置が分かれて入る

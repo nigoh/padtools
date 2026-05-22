@@ -257,7 +257,7 @@ public final class MethodUsageReport {
 
     private static String renderCsv(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
-        out.append("category,class,class_name,kind,signature,file,line,callers,conditions,reason\n");
+        out.append("区分,クラス,クラス名,種別,関数,ファイル,行,利用側,実行条件,理由\n");
         for (Row r : rows) {
             out.append(csv(r.listener ? "listener" : "method")).append(',')
                     .append(csv(r.classFqn)).append(',')

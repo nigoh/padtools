@@ -159,7 +159,7 @@ public final class PlantUmlSequenceDiagram {
         StringBuilder out = new StringBuilder();
         out.append("@startuml\n");
         if (o.title != null && !o.title.isEmpty()) {
-            out.append("title ").append(o.title).append('\n');
+            out.append("title ").append(escapeLabel(o.title)).append('\n');
         } else {
             out.append("title ").append(cls.getSimpleName()).append('.')
                     .append(method.getName()).append('\n');
@@ -190,18 +190,18 @@ public final class PlantUmlSequenceDiagram {
 
         StringBuilder body = new StringBuilder();
         if (!entryHidden) {
-            body.append(o.callerName).append(" -> ").append(cls.getSimpleName())
-                    .append(": ").append(formatCallLabel(cls.getSimpleName(),
-                            method.getName(), o)).append('\n');
+            body.append(idRef(o.callerName)).append(" -> ").append(idRef(cls.getSimpleName()))
+                    .append(": ").append(escapeLabel(formatCallLabel(cls.getSimpleName(),
+                            method.getName(), o))).append('\n');
             SeqEmitters.emitCallSiteComment(body, "", cls.getSimpleName(), method, o);
-            body.append("activate ").append(cls.getSimpleName()).append('\n');
+            body.append("activate ").append(idRef(cls.getSimpleName())).append('\n');
 
             Set<String> stack = new HashSet<>();
             stack.add(cls.getSimpleName() + "." + method.getName());
             walkStatements(method.getStatements(), cls, 1, "", new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, o));
             stack.remove(cls.getSimpleName() + "." + method.getName());
 
-            body.append("deactivate ").append(cls.getSimpleName()).append('\n');
+            body.append("deactivate ").append(idRef(cls.getSimpleName())).append('\n');
         }
 
         // walk 完了後に、解析対象外の participant を依存 JAR で解決 (EXTERNAL_JAR)
@@ -420,11 +420,8 @@ public final class PlantUmlSequenceDiagram {
                                              String indent) {
         String expr = r.getExpression();
         String text = (expr == null || expr.isEmpty()) ? "return" : "return " + expr;
-        if (text.length() > 80) {
-            text = text.substring(0, 77) + "...";
-        }
         body.append(indent).append("note over ").append(quote(participant))
-                .append(" : ").append(text).append('\n');
+                .append(" : ").append(escapeLabel(text)).append('\n');
     }
 
     private static void emitThrowStatement(JavaMethodInfo.Throw t,
@@ -433,11 +430,8 @@ public final class PlantUmlSequenceDiagram {
                                             String indent) {
         String expr = t.getExpression();
         String text = (expr == null || expr.isEmpty()) ? "throw" : "throw " + expr;
-        if (text.length() > 80) {
-            text = text.substring(0, 77) + "...";
-        }
         body.append(indent).append("note over ").append(quote(participant))
-                .append(" : ").append(text).append('\n');
+                .append(" : ").append(escapeLabel(text)).append('\n');
     }
 
     private static void emitCall(JavaMethodInfo.Call call, JavaClassInfo currentClass, int depth, String indent, SeqRender r) {
@@ -464,10 +458,10 @@ public final class PlantUmlSequenceDiagram {
         participants.add(target);
         participantMethods.computeIfAbsent(target, k -> new LinkedHashSet<>())
                 .add(call.getMethodName());
-        body.append(indent).append(currentClass.getSimpleName())
-                .append(" -> ").append(target)
-                .append(": ").append(formatCallLabel(target, call.getMethodName(),
-                        call.getFirstArgLabel(), opts))
+        body.append(indent).append(idRef(currentClass.getSimpleName()))
+                .append(" -> ").append(idRef(target))
+                .append(": ").append(escapeLabel(formatCallLabel(target, call.getMethodName(),
+                        call.getFirstArgLabel(), opts)))
                 .append('\n');
 
         // 解析済みクラスに該当する呼び出し先メソッドを引いておく (note と再帰展開で共有)
@@ -507,8 +501,8 @@ public final class PlantUmlSequenceDiagram {
                             .append(" : recursive call (").append(inlineLabel).append(")\n");
                     continue;
                 }
-                body.append(indent).append(target).append(" -> ").append(quote(inlineName))
-                        .append(": ").append(inlineLabel).append("()\n");
+                body.append(indent).append(idRef(target)).append(" -> ").append(quote(inlineName))
+                        .append(": ").append(escapeLabel(inlineLabel)).append("()\n");
                 if (inline.getStatements().isEmpty()) {
                     continue;
                 }
@@ -537,12 +531,12 @@ public final class PlantUmlSequenceDiagram {
                         .append(")\n");
                 return;
             }
-            body.append(indent).append("activate ").append(target).append('\n');
+            body.append(indent).append("activate ").append(idRef(target)).append('\n');
             stack.add(inlineKey);
             // inline body 内の `this.foo()` を呼び出し元クラスに解決させるため currentClass を保つ
             walkStatements(inline.getStatements(), currentClass, depth + 1, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
             stack.remove(inlineKey);
-            body.append(indent).append("deactivate ").append(target).append('\n');
+            body.append(indent).append("deactivate ").append(idRef(target)).append('\n');
             return;
         }
         if (nextMethod == null || nextMethod.getStatements().isEmpty()) {
@@ -556,11 +550,11 @@ public final class PlantUmlSequenceDiagram {
                     .append(")\n");
             return;
         }
-        body.append(indent).append("activate ").append(target).append('\n');
+        body.append(indent).append("activate ").append(idRef(target)).append('\n');
         stack.add(key);
         walkStatements(nextMethod.getStatements(), nextCls, depth + 1, indent, new SeqRender(classes, participants, inlineParticipants, participantMethods, body, stack, opts));
         stack.remove(key);
-        body.append(indent).append("deactivate ").append(target).append('\n');
+        body.append(indent).append("deactivate ").append(idRef(target)).append('\n');
     }
 
     /**
@@ -765,6 +759,16 @@ public final class PlantUmlSequenceDiagram {
         return "\"" + s.replace("\"", "\\\"") + "\"";
     }
 
+    /** 引用符なしで書ける単純な participant 識別子のパターン。 */
+    private static final java.util.regex.Pattern SAFE_PARTICIPANT =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    // participant 参照表記: 単純名は素のまま、空白/$/<>/. 等を含む名前のみ quote() で囲む。
+    // 宣言側は常に quote するため、特殊文字名を素で参照すると構文エラーになるのを防ぐ。
+    static String idRef(String s) {
+        return s != null && SAFE_PARTICIPANT.matcher(s).matches() ? s : quote(s == null ? "" : s);
+    }
+
     /** PlantUML の制御行で安全に書ける形に整形する (改行や 80 文字超を畳む)。 */
     static String escapeLabel(String s) {
         if (s == null) {
@@ -782,9 +786,10 @@ public final class PlantUmlSequenceDiagram {
         StringBuilder sb = new StringBuilder();
         sb.append("@startuml\n");
         if (o.title != null && !o.title.isEmpty()) {
-            sb.append("title ").append(o.title).append('\n');
+            sb.append("title ").append(escapeLabel(o.title)).append('\n');
         }
-        sb.append("note over of \"info\" : ").append(reason).append('\n');
+        sb.append("participant \"info\"\n");
+        sb.append("note over \"info\" : ").append(escapeLabel(reason)).append('\n');
         sb.append("@enduml\n");
         return sb.toString();
     }

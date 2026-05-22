@@ -22,4 +22,8 @@
          テストに限りファイル長を許可する。 -->
     <suppress checks="FileLength" files="MethodDiffAnalyzerTest\.java" />
     <suppress checks="FileLength" files="PlantUmlClassDiagramTest\.java" />
+
+    <!-- MethodUsageReport.Row は CSV/Markdown 出力用の不変データホルダで、列が増えるたびに
+         コンストラクタ引数が増える。意味のある分割が難しいため ParameterNumber を許可する。 -->
+    <suppress checks="ParameterNumber" files="MethodUsageReport\.java" />
 </suppressions>

@@ -505,9 +505,10 @@ public class MainCliTest {
         assertTrue(md, md.contains("run"));
         assertTrue(md, md.contains("実行条件"));
         assertTrue(md, md.contains("if"));
-        // 定義列に各関数のソース位置 (ファイル名:行) が出る
-        assertTrue(md, md.contains("定義"));
-        assertTrue(md, md.contains("Svc.java:1"));
+        // ファイル名と行に分けてソース位置を出す
+        assertTrue(md, md.contains("ファイル"));
+        assertTrue(md, md.contains("行"));
+        assertTrue(md, md.contains("Svc.java"));
         // FQN と並べてクラス名単体の列も出す
         assertTrue(md, md.contains("クラス名"));
     }
@@ -526,11 +527,11 @@ public class MainCliTest {
                 "-o", out.getAbsolutePath(), root.getAbsolutePath()});
         String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue(csv, csv.startsWith(
-                "category,class,class_name,kind,signature,location,callers,conditions,reason"));
+                "category,class,class_name,kind,signature,file,line,callers,conditions,reason"));
         // class 列は FQN、class_name 列は単純名
         assertTrue(csv, csv.contains("method,x.Svc,Svc,CLASS,"));
-        // location 列に定義位置 (ファイル名:行) が入る
-        assertTrue(csv, csv.contains("Svc.java:1"));
+        // file 列・line 列に定義位置が分かれて入る
+        assertTrue(csv, csv.contains(",Svc.java,1,"));
         // helper() の呼び出しは if(f) 配下なので条件列・reason 列に反映される
         assertTrue(csv, csv.contains("if (f)"));
         assertTrue(csv, csv.contains("分岐ガード"));

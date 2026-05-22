@@ -197,15 +197,16 @@ public final class MethodUsageReport {
     private static String renderTable(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
         out.append("# 関数使用マップ (Function usage map)\n\n");
-        out.append("| クラス | クラス名 | 種別 | 関数 | 定義 | 利用側 | 実行条件 |\n");
-        out.append("|---|---|---|---|---|---|---|\n");
+        out.append("| クラス | クラス名 | 種別 | 関数 | ファイル | 行 | 利用側 | 実行条件 |\n");
+        out.append("|---|---|---|---|---|---|---|---|\n");
         for (Row r : rows) {
             String sig = r.listener ? "[listener] " + r.signature : r.signature;
             out.append("| `").append(mdInline(r.classFqn)).append("` | `")
                     .append(mdInline(r.simpleName)).append("` | ")
                     .append(mdInline(r.kind)).append(" | `")
                     .append(mdInline(sig)).append("` | ")
-                    .append(mdInline(locationLabel(r))).append(" | ")
+                    .append(mdInline(fileLabel(r))).append(" | ")
+                    .append(mdInline(lineLabel(r))).append(" | ")
                     .append(callersCell(r)).append(" | ")
                     .append(conditionsCell(r)).append(" |\n");
         }
@@ -256,14 +257,15 @@ public final class MethodUsageReport {
 
     private static String renderCsv(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
-        out.append("category,class,class_name,kind,signature,location,callers,conditions,reason\n");
+        out.append("category,class,class_name,kind,signature,file,line,callers,conditions,reason\n");
         for (Row r : rows) {
             out.append(csv(r.listener ? "listener" : "method")).append(',')
                     .append(csv(r.classFqn)).append(',')
                     .append(csv(r.simpleName)).append(',')
                     .append(csv(r.kind)).append(',')
                     .append(csv(r.signature)).append(',')
-                    .append(csv(locationLabel(r))).append(',')
+                    .append(csv(fileLabel(r))).append(',')
+                    .append(csv(lineLabel(r))).append(',')
                     .append(csv(callersText(r))).append(',')
                     .append(csv(conditionsText(r))).append(',')
                     .append(csv(r.derivation.reason)).append('\n');
@@ -277,6 +279,7 @@ public final class MethodUsageReport {
                         .append(csv("")).append(',')
                         .append(csv(a.actionType.label)).append(',')
                         .append(csv(a.handler)).append(',')
+                        .append(csv("")).append(',')
                         .append(csv("")).append(',')
                         .append(csv(source.isEmpty() ? "(場所不明)" : source)).append(',')
                         .append(csv("(UIトリガ)")).append(',')
@@ -315,9 +318,9 @@ public final class MethodUsageReport {
     /** 算出手順と理由凡例を Markdown で追記する。 */
     private static void appendMethodology(StringBuilder out) {
         out.append("## 算出ロジック (How values are derived)\n\n");
-        out.append("- **定義 (location)**: 各関数の宣言位置を `ファイル名:開始行` で示す"
-                + "（ソースをそのまま開いて該当行へ辿れる）。行が取れない場合（Kotlin軽量解析・"
-                + "ラムダ本体等）はファイル名のみ、両方欠ける場合は `—`。\n");
+        out.append("- **ファイル / 行 (file / line)**: 各関数の宣言位置を"
+                + "ファイル名と開始行に分けて示す（ソースをそのまま開いて該当行へ辿れる）。"
+                + "行が取れない場合（Kotlin軽量解析・ラムダ本体等）は行を空欄にする。\n");
         out.append("- **利用側 (callers)**: 逆参照インデックス (ReferenceIndex) で"
                 + "「このメソッドを呼んでいる箇所」を収集し、`呼び出し元クラスFQN.メソッド (ファイル名[:行])`"
                 + " で列挙する。空欄理由 = 解析対象ソース内に呼び出しが見つからない"
@@ -449,13 +452,14 @@ public final class MethodUsageReport {
         return sb.toString();
     }
 
-    /** 関数の宣言位置を {@code ファイル名:行} で整形する。欠落時は分かる範囲のみ。 */
-    private static String locationLabel(Row r) {
-        String file = nz(r.sourceFile);
-        if (!file.isEmpty()) {
-            return r.startLine > 0 ? file + ":" + r.startLine : file;
-        }
-        return r.startLine > 0 ? String.valueOf(r.startLine) : "—";
+    /** 関数が宣言されたソースのファイル名。未取得時は空。 */
+    private static String fileLabel(Row r) {
+        return nz(r.sourceFile);
+    }
+
+    /** 関数の宣言開始行。未取得時は空。 */
+    private static String lineLabel(Row r) {
+        return r.startLine > 0 ? String.valueOf(r.startLine) : "";
     }
 
     private static String callerLabel(ReferenceSite s) {

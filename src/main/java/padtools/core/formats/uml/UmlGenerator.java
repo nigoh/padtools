@@ -112,6 +112,9 @@ public final class UmlGenerator {
             infos = new ArrayList<>(JavaStructureExtractor.extract(source, wrapped, solver));
         }
         for (JavaClassInfo info : infos) {
+            if (fileName != null) {
+                info.setSourceFile(fileName);
+            }
             String cat = AaosPattern.categorize(info);
             if (cat != null) {
                 info.setAaosCategory(cat);

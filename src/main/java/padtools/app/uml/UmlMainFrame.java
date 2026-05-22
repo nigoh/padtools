@@ -4,12 +4,14 @@ import padtools.Main;
 import padtools.Setting;
 import padtools.core.formats.android.TextSummaryReport;
 import padtools.core.formats.uml.DiagramStyle;
+import padtools.core.formats.uml.GraphvizLocator;
 import padtools.core.formats.uml.PlantUmlRenderer;
 import padtools.util.CancelToken;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JComponent;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -167,6 +169,7 @@ public class UmlMainFrame extends JFrame {
         mcb.applyPreset = this::applyPreset;
         mcb.openScopeDialog = () -> controller.openScopeDialog();
         mcb.clearScope = () -> { state.currentScope = null; refreshDiagram(); };
+        mcb.enableGraphviz = this::enableGraphviz;
         mcb.selectDiagramKindFromMenu = k -> controller.selectDiagramKind(k);
         mcb.syncDiagramToggle = k -> controller.syncDiagramToggle(k);
         mcb.applyTheme = this::applyTheme;
@@ -510,6 +513,48 @@ public class UmlMainFrame extends JFrame {
     private void refreshDiagram() {
         if (controller != null) {
             controller.applyStateToActiveTab();
+        }
+    }
+
+    /**
+     * Graphviz dot を検出 / 指定して有効化する。検出できれば即再描画し、見つからなければ
+     * ユーザーに dot 実行ファイルの場所を尋ねる。大きな図で Smetana レイアウトが破綻する
+     * ケースを、より堅牢な dot レイアウトで描画できるようにするための導線。
+     */
+    private void enableGraphviz() {
+        if (GraphvizLocator.redetect()) {
+            tabPane.rerenderAllTabs();
+            JOptionPane.showMessageDialog(this,
+                    "Graphviz (dot) を検出しました。\n開いている図を再描画しました。",
+                    "Graphviz", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Graphviz (dot) が見つかりませんでした。\n"
+                        + "dot 実行ファイルの場所を指定しますか?\n\n"
+                        + "未インストールの場合は https://graphviz.org/download/ から\n"
+                        + "インストールしてください。",
+                "Graphviz が見つかりません",
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("dot 実行ファイルを選択");
+        if (fc.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File dot = fc.getSelectedFile();
+        if (GraphvizLocator.useDotBinary(dot)) {
+            tabPane.rerenderAllTabs();
+            JOptionPane.showMessageDialog(this,
+                    "Graphviz (dot) を有効化しました。\n開いている図を再描画しました。",
+                    "Graphviz", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "選択したファイルは実行可能な dot ではありません:\n"
+                            + dot.getAbsolutePath(),
+                    "エラー", JOptionPane.ERROR_MESSAGE);
         }
     }
 

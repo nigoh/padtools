@@ -68,7 +68,51 @@ public final class PlantUmlRenderer {
             "I love it when a plan comes together"
     };
 
+    /** PlantUML のキャンバスサイズ上限を制御するシステムプロパティ / 環境変数名。 */
+    private static final String LIMIT_SIZE_PROP = "PLANTUML_LIMIT_SIZE";
+
+    /**
+     * PNG ラスタライズ時の 1 辺あたり最大ピクセル数の既定値。PlantUML 既定の 4096 では
+     * 巨大なクラス図/シーケンス図が PNG エクスポートで切り詰められてしまうため、より大きく取る。
+     * 16384²×4byte ≒ 1GB が上限の目安なので、実用上ほとんどの図を収めつつ極端な OOM を避ける値。
+     */
+    public static final int DEFAULT_IMAGE_LIMIT = 16384;
+
     private PlantUmlRenderer() {
+    }
+
+    /**
+     * PlantUML のキャンバスサイズ上限 ({@code PLANTUML_LIMIT_SIZE}) を {@link #DEFAULT_IMAGE_LIMIT}
+     * に引き上げる。ユーザが {@code -DPLANTUML_LIMIT_SIZE=...} または環境変数で明示指定済みの
+     * 場合は尊重して何もしない。アプリ起動時 ({@code Main}) に一度だけ呼ぶ想定。
+     */
+    public static void configureImageLimit() {
+        if (System.getProperty(LIMIT_SIZE_PROP) == null
+                && System.getenv(LIMIT_SIZE_PROP) == null) {
+            System.setProperty(LIMIT_SIZE_PROP, Integer.toString(DEFAULT_IMAGE_LIMIT));
+        }
+    }
+
+    /**
+     * 現在有効な PNG キャンバス上限 (1 辺あたりピクセル数) を返す。プロパティ → 環境変数の順で
+     * 参照し、未設定・不正値なら {@link #DEFAULT_IMAGE_LIMIT}。
+     */
+    public static int imageLimit() {
+        String v = System.getProperty(LIMIT_SIZE_PROP);
+        if (v == null) {
+            v = System.getenv(LIMIT_SIZE_PROP);
+        }
+        if (v != null) {
+            try {
+                int n = Integer.parseInt(v.trim());
+                if (n > 0) {
+                    return n;
+                }
+            } catch (NumberFormatException ignored) {
+                // 不正値は既定にフォールバック
+            }
+        }
+        return DEFAULT_IMAGE_LIMIT;
     }
 
     /** 現在のスタイルを取得する。null 安全 (常に非 null を返す)。 */
@@ -208,6 +252,42 @@ public final class PlantUmlRenderer {
             }
             throw e;
         }
+    }
+
+    /**
+     * PNG エクスポート用に {@code @startuml} 直後へ {@code scale max <maxPx>*<maxPx>} を挿入する。
+     * これにより {@code PLANTUML_LIMIT_SIZE} を超える巨大な図は「切り詰め」ではなく「縮小」されて
+     * キャンバスに収まり、PNG が途中で切れたり壊れたりするのを防ぐ。
+     *
+     * <p>{@code scale max} は図が指定サイズより大きいときだけ縮小し、小さい図は拡大しないため
+     * 通常サイズの図には影響しない。既に {@code scale} 指定がある図や {@code @startuml} を含まない
+     * 文字列はそのまま返す ({@code maxPx <= 0} も同様)。</p>
+     */
+    public static String injectScaleMax(String puml, int maxPx) {
+        if (puml == null) {
+            return null;
+        }
+        int idx = puml.indexOf("@startuml");
+        if (idx < 0 || maxPx <= 0 || hasScaleDirective(puml)) {
+            return puml;
+        }
+        String line = "scale max " + maxPx + "*" + maxPx + "\n";
+        int nl = puml.indexOf('\n', idx);
+        if (nl < 0) {
+            return puml + "\n" + line;
+        }
+        return puml.substring(0, nl + 1) + line + puml.substring(nl + 1);
+    }
+
+    /** 行頭 (前後空白除去後) が {@code scale} で始まる行があるか。ユーザ指定の scale を尊重するため。 */
+    private static boolean hasScaleDirective(String puml) {
+        for (String raw : puml.split("\n", -1)) {
+            String t = raw.trim();
+            if (t.equals("scale") || t.startsWith("scale ")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

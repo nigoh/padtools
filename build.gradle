@@ -152,7 +152,11 @@ tasks.register('copySystemDot') {
             from dotPath
             into destDir
         }
-        println "Copied dot to $destDir (PATH: $dotPath)"
+        def destFile = new File(destDir, new File(dotPath).name)
+        destFile.setExecutable(true)
+        println "Copied dot to $destFile (source: $dotPath)"
+        println "次に ./gradlew makeZip を実行すると配布 ZIP に自動同梱されます。"
+        println "起動後でも GUI の Diagram → Enable Graphviz (dot)… から dot を有効化できます。"
         println "Note: このバイナリは動的リンクのため、同一 OS/ライブラリ環境でのみ動作します。"
     }
 }

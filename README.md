@@ -159,12 +159,34 @@ java -jar PadTools.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 * Gradle DSL は `android { ... }` 直下の代表的な宣言と `dependencies` ブロックを正規表現で
   抽出します。動的構文 (関数呼び出し / 条件分岐) は best-effort 扱いです。
 * AIDL は `interface` 宣言とそのメソッドを抽出します。`parcelable` 前方宣言は読み飛ばします。
-* PlantUML のキャンバスサイズ上限 (既定 4096×4096) は PNG 出力にのみ作用します。
+* PlantUML のキャンバスサイズ上限 (`PLANTUML_LIMIT_SIZE`) は PNG 出力にのみ作用します。
   GUI プレビューおよび SVG 出力はベクターで描画されるため、この上限の影響を受けません。
-  PNG エクスポート時に巨大な図が切り詰められる場合は、SVG エクスポートを利用してください。
-* 同梱 PlantUML での SVG 描画は Smetana レイアウトを自動指定するため、Graphviz 不要で
-  動作します。Smetana が苦手な巨大グラフは `-o foo.puml` で書き出して、Graphviz を
-  別途インストールした上で `plantuml -tsvg foo.puml` を試してください。
+  PadTools は既定値を 16384 に引き上げ、さらに PNG エクスポート時は `scale max` を自動注入して
+  上限を超える図を「切り詰め」ではなく「縮小」で収めます。`-DPLANTUML_LIMIT_SIZE=<px>` または
+  同名の環境変数で上書きできます (大きすぎる値はメモリ消費に注意)。
+* 同梱 PlantUML での SVG 描画は Smetana レイアウトを自動指定するため Graphviz 不要で動作しますが、
+  Smetana は巨大グラフのレイアウトに失敗することがあります。その場合は Graphviz (dot) を有効に
+  すると安定して描画できます (後述「巨大な図が描画できないとき」)。
+
+巨大な図が描画できないとき
+------------------------------------------------
+
+クラス図などが大きすぎて GUI プレビューで「Couldn't render this diagram」になる場合、純 Java の
+Smetana レイアウトエンジンが破綻しています。より堅牢な **Graphviz (dot)** を使うと描画できます。
+
+* **GUI から有効化 (再起動不要)**: メニューの `Diagram → Enable Graphviz (dot)…` を選択します。
+  PATH / 環境変数 / 同梱バイナリを再検出し、見つからなければ dot 実行ファイルの場所を指定できます。
+  有効化すると開いている図がその場で再描画されます。
+* **環境変数で指定**: 起動前に `GRAPHVIZ_DOT=/path/to/dot`
+  (または `-Dnet.sourceforge.plantuml.GRAPHVIZ_DOT=...`) を設定すると、起動時に自動検出されます。
+* **配布物へ同梱**: `bundle/graphviz/<platform>/dot`
+  (例: `linux-amd64` / `mac-aarch64` / `windows-amd64`) に dot を置くと jar 隣接バイナリとして
+  自動検出されます。Linux/Mac は `./gradlew copySystemDot` で PATH 上の dot をコピーでき、その後
+  `./gradlew makeZip` で配布 ZIP に同梱されます
+  (動的リンクのため同一 OS/ライブラリ環境でのみ動作する点に注意)。
+* **PNG エクスポートで切れる場合**: 既定でキャンバス上限を 16384 へ引き上げ、`scale max` で自動縮小
+  しています。それでも収まらない極端な図は、ベクターで上限の影響を受けない SVG エクスポートを利用
+  するか、`Diagram → Preset` / `Scope…` で範囲を絞ってください。
 
 セキュリティ
 ------------------------------------------------

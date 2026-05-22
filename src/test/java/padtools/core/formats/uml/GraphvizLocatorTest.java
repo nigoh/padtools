@@ -9,6 +9,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.io.IOException;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -114,6 +115,41 @@ public class GraphvizLocatorTest {
     public void initWithNullJarDirStillChecksSysProp() {
         System.setProperty(GraphvizLocator.PLANTUML_DOT_PROP, "/fake/dot");
         GraphvizLocator.init(null);
+        assertTrue(PlantUmlRenderer.isGraphvizAvailable());
+    }
+
+    @Test
+    public void useDotBinaryRejectsNullAndNonExecutable() throws IOException {
+        assertFalse(GraphvizLocator.useDotBinary(null));
+        assertFalse(PlantUmlRenderer.isGraphvizAvailable());
+
+        File plain = tmp.newFile("not-dot.txt");
+        plain.setExecutable(false);
+        // 実行不能なファイルは拒否される（実行ビットを落とせない環境ではスキップ相当）。
+        if (!plain.canExecute()) {
+            assertFalse(GraphvizLocator.useDotBinary(plain));
+            assertFalse(PlantUmlRenderer.isGraphvizAvailable());
+        }
+    }
+
+    @Test
+    public void useDotBinaryAcceptsExecutableAndSetsProperty() throws IOException {
+        File dot = tmp.newFile("dot");
+        assertTrue(dot.setExecutable(true));
+
+        assertTrue(GraphvizLocator.useDotBinary(dot));
+        assertTrue(PlantUmlRenderer.isGraphvizAvailable());
+        assertEquals(dot.getAbsolutePath(),
+                System.getProperty(GraphvizLocator.PLANTUML_DOT_PROP));
+    }
+
+    @Test
+    public void redetectHonoursExecutableSystemProperty() throws IOException {
+        File dot = tmp.newFile("dot");
+        assertTrue(dot.setExecutable(true));
+        System.setProperty(GraphvizLocator.PLANTUML_DOT_PROP, dot.getAbsolutePath());
+
+        assertTrue(GraphvizLocator.redetect());
         assertTrue(PlantUmlRenderer.isGraphvizAvailable());
     }
 }

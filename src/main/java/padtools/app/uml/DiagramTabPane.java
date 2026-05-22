@@ -565,13 +565,27 @@ public final class DiagramTabPane {
 
         /** 描画失敗時にタブ内へ表示する案内 (原因 + 対処)。 */
         private String failureMessage(Throwable error) {
-            return "<b>Couldn't render this diagram.</b><br>"
-                    + esc(failureReason(error)) + "<br><br>"
-                    + "The diagram may be too large for the layout engine. Try:<br>"
-                    + "• selecting a single package / class / method in the tree<br>"
-                    + "• applying a preset (Diagram → Preset) to reduce detail<br>"
-                    + "• narrowing the scope (Diagram → Scope…)<br><br>"
-                    + "The generated PlantUML is shown in the lower pane.";
+            StringBuilder sb = new StringBuilder();
+            sb.append("<b>Couldn't render this diagram.</b><br>")
+              .append(esc(failureReason(error)))
+              .append("<br><br>");
+            if (!padtools.core.formats.uml.PlantUmlRenderer.isGraphvizAvailable()) {
+                // Graphviz 無効時は純 Java の Smetana レイアウトになり、大きな図で破綻しやすい。
+                // dot を有効化すれば描画できる可能性が高いので、最優先で案内する。
+                sb.append("Graphviz が無効のため、純 Java の Smetana レイアウトを使用しています。")
+                  .append("Smetana は大きな図を描画できないことがあります。<br>")
+                  .append("<b>Graphviz (dot) を有効にすると改善します:</b><br>")
+                  .append("• Diagram → Enable Graphviz (dot)… で検出 / 指定<br>")
+                  .append("• 未インストールなら graphviz.org からインストール<br><br>")
+                  .append("または図を小さくする:<br>");
+            } else {
+                sb.append("The diagram may be too large for the layout engine. Try:<br>");
+            }
+            sb.append("• selecting a single package / class / method in the tree<br>")
+              .append("• applying a preset (Diagram → Preset) to reduce detail<br>")
+              .append("• narrowing the scope (Diagram → Scope…)<br><br>")
+              .append("The generated PlantUML is shown in the lower pane.");
+            return sb.toString();
         }
 
         private String failureReason(Throwable error) {

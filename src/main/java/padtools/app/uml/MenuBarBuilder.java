@@ -50,6 +50,8 @@ public final class MenuBarBuilder {
         public Consumer<DiagramPreset> applyPreset;
         public Runnable openScopeDialog;
         public Runnable clearScope;
+        /** Graphviz dot を検出/指定して有効化し、図を再描画するアクション。 */
+        public Runnable enableGraphviz;
         /** Diagram メニューのラジオ選択時のアクション (currentKind 更新 + refresh)。 */
         public Consumer<DiagramKind> selectDiagramKindFromMenu;
         /** ツールバートグルと Diagram メニューを同期するコールバック。 */
@@ -241,6 +243,13 @@ public final class MenuBarBuilder {
         JMenuItem clearScope = new JMenuItem("Clear Scope");
         clearScope.addActionListener(e -> cb.clearScope.run());
         m.add(clearScope);
+        m.addSeparator();
+        JMenuItem enableGraphviz = new JMenuItem("Enable Graphviz (dot)...");
+        enableGraphviz.setToolTipText(
+                "大きな図で純 Java の Smetana レイアウトが破綻する場合、"
+                + "Graphviz dot を有効にすると安定して描画できます");
+        enableGraphviz.addActionListener(e -> cb.enableGraphviz.run());
+        m.add(enableGraphviz);
         return m;
     }
 

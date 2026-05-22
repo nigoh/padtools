@@ -70,6 +70,7 @@ public class Main {
         SettingManager.initialize();
         ProjectRepository.initialize();
         PlantUmlRenderer.setStyle(SettingManager.getInstance().getSetting().getStyle());
+        PlantUmlRenderer.configureImageLimit();
         GraphvizLocator.init(detectJarDir());
 
         CliOptions options = new CliOptions();

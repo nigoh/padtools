@@ -34,7 +34,9 @@ public final class PlantUmlImageRenderer {
         if (puml == null) {
             throw new IllegalArgumentException("puml is null");
         }
-        SourceStringReader reader = new SourceStringReader(PlantUmlRenderer.injectLayout(puml));
+        // 上限を超える巨大な図は切り詰めではなく縮小して収める (PNG キャンバス上限対策)。
+        String prepared = PlantUmlRenderer.injectScaleMax(puml, PlantUmlRenderer.imageLimit());
+        SourceStringReader reader = new SourceStringReader(PlantUmlRenderer.injectLayout(prepared));
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             reader.outputImage(baos, new FileFormatOption(FileFormat.PNG));
             byte[] bytes = baos.toByteArray();

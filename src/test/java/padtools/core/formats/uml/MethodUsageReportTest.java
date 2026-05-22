@@ -31,7 +31,7 @@ public class MethodUsageReportTest {
         String csv = MethodUsageReport.render(classes, null, Collections.emptyList(),
                 MethodUsageReport.Format.CSV);
         assertTrue(csv, csv.startsWith(
-                "category,class,kind,signature,callers,conditions,reason"));
+                "category,class,kind,signature,location,callers,conditions,reason"));
         // 署名にカンマを含むためクォートされる
         assertTrue(csv, csv.contains("\"+ add(a: int, b: int): int\""));
         assertTrue(csv, csv.contains("method,x.Foo,CLASS,"));

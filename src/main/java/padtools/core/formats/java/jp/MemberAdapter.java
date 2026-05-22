@@ -61,6 +61,7 @@ final class MemberAdapter {
     static JavaMethodInfo toMethod(MethodDeclaration md, JpContext ctx, JavaClassInfo owner) {
         JavaMethodInfo m = new JavaMethodInfo();
         m.setName(md.getNameAsString());
+        md.getBegin().ifPresent(p -> m.setStartLine(p.line));
         m.setReturnType(md.getType().toString());
         addParams(m, md.getParameters());
         m.setVisibility(JpText.visibility(md));
@@ -95,6 +96,7 @@ final class MemberAdapter {
                                     JpContext ctx) {
         JavaMethodInfo m = new JavaMethodInfo();
         m.setName(amd.getNameAsString());
+        amd.getBegin().ifPresent(p -> m.setStartLine(p.line));
         m.setReturnType(amd.getType().toString());
         m.setVisibility(Visibility.PUBLIC);
         m.setAbstract(true);
@@ -106,6 +108,7 @@ final class MemberAdapter {
     static void addConstructor(JavaClassInfo owner, ConstructorDeclaration cd, JpContext ctx) {
         JavaMethodInfo m = new JavaMethodInfo();
         m.setName(cd.getNameAsString());
+        cd.getBegin().ifPresent(p -> m.setStartLine(p.line));
         m.setConstructor(true);
         addParams(m, cd.getParameters());
         m.setVisibility(JpText.visibility(cd));

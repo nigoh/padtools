@@ -285,6 +285,7 @@ public class JavaMethodInfo {
     }
 
     private String name;
+    private int startLine = -1;
     private String returnType;
     private final List<String> parameterTypes = new ArrayList<>();
     private final List<String> parameterNames = new ArrayList<>();
@@ -304,6 +305,15 @@ public class JavaMethodInfo {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    /** メソッド/コンストラクタ宣言の開始行 (1始まり)。未取得時は -1。 */
+    public int getStartLine() {
+        return startLine;
+    }
+
+    public void setStartLine(int startLine) {
+        this.startLine = startLine;
     }
 
     public String getReturnType() {

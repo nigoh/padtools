@@ -40,6 +40,7 @@ public class JavaClassInfo {
     private boolean detailed = true;
     private Origin origin = Origin.SOURCE;
     private String jarPath;
+    private String sourceFile;
     private final List<JavaModuleDirective> moduleDirectives = new ArrayList<>();
 
     /** 完全修飾名。{@code com.foo.Outer.Inner} 形式。 */
@@ -198,6 +199,15 @@ public class JavaClassInfo {
 
     public void setJarPath(String jarPath) {
         this.jarPath = jarPath;
+    }
+
+    /** 解析元ソースのファイル名 (例: {@code Foo.java})。未設定時は null。 */
+    public String getSourceFile() {
+        return sourceFile;
+    }
+
+    public void setSourceFile(String sourceFile) {
+        this.sourceFile = sourceFile;
     }
 
     /**

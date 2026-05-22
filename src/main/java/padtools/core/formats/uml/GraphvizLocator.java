@@ -18,6 +18,9 @@ public final class GraphvizLocator {
 
     static final String PLANTUML_DOT_PROP = "net.sourceforge.plantuml.GRAPHVIZ_DOT";
 
+    /** {@link #init(File)} に渡された jar ディレクトリ。{@link #redetect()} の同梱検索で再利用する。 */
+    private static volatile File cachedJarDir;
+
     private GraphvizLocator() {
     }
 
@@ -28,6 +31,7 @@ public final class GraphvizLocator {
      * @param jarDir jar ファイルが置かれているディレクトリ。null の場合は同梱バイナリ検索をスキップ。
      */
     public static void init(File jarDir) {
+        cachedJarDir = jarDir;
         if (System.getProperty(PLANTUML_DOT_PROP) != null) {
             PlantUmlRenderer.setGraphvizAvailable(true);
             return;
@@ -49,6 +53,58 @@ public final class GraphvizLocator {
             System.setProperty(PLANTUML_DOT_PROP, systemDot);
             PlantUmlRenderer.setGraphvizAvailable(true);
         }
+    }
+
+    /**
+     * 起動後にユーザー操作で dot を再検出する。既に有効なパスが設定済みならそれを尊重し、
+     * そうでなければ環境変数 → 同梱バイナリ → PATH の順で再スキャンする。見つかれば
+     * プロパティを設定して {@link PlantUmlRenderer#setGraphvizAvailable(boolean)} を true にし
+     * true を返す。見つからなければ false。
+     *
+     * <p>{@link #init(File)} と異なり、設定済みプロパティが実行不能になっている場合は無視して
+     * 再探索する（インストール後の有効化を確実にするため）。</p>
+     */
+    public static boolean redetect() {
+        String prop = System.getProperty(PLANTUML_DOT_PROP);
+        if (prop != null && new File(prop).canExecute()) {
+            PlantUmlRenderer.setGraphvizAvailable(true);
+            return true;
+        }
+        String env = System.getenv("GRAPHVIZ_DOT");
+        if (env != null && new File(env).canExecute()) {
+            System.setProperty(PLANTUML_DOT_PROP, env);
+            PlantUmlRenderer.setGraphvizAvailable(true);
+            return true;
+        }
+        if (cachedJarDir != null) {
+            File bundled = findBundledDot(cachedJarDir);
+            if (bundled != null) {
+                System.setProperty(PLANTUML_DOT_PROP, bundled.getAbsolutePath());
+                PlantUmlRenderer.setGraphvizAvailable(true);
+                return true;
+            }
+        }
+        String systemDot = findSystemDot();
+        if (systemDot != null) {
+            System.setProperty(PLANTUML_DOT_PROP, systemDot);
+            PlantUmlRenderer.setGraphvizAvailable(true);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * ユーザーが明示的に選択した dot 実行ファイルを使うよう設定する。実行可能なファイルなら
+     * プロパティを設定して {@link PlantUmlRenderer#setGraphvizAvailable(boolean)} を true にし
+     * true を返す。null・非ファイル・実行不能なら何もせず false。
+     */
+    public static boolean useDotBinary(File dot) {
+        if (dot == null || !dot.isFile() || !dot.canExecute()) {
+            return false;
+        }
+        System.setProperty(PLANTUML_DOT_PROP, dot.getAbsolutePath());
+        PlantUmlRenderer.setGraphvizAvailable(true);
+        return true;
     }
 
     /** {@code bundle/graphviz/<platform>/dot[.exe]} を探す。見つからなければ null。 */

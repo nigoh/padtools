@@ -508,6 +508,8 @@ public class MainCliTest {
         // 定義列に各関数のソース位置 (ファイル名:行) が出る
         assertTrue(md, md.contains("定義"));
         assertTrue(md, md.contains("Svc.java:1"));
+        // FQN と並べてクラス名単体の列も出す
+        assertTrue(md, md.contains("クラス名"));
     }
 
     @Test
@@ -524,8 +526,9 @@ public class MainCliTest {
                 "-o", out.getAbsolutePath(), root.getAbsolutePath()});
         String csv = new String(Files.readAllBytes(out.toPath()), StandardCharsets.UTF_8);
         assertTrue(csv, csv.startsWith(
-                "category,class,kind,signature,location,callers,conditions,reason"));
-        assertTrue(csv, csv.contains("method,x.Svc,CLASS,"));
+                "category,class,class_name,kind,signature,location,callers,conditions,reason"));
+        // class 列は FQN、class_name 列は単純名
+        assertTrue(csv, csv.contains("method,x.Svc,Svc,CLASS,"));
         // location 列に定義位置 (ファイル名:行) が入る
         assertTrue(csv, csv.contains("Svc.java:1"));
         // helper() の呼び出しは if(f) 配下なので条件列・reason 列に反映される

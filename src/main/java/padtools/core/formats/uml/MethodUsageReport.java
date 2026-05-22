@@ -84,6 +84,7 @@ public final class MethodUsageReport {
     /** 1メソッド（または1リスナー）分の出力行。形式非依存の中間表現。 */
     private static final class Row {
         final String classFqn;
+        final String simpleName;
         final String kind;
         final String signature;
         final String sourceFile;
@@ -93,10 +94,11 @@ public final class MethodUsageReport {
         final List<String> conditions;
         final Derivation derivation;
 
-        Row(String classFqn, String kind, String signature, String sourceFile, int startLine,
-            boolean listener, List<String> callers, List<String> conditions,
-            Derivation derivation) {
+        Row(String classFqn, String simpleName, String kind, String signature,
+            String sourceFile, int startLine, boolean listener, List<String> callers,
+            List<String> conditions, Derivation derivation) {
             this.classFqn = classFqn;
+            this.simpleName = simpleName;
             this.kind = kind;
             this.signature = signature;
             this.sourceFile = sourceFile;
@@ -124,23 +126,26 @@ public final class MethodUsageReport {
         List<Row> rows = new ArrayList<>();
         for (JavaClassInfo c : sorted) {
             String qn = nz(c.getQualifiedName());
+            String simple = nz(c.getSimpleName());
             String kind = String.valueOf(c.getKind());
             String file = nz(c.getSourceFile());
             for (JavaMethodInfo m : c.getMethods()) {
-                rows.add(methodRow(qn, kind, file, m, refIndex, byQn));
+                rows.add(methodRow(qn, simple, kind, file, m, refIndex, byQn));
             }
             for (JavaMethodInfo listener : collectListeners(c)) {
                 List<String> trigger = new ArrayList<>();
                 trigger.add(triggerOf(listener.getName()));
-                rows.add(new Row(qn, kind, signature(listener), file, listener.getStartLine(),
-                        true, new ArrayList<>(), trigger, Derivation.LISTENER));
+                rows.add(new Row(qn, simple, kind, signature(listener), file,
+                        listener.getStartLine(), true, new ArrayList<>(), trigger,
+                        Derivation.LISTENER));
             }
         }
         return rows;
     }
 
-    private static Row methodRow(String qn, String kind, String file, JavaMethodInfo m,
-                                 ReferenceIndex refIndex, Map<String, JavaClassInfo> byQn) {
+    private static Row methodRow(String qn, String simple, String kind, String file,
+                                 JavaMethodInfo m, ReferenceIndex refIndex,
+                                 Map<String, JavaClassInfo> byQn) {
         List<ReferenceSite> sites = refIndex == null
                 ? new ArrayList<>()
                 : refIndex.sitesByMember(ReferenceKey.Kind.METHOD, qn, nz(m.getName()));
@@ -185,18 +190,19 @@ public final class MethodUsageReport {
         } else {
             d = Derivation.UNANALYZED;
         }
-        return new Row(qn, kind, signature(m), file, m.getStartLine(), false,
+        return new Row(qn, simple, kind, signature(m), file, m.getStartLine(), false,
                 callers, new ArrayList<>(conditions), d);
     }
 
     private static String renderTable(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
         out.append("# 関数使用マップ (Function usage map)\n\n");
-        out.append("| クラス | 種別 | 関数 | 定義 | 利用側 | 実行条件 |\n");
-        out.append("|---|---|---|---|---|---|\n");
+        out.append("| クラス | クラス名 | 種別 | 関数 | 定義 | 利用側 | 実行条件 |\n");
+        out.append("|---|---|---|---|---|---|---|\n");
         for (Row r : rows) {
             String sig = r.listener ? "[listener] " + r.signature : r.signature;
-            out.append("| `").append(mdInline(r.classFqn)).append("` | ")
+            out.append("| `").append(mdInline(r.classFqn)).append("` | `")
+                    .append(mdInline(r.simpleName)).append("` | ")
                     .append(mdInline(r.kind)).append(" | `")
                     .append(mdInline(sig)).append("` | ")
                     .append(mdInline(locationLabel(r))).append(" | ")
@@ -250,10 +256,11 @@ public final class MethodUsageReport {
 
     private static String renderCsv(List<Row> rows, List<UiActionEntry> actions) {
         StringBuilder out = new StringBuilder();
-        out.append("category,class,kind,signature,location,callers,conditions,reason\n");
+        out.append("category,class,class_name,kind,signature,location,callers,conditions,reason\n");
         for (Row r : rows) {
             out.append(csv(r.listener ? "listener" : "method")).append(',')
                     .append(csv(r.classFqn)).append(',')
+                    .append(csv(r.simpleName)).append(',')
                     .append(csv(r.kind)).append(',')
                     .append(csv(r.signature)).append(',')
                     .append(csv(locationLabel(r))).append(',')
@@ -267,6 +274,7 @@ public final class MethodUsageReport {
                 String source = actionSource(a);
                 out.append(csv("ui-action")).append(',')
                         .append(csv(component)).append(',')
+                        .append(csv("")).append(',')
                         .append(csv(a.actionType.label)).append(',')
                         .append(csv(a.handler)).append(',')
                         .append(csv("")).append(',')

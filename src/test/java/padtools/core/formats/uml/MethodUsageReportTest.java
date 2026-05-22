@@ -31,10 +31,11 @@ public class MethodUsageReportTest {
         String csv = MethodUsageReport.render(classes, null, Collections.emptyList(),
                 MethodUsageReport.Format.CSV);
         assertTrue(csv, csv.startsWith(
-                "category,class,kind,signature,location,callers,conditions,reason"));
+                "category,class,class_name,kind,signature,location,callers,conditions,reason"));
         // 署名にカンマを含むためクォートされる
         assertTrue(csv, csv.contains("\"+ add(a: int, b: int): int\""));
-        assertTrue(csv, csv.contains("method,x.Foo,CLASS,"));
+        // class 列は FQN、class_name 列は単純名
+        assertTrue(csv, csv.contains("method,x.Foo,Foo,CLASS,"));
         // reason 列に空欄理由が入る
         assertTrue(csv, csv.contains("呼び出し元なし"));
     }

@@ -7,10 +7,11 @@ import java.awt.BorderLayout;
 import java.awt.Font;
 
 /**
- * 全クラスの「純粋なメンバー一覧」（フィールド・メソッド）をリードオンリー表示するパネル。
+ * 全クラスの「純粋なメンバー一覧」（フィールド・メソッド・enum 定数）を CSV でリードオンリー表示するパネル。
  *
- * <p>{@link padtools.core.formats.uml.ClassMemberReport#render} のテキストをそのまま貼り付ける。
- * 等幅フォント / 行ラップなしで表示し、選択コピー可能。クラスは単純名で見出し表示する。</p>
+ * <p>{@link padtools.core.formats.uml.ClassMemberReport#render} の CSV をそのまま貼り付ける。
+ * 等幅フォント / 行ラップなしで表示し、選択コピーして表計算ソフトに取り込める。
+ * クラスは単純名カラム、パッケージは別カラムに分離する。</p>
  */
 public class MemberListPanel extends JPanel {
 

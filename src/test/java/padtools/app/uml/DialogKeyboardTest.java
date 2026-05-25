@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 naou and contributors
+
 package padtools.app.uml;
 
 import org.assertj.swing.edt.GuiActionRunner;

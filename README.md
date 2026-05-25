@@ -1,6 +1,8 @@
 PadTools 2.0 — Java + Android + Gradle UML Tool
 ================================================
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 概要
 ------------------------------------------------
 PadTools は **Java / Android (Gradle + AndroidManifest.xml + AIDL) プロジェクトから
@@ -257,9 +259,12 @@ PadTools は **オープンソースソフトウェア** として MIT ライセ
 
 MIT ライセンスは [OSI (Open Source Initiative)](https://opensource.org/licenses/MIT) が
 承認したオープンソースライセンスで、商用・非商用を問わず自由に利用・改変・再配布が可能です
-(著作権表示とライセンス文の保持が条件)。
+(著作権表示とライセンス文の保持が条件)。ライセンス全文はリポジトリ直下の
+[`LICENSE`](LICENSE) を参照してください。
 
-なお、同梱の PlantUML は GPLv3 ライセンスです。
+同梱の PlantUML は MIT 版アーティファクト (`plantuml-mit`) を使用しており、配布される
+fat jar 全体が MIT 互換です。fat jar に同梱される第三者ライブラリとそのライセンスの
+一覧は [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) を参照してください。
 
 リンク
 ------------------------------------------------

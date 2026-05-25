@@ -22,8 +22,10 @@
         <property name="file" value="${config_loc}/suppressions.xml"/>
     </module>
 
+    <!-- 全ソースに 2 行の SPDX ライセンスヘッダを付与しているため、実質のコード行上限を
+         従来 (800) と同等に保つようヘッダ 2 行分を加味して 802 とする。 -->
     <module name="FileLength">
-        <property name="max" value="800"/>
+        <property name="max" value="802"/>
     </module>
 
     <module name="TreeWalker">

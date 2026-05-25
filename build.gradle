@@ -24,9 +24,12 @@ dependencies {
     // batik-anim / batik-bridge / batik-gvt / batik-css)。
     implementation 'org.apache.xmlgraphics:batik-bridge:1.17'
     implementation 'com.rover12421.opensource:JFontChooser:1.0.5-3'
-    // PlantUML (GPLv3). UML 系出力を SVG として直接書き出すために同梱する。
+    // PlantUML (MIT 版アーティファクト plantuml-mit を使用)。UML 系出力を SVG として
+    // 直接書き出すために同梱する。PlantUML は同一機能を複数ライセンスの別アーティファクト
+    // で配布しており、-mit 版は class/sequence/package 図を全てサポートする (ditaa 等の
+    // 未使用機能のみ欠落)。fat jar 全体を MIT 互換に保つため GPL 版ではなくこれを選ぶ。
     // graphviz/dot は不要 (PlantUmlRenderer が Smetana レイアウトを自動指定)。
-    implementation 'net.sourceforge.plantuml:plantuml:1.2026.2'
+    implementation 'net.sourceforge.plantuml:plantuml-mit:1.2026.2'
     // ASM: 依存 JAR/AAR からクラスヘッダ (名前・superclass・interfaces・public members)
     // を読み取り、シーケンス図/クラス図に外部クラスを表示するために使用する。
     // .class バイトコードは SKIP_CODE で読み飛ばし、ヘッダ情報のみを抽出する。
@@ -82,13 +85,24 @@ test {
 jar {
     archiveFileName = 'PadTools.jar'
     manifest {
-        attributes 'Main-Class': 'padtools.Main'
+        attributes(
+                'Main-Class': 'padtools.Main',
+                'Implementation-Title': 'PadTools',
+                'Implementation-Version': version,
+                'License': 'MIT'
+        )
     }
 
     // 依存ライブラリを同梱して単体実行可能な fat jar にする。
     // 各依存 jar の META-INF/*.SF, *.DSA, *.RSA は署名検証で衝突を起こすので除外する。
     from {
         configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    // 配布 jar 自身にも本体のライセンスと第三者ライセンス表記を同梱する
+    // (Apache-2.0 / BSD 依存の表記保持義務を fat jar 配布側でも満たすため)。
+    metaInf {
+        from 'LICENSE'
+        from 'THIRD-PARTY-NOTICES.md'
     }
     exclude 'META-INF/*.SF'
     exclude 'META-INF/*.DSA'

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2015-2026 naou and contributors
+
 package padtools.core.formats.android.actions;
 
 import java.util.ArrayList;

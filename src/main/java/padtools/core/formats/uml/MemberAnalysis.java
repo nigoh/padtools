@@ -89,7 +89,9 @@ public final class MemberAnalysis {
         ROLE("role", false, "メソッド", "factory / getter / ctor",
                 "役割推定 (ctor/getter/setter/factory/handler/validator/other)"),
         USED_BY("usedBy", true, "メソッド", "3",
-                "解析対象内での被参照メソッド数 (fan-in 近似)");
+                "解析対象内での被参照メソッド数 (fan-in 近似)"),
+        COMMENT("comment", false, "メソッド/フィールド", "合計を返す。",
+                "宣言直前の Javadoc / 行コメントの本文 (記号は除去、改行は空白化)");
 
         private final String header;
         private final boolean numeric;
@@ -216,6 +218,7 @@ public final class MemberAnalysis {
             set(r, Col.TYPE, nz(f.getType()));
             set(r, Col.MODIFIERS, fieldModifiers(f));
             set(r, Col.ANNOTATIONS, joinAnnotations(f.getAnnotations()));
+            set(r, Col.COMMENT, comment(f.getComment()));
             out.add(r);
             emitted = true;
         }
@@ -260,6 +263,7 @@ public final class MemberAnalysis {
         set(r, Col.IO_CATEGORY, ioCategory(m));
         set(r, Col.ROLE, role(m));
         set(r, Col.USED_BY, Integer.toString(usedBy(fanIn, cls, nz(m.getName()))));
+        set(r, Col.COMMENT, comment(m.getComment()));
         return r;
     }
 
@@ -654,6 +658,11 @@ public final class MemberAnalysis {
             v = v.substring(dot + 1);
         }
         return v;
+    }
+
+    /** 宣言直前コメント本文を 1 行に正規化する (記号は抽出時に除去済み、改行/連続空白は空白化)。 */
+    private static String comment(String raw) {
+        return nz(raw).replaceAll("\\s+", " ").trim();
     }
 
     private static String nz(String s) {

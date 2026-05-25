@@ -65,6 +65,16 @@ public class MemberAnalysisTest {
     }
 
     @Test
+    public void rows_capturesDeclarationComment() {
+        List<String[]> rows = MemberAnalysis.rows(JavaStructureExtractor.extract(
+                "package p; public class D {"
+                + " /** 合計を返す。 */ public int total() { return 0; }"
+                + " /** 件数 */ private int count; }"));
+        assertTrue(cell(row(rows, "total"), MemberAnalysis.Col.COMMENT).contains("合計を返す"));
+        assertTrue(cell(row(rows, "count"), MemberAnalysis.Col.COMMENT).contains("件数"));
+    }
+
+    @Test
     public void headersAndLegendCoverEveryColumn() {
         assertEquals(MemberAnalysis.Col.values().length, MemberAnalysis.headers().size());
         assertEquals(MemberAnalysis.Col.values().length, MemberAnalysis.legend().size());

@@ -25,8 +25,8 @@ public class ClassMemberReportTest {
         // クラスは単純名カラム + パッケージ別カラム (FQN/URI は使わない)
         assertTrue(csv, csv.contains("Foo,com.example.app,class,field,"));
         assertFalse(csv, csv.contains("com.example.app.Foo"));
-        // フィールド行
-        assertTrue(csv, csv.contains("field,private,count,int,,final"));
+        // フィールド行 (params が無い箇所は空セルマーカー "-")
+        assertTrue(csv, csv.contains("field,private,count,int,-,final"));
         // メソッド行 (params にカンマを含むためクォートされる)
         assertTrue(csv, csv.contains("method,public,add,int,\"a: int, b: int\","));
     }
@@ -36,7 +36,8 @@ public class ClassMemberReportTest {
         List<JavaClassInfo> classes = JavaStructureExtractor.extract(
                 "package x; public enum Color { RED, GREEN, BLUE }");
         String csv = ClassMemberReport.render(classes);
-        assertTrue(csv, csv.contains("Color,x,enum,enum-constant,public,RED,,,"));
+        // 空セルは "-" で埋まる (type/params/modifiers/構造カラムすべて該当なし)
+        assertTrue(csv, csv.contains("Color,x,enum,enum-constant,public,RED,-,-,-"));
         assertTrue(csv, csv.contains("enum-constant,public,GREEN"));
         assertTrue(csv, csv.contains("enum-constant,public,BLUE"));
     }
@@ -77,8 +78,8 @@ public class ClassMemberReportTest {
         String[] ping = cols(csv, "ping");
         assertEquals(csv, "Service", ping[9]);    // enclosing
         assertEquals(csv, "no", ping[14]);        // overrides
-        assertEquals(csv, "0", ping[15]);         // calls
-        assertEquals(csv, "", ping[16]);          // callees
+        assertEquals(csv, "0", ping[15]);         // calls (呼び出し 0 は "0"、空ではない)
+        assertEquals(csv, "-", ping[16]);         // callees (該当なしは空セルマーカー)
     }
 
     @Test
@@ -90,10 +91,10 @@ public class ClassMemberReportTest {
         String[] n = cols(csv, "n");
         assertEquals(csv, "field", n[3]);
         assertEquals(csv, "Deprecated", n[13]); // annotations
-        assertEquals(csv, "", n[12]);           // line (フィールドは行情報を持たない)
-        assertEquals(csv, "", n[14]);           // overrides
-        assertEquals(csv, "", n[15]);           // calls
-        assertEquals(csv, "", n[16]);           // callees
+        assertEquals(csv, "-", n[12]);          // line (フィールドは行情報を持たない)
+        assertEquals(csv, "-", n[14]);          // overrides
+        assertEquals(csv, "-", n[15]);          // calls
+        assertEquals(csv, "-", n[16]);          // callees
     }
 
     /** name 列 (6 列目) が一致する最初のデータ行を CSV 分割して返す。引数にカンマを含まない前提。 */

@@ -21,12 +21,18 @@ import java.util.Locale;
  *
  * <p>{@code line}/{@code calls}/{@code callees} はメソッド本体を解析する FULL パースでのみ実値になる
  * (GUI の Members タブは FULL)。ヘッダのみ解析モードでは空/0 になる。</p>
+ *
+ * <p>データ行の空セルは {@code -} (ハイフン) で埋める。値が無い箇所を視認しやすくするため。
+ * ヘッダ行は対象外。</p>
  */
 public final class ClassMemberReport {
 
     private static final String HEADER =
             "class,package,kind,member,visibility,name,type,params,modifiers,"
             + "enclosing,extends,implements,line,annotations,overrides,calls,callees";
+
+    /** 空セルを表すマーカー。表計算で「値なし」として読みやすいハイフンを使う。 */
+    private static final String EMPTY = "-";
 
     private ClassMemberReport() {
     }
@@ -95,13 +101,14 @@ public final class ClassMemberReport {
         }
     }
 
-    /** 各セルを CSV エスケープしてカンマ連結し、1 行として追記する。 */
+    /** 各セルを CSV エスケープしてカンマ連結し、1 行として追記する。空セルは {@link #EMPTY} に置換する。 */
     private static void line(StringBuilder out, String... cells) {
         for (int i = 0; i < cells.length; i++) {
             if (i > 0) {
                 out.append(',');
             }
-            out.append(csv(cells[i]));
+            String v = nz(cells[i]);
+            out.append(v.isEmpty() ? EMPTY : csv(v));
         }
         out.append('\n');
     }

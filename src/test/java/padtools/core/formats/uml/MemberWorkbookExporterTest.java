@@ -28,7 +28,14 @@ public class MemberWorkbookExporterTest {
         try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(bos.toByteArray()))) {
             Sheet members = wb.getSheet("Members");
             assertNotNull("Members シートが無い", members);
-            assertNotNull("凡例 シートが無い", wb.getSheet("凡例"));
+
+            Sheet legend = wb.getSheet("凡例");
+            assertNotNull("凡例 シートが無い", legend);
+            Row legendHeader = legend.getRow(0);
+            assertEquals("列", legendHeader.getCell(0).getStringCellValue());
+            assertEquals("対象", legendHeader.getCell(1).getStringCellValue());
+            assertEquals("例", legendHeader.getCell(2).getStringCellValue());
+            assertEquals("説明", legendHeader.getCell(3).getStringCellValue());
 
             Row header = members.getRow(0);
             assertEquals("class", header.getCell(0).getStringCellValue());

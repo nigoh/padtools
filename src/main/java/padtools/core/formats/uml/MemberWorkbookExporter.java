@@ -76,23 +76,28 @@ public final class MemberWorkbookExporter {
         }
     }
 
+    private static final String[] LEGEND_HEADERS = {"列", "対象", "例", "説明"};
+    private static final int[] LEGEND_WIDTHS = {18, 16, 32, 70};
+
     private static void writeLegendSheet(Workbook wb, CellStyle headerStyle) {
         Sheet sheet = wb.createSheet("凡例");
         Row header = sheet.createRow(0);
-        Cell colHead = header.createCell(0);
-        colHead.setCellValue("列");
-        colHead.setCellStyle(headerStyle);
-        Cell descHead = header.createCell(1);
-        descHead.setCellValue("説明");
-        descHead.setCellStyle(headerStyle);
+        for (int i = 0; i < LEGEND_HEADERS.length; i++) {
+            Cell cell = header.createCell(i);
+            cell.setCellValue(LEGEND_HEADERS[i]);
+            cell.setCellStyle(headerStyle);
+        }
         int rowIndex = 1;
         for (String[] entry : MemberAnalysis.legend()) {
             Row row = sheet.createRow(rowIndex++);
-            row.createCell(0).setCellValue(entry[0]);
-            row.createCell(1).setCellValue(entry[1]);
+            for (int i = 0; i < entry.length; i++) {
+                row.createCell(i).setCellValue(entry[i]);
+            }
         }
-        sheet.setColumnWidth(0, 18 * 256);
-        sheet.setColumnWidth(1, 70 * 256);
+        sheet.createFreezePane(0, 1);
+        for (int i = 0; i < LEGEND_WIDTHS.length; i++) {
+            sheet.setColumnWidth(i, LEGEND_WIDTHS[i] * 256);
+        }
     }
 
     private static CellStyle boldStyle(Workbook wb) {

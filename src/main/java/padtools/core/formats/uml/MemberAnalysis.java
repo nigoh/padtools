@@ -26,46 +26,82 @@ public final class MemberAnalysis {
 
     /** 出力列の定義。順序がそのまま CSV / Excel の列順になる (先頭 17 列は既存互換)。 */
     public enum Col {
-        CLASS("class", false, "クラスの単純名 (FQN/URI は使わない)"),
-        PACKAGE("package", false, "パッケージ名"),
-        KIND("kind", false, "型種別 (class/interface/enum/@interface/aidl/record)"),
-        MEMBER("member", false, "メンバー種別 (field/method/enum-constant/(none))"),
-        VISIBILITY("visibility", false, "可視性 (public/protected/package/private)"),
-        NAME("name", false, "メンバー名"),
-        TYPE("type", false, "フィールド宣言型 / メソッド戻り値型 (コンストラクタは空)"),
-        PARAMS("params", false, "メソッド引数 (name: type, ...)"),
-        MODIFIERS("modifiers", false, "修飾子 (static/final/abstract)"),
-        ENCLOSING("enclosing", false, "外側クラスの単純名チェーン (ネスト時)。トップレベルは空"),
-        EXTENDS("extends", false, "親クラスの単純名 (継承元)"),
-        IMPLEMENTS("implements", false, "実装インタフェースの単純名 (; 連結)"),
-        LINE("line", true, "メソッド/コンストラクタの宣言開始行 (1始まり)"),
-        ANNOTATIONS("annotations", false, "付与アノテーション (先頭 @ なし、; 連結)"),
-        OVERRIDES("overrides", false, "@Override の有無 (yes/no、注釈ベースの近似)"),
-        CALLS("calls", true, "外部呼び出し総数 (fan-out)。ネスト/インライン本体も平坦化して計上"),
-        CALLEES("callees", false, "呼び出し先クラス (解決済み owner 優先、distinct ; 連結)"),
-        CALLED_METHODS("calledMethods", false, "呼び出すメソッド名 (distinct ; 連結)"),
-        SELF_CALLS("selfCalls", true, "自クラスのメソッドを呼び出した回数"),
-        BRANCHES("branches", true, "分岐数 (if + else if + case)"),
-        LOOPS("loops", true, "ループ数 (for/foreach/while/do-while)"),
-        SWITCHES("switches", true, "switch ブロック数"),
-        TRIES("tries", true, "try ブロック数"),
-        CATCHES("catches", true, "catch 節数"),
-        MAX_NESTING("maxNesting", true, "制御ブロックの最大ネスト深さ (本体直下=0)"),
-        RETURNS("returns", true, "return 文の数 (脱出点)"),
-        BODY_THROWS("bodyThrows", true, "本体内の throw 文の数"),
-        THROWS_DECLARED("throwsDeclared", true, "throws 節で宣言された例外数"),
-        RECURSIVE("recursive", false, "自己再帰呼び出しの有無 (yes/no)"),
-        IO_CATEGORY("ioCategory", false, "副作用/IO 分類 (DB/NET/IO/UI/LOG/none、callee FQN 推定)"),
-        ROLE("role", false, "役割推定 (ctor/getter/setter/factory/handler/validator/other)"),
-        USED_BY("usedBy", true, "解析対象内での被参照メソッド数 (fan-in 近似)");
+        CLASS("class", false, "全行", "ExportController",
+                "クラスの単純名 (FQN/URI は使わない)"),
+        PACKAGE("package", false, "全行", "padtools.app.uml",
+                "パッケージ名"),
+        KIND("kind", false, "全行", "class / interface / enum / record",
+                "型種別 (class/interface/enum/@interface/aidl/record)"),
+        MEMBER("member", false, "全行", "method / field / enum-constant / (none)",
+                "メンバー種別。(none) はメンバーを持たないクラス"),
+        VISIBILITY("visibility", false, "メンバー", "public / private",
+                "可視性 (public/protected/package/private)"),
+        NAME("name", false, "メンバー", "buildExportPopup",
+                "メンバー名 (フィールド名/メソッド名/enum 定数名)"),
+        TYPE("type", false, "フィールド/メソッド", "JPopupMenu",
+                "フィールド宣言型 / メソッド戻り値型 (コンストラクタは空)"),
+        PARAMS("params", false, "メソッド", "parent: Frame, state: DiagramState",
+                "メソッド引数 (name: type, ...)"),
+        MODIFIERS("modifiers", false, "メンバー", "static final",
+                "修飾子 (static/final/abstract)"),
+        ENCLOSING("enclosing", false, "全行", "Service (Inner の外側)",
+                "外側クラスの単純名チェーン (ネスト時)。トップレベルは空"),
+        EXTENDS("extends", false, "全行", "Base",
+                "親クラスの単純名 (継承元)"),
+        IMPLEMENTS("implements", false, "全行", "Runnable",
+                "実装インタフェースの単純名 (; 連結)"),
+        LINE("line", true, "メソッド", "30",
+                "メソッド/コンストラクタの宣言開始行 (1始まり)"),
+        ANNOTATIONS("annotations", false, "メンバー", "Override; Deprecated",
+                "付与アノテーション (先頭 @ なし、; 連結)"),
+        OVERRIDES("overrides", false, "メソッド", "yes / no",
+                "@Override の有無 (注釈ベースの近似)"),
+        CALLS("calls", true, "メソッド", "16",
+                "外部呼び出し総数 (fan-out)。ネスト/インライン本体も平坦化して計上"),
+        CALLEES("callees", false, "メソッド", "JFileChooser; UmlExporter",
+                "呼び出し先クラス (解決済み owner 優先、distinct ; 連結)"),
+        CALLED_METHODS("calledMethods", false, "メソッド", "isEmpty; showMessageDialog",
+                "呼び出すメソッド名 (distinct ; 連結)"),
+        SELF_CALLS("selfCalls", true, "メソッド", "2",
+                "自クラスのメソッドを呼び出した回数"),
+        BRANCHES("branches", true, "メソッド", "6",
+                "分岐数 (if + else if + case)"),
+        LOOPS("loops", true, "メソッド", "1",
+                "ループ数 (for/foreach/while/do-while)"),
+        SWITCHES("switches", true, "メソッド", "1",
+                "switch ブロック数"),
+        TRIES("tries", true, "メソッド", "1",
+                "try ブロック数"),
+        CATCHES("catches", true, "メソッド", "1",
+                "catch 節数"),
+        MAX_NESTING("maxNesting", true, "メソッド", "2",
+                "制御ブロックの最大ネスト深さ (本体直下=0)"),
+        RETURNS("returns", true, "メソッド", "2",
+                "return 文の数 (脱出点)"),
+        BODY_THROWS("bodyThrows", true, "メソッド", "0",
+                "本体内の throw 文の数"),
+        THROWS_DECLARED("throwsDeclared", true, "メソッド", "1",
+                "throws 節で宣言された例外数"),
+        RECURSIVE("recursive", false, "メソッド", "yes / no",
+                "自己再帰呼び出しの有無"),
+        IO_CATEGORY("ioCategory", false, "メソッド", "UI / DB / none",
+                "副作用/IO 分類 (DB/NET/IO/UI/LOG/none、callee FQN 推定)"),
+        ROLE("role", false, "メソッド", "factory / getter / ctor",
+                "役割推定 (ctor/getter/setter/factory/handler/validator/other)"),
+        USED_BY("usedBy", true, "メソッド", "3",
+                "解析対象内での被参照メソッド数 (fan-in 近似)");
 
         private final String header;
         private final boolean numeric;
+        private final String appliesTo;
+        private final String example;
         private final String legend;
 
-        Col(String header, boolean numeric, String legend) {
+        Col(String header, boolean numeric, String appliesTo, String example, String legend) {
             this.header = header;
             this.numeric = numeric;
+            this.appliesTo = appliesTo;
+            this.example = example;
             this.legend = legend;
         }
 
@@ -75,6 +111,14 @@ public final class MemberAnalysis {
 
         public boolean numeric() {
             return numeric;
+        }
+
+        public String appliesTo() {
+            return appliesTo;
+        }
+
+        public String example() {
+            return example;
         }
 
         public String legend() {
@@ -94,11 +138,11 @@ public final class MemberAnalysis {
         return out;
     }
 
-    /** 凡例 (列見出し, 説明) の行を返す。 */
+    /** 凡例 (列見出し, 対象, 例, 説明) の行を返す。 */
     public static List<String[]> legend() {
         List<String[]> out = new ArrayList<>();
         for (Col c : Col.values()) {
-            out.add(new String[] {c.header(), c.legend()});
+            out.add(new String[] {c.header(), c.appliesTo(), c.example(), c.legend()});
         }
         return out;
     }

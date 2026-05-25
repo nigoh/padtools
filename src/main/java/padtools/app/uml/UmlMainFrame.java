@@ -145,6 +145,7 @@ public class UmlMainFrame extends JFrame {
         mcb.chooseAndExport = this::chooseAndExport;
         mcb.exportClassDiagramsPerFolder = this::exportClassDiagramsPerFolder;
         mcb.exportFunctionList = this::exportFunctionList;
+        mcb.exportMemberList = this::exportMemberList;
         mcb.refreshDiagram = this::refreshDiagram;
         mcb.cancelLoading = () -> {
             if (loadingCancelToken != null) {
@@ -518,6 +519,17 @@ public class UmlMainFrame extends JFrame {
                 buildFunctionListReport(
                         padtools.core.formats.uml.MethodUsageReport.Format.CSV),
                 "Save function list (Markdown table or CSV)");
+    }
+
+    /** 全クラスのメンバー解析結果を Excel (.xlsx) ワークブックとして保存する (File メニュー)。 */
+    private void exportMemberList() {
+        if (!cache.isLoaded()) {
+            JOptionPane.showMessageDialog(this, "Open a project first.",
+                    "Members", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        exportController.exportMemberWorkbook(
+                cache.getClasses(), "Save members workbook (Excel .xlsx)");
     }
 
     /** F5 / Refresh / フィルタ変更後にアクティブタブを再描画する。 */

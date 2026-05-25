@@ -35,6 +35,7 @@ public final class MenuBarBuilder {
         public Runnable chooseAndExport;
         public Runnable exportClassDiagramsPerFolder;
         public Runnable exportFunctionList;
+        public Runnable exportMemberList;
         public Runnable refreshDiagram;
         /** Cancel Loading アイテムのアクション。loadingCancelToken がある場合に cancel を呼ぶ。 */
         public Runnable cancelLoading;
@@ -150,6 +151,8 @@ public final class MenuBarBuilder {
         perFolder.addActionListener(e -> cb.exportClassDiagramsPerFolder.run());
         JMenuItem functionList = new JMenuItem("Export Function List...");
         functionList.addActionListener(e -> cb.exportFunctionList.run());
+        JMenuItem memberList = new JMenuItem("Export Members to Excel...");
+        memberList.addActionListener(e -> cb.exportMemberList.run());
         JMenuItem refresh = new JMenuItem("Refresh");
         refresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0));
         refresh.addActionListener(e -> cb.refreshDiagram.run());
@@ -160,6 +163,7 @@ public final class MenuBarBuilder {
         m.add(save);
         m.add(perFolder);
         m.add(functionList);
+        m.add(memberList);
         m.addSeparator();
         m.add(refresh);
         m.add(cancelLoadingItem);

@@ -199,4 +199,34 @@ final class ExportController {
                     "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
+
+    /** 全クラスのメンバー解析結果を Excel (.xlsx) ワークブックとして保存する。 */
+    public void exportMemberWorkbook(
+            java.util.List<padtools.core.formats.uml.JavaClassInfo> classes, String dialogTitle) {
+        if (classes == null || classes.isEmpty()) {
+            JOptionPane.showMessageDialog(parent, "No content to export.",
+                    "Export", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle(dialogTitle);
+        fc.setAcceptAllFileFilterUsed(false);
+        fc.setFileFilter(new FileNameExtensionFilter("Excel workbook (*.xlsx)", "xlsx"));
+        int r = fc.showSaveDialog(parent);
+        if (r != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File chosen = fc.getSelectedFile();
+        if (!chosen.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx")) {
+            chosen = new File(chosen.getAbsolutePath() + ".xlsx");
+        }
+        try (java.io.OutputStream os = new java.io.FileOutputStream(chosen)) {
+            padtools.core.formats.uml.MemberWorkbookExporter.write(classes, os);
+            status.setText("Saved: " + chosen.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(parent,
+                    "Export failed: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 }

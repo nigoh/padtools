@@ -19,9 +19,7 @@ public class ClassMemberReportTest {
                 + " public int add(int a, int b) { return a + b; } }");
         String csv = ClassMemberReport.render(classes);
 
-        assertTrue(csv, csv.startsWith(
-                "class,package,kind,member,visibility,name,type,params,modifiers,"
-                + "enclosing,extends,implements,line,annotations,overrides,calls,callees\n"));
+        assertTrue(csv, csv.startsWith(String.join(",", MemberAnalysis.headers()) + "\n"));
         // クラスは単純名カラム + パッケージ別カラム (FQN/URI は使わない)
         assertTrue(csv, csv.contains("Foo,com.example.app,class,field,"));
         assertFalse(csv, csv.contains("com.example.app.Foo"));
@@ -45,9 +43,7 @@ public class ClassMemberReportTest {
     @Test
     public void render_emptyInput_emitsHeaderOnly() {
         String csv = ClassMemberReport.render(java.util.Collections.emptyList());
-        assertTrue(csv, csv.startsWith(
-                "class,package,kind,member,visibility,name,type,params,modifiers,"
-                + "enclosing,extends,implements,line,annotations,overrides,calls,callees"));
+        assertTrue(csv, csv.startsWith(String.join(",", MemberAnalysis.headers())));
         // データ行なし
         assertTrue(csv, csv.trim().lines().count() == 1);
     }
@@ -65,7 +61,7 @@ public class ClassMemberReportTest {
 
         // run(): 継承・@Override・呼び出しが構造カラムに出る
         String[] run = cols(csv, "run");
-        assertEquals(csv, 17, run.length);
+        assertEquals(csv, MemberAnalysis.headers().size(), run.length);
         assertEquals(csv, "Base", run[10]);       // extends
         assertEquals(csv, "Runnable", run[11]);   // implements
         assertFalse(csv, run[12].isEmpty());      // line (FULL パースで取得済み)

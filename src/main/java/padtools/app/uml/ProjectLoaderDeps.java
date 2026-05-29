@@ -24,6 +24,7 @@ public final class ProjectLoaderDeps {
     public ProjectTreePanel treePanel;
     public ManifestSummaryPanel manifestSummaryPanel;
     public JProgressBar loadProgress;
+    public LoadingGlassPane loadingOverlay;
     public JMenuItem cancelLoadingItem;
     public JLabel statusLabel;
     public JFrame parentFrame;

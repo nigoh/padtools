@@ -3,6 +3,8 @@
 
 package padtools.app.uml;
 
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import java.io.File;
@@ -28,6 +30,20 @@ public final class UmlApp {
                  | InstantiationException | IllegalAccessException ex) {
             // システム L&F が使えない環境では既定 L&F のまま続行
         }
-        UmlMainFrame.launch(initialProject);
+        launchWithSplash(initialProject);
+    }
+
+    /** 起動スプラッシュ (GIF) を中央表示しつつメインウィンドウを起動する。 */
+    private static void launchWithSplash(File initialProject) {
+        // 起動直後に一瞬で消えないよう、スプラッシュの最低表示時間を確保する。
+        final int minSplashMillis = 900;
+        SwingUtilities.invokeLater(() -> {
+            SplashWindow splash = SplashWindow.display();
+            UmlMainFrame frame = new UmlMainFrame(initialProject);
+            frame.setVisible(true);
+            Timer timer = new Timer(minSplashMillis, e -> splash.close());
+            timer.setRepeats(false);
+            timer.start();
+        });
     }
 }

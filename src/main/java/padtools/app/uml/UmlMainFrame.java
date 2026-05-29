@@ -73,6 +73,8 @@ public class UmlMainFrame extends JFrame {
     private final JLabel status = new JLabel(" ");
     private final JLabel zoomLabel = new JLabel("100%");
     private final JProgressBar loadProgress = new JProgressBar();
+    /** プロジェクト解析中に全面表示する GIF ローディングオーバーレイ (glass pane)。 */
+    private final LoadingGlassPane loadingOverlay = new LoadingGlassPane();
     private JMenuItem cancelLoadingItem;
     private ButtonGroup diagramGroup;
     private java.util.EnumMap<DiagramKind, JRadioButtonMenuItem> diagramItems;
@@ -117,6 +119,7 @@ public class UmlMainFrame extends JFrame {
         // タブにフォーカスが移ったら、ツリーハイライト・図種ミラー・ツールバー反映を連動させる。
         tabPane.setOnTabFocused(info -> controller.onTabFocused(info));
         add(buildStatusBar(), BorderLayout.SOUTH);
+        setGlassPane(loadingOverlay); // 解析中オーバーレイ (初期は非表示)
         applyInitialWindowSize();
         initPersistorsAndLoader();
 
@@ -268,6 +271,7 @@ public class UmlMainFrame extends JFrame {
         loaderDeps.treePanel = treePanel;
         loaderDeps.manifestSummaryPanel = manifestSummaryPanel;
         loaderDeps.loadProgress = loadProgress;
+        loaderDeps.loadingOverlay = loadingOverlay;
         loaderDeps.cancelLoadingItem = cancelLoadingItem;
         loaderDeps.statusLabel = status;
         loaderDeps.parentFrame = this;
@@ -627,13 +631,5 @@ public class UmlMainFrame extends JFrame {
 
     private void saveCurrentProjectSettings() {
         settingsPersistor.saveCurrentProjectSettings(currentProjectRoot);
-    }
-
-    /** GUI を EDT で起動する。 */
-    public static void launch(File initialProject) {
-        SwingUtilities.invokeLater(() -> {
-            UmlMainFrame f = new UmlMainFrame(initialProject);
-            f.setVisible(true);
-        });
     }
 }

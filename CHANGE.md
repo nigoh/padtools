@@ -4,6 +4,14 @@ Change log
 2.1
 --------
 
+* **Soong (Android.bp) 図を GUI に追加** (`DiagramKind.SOONG` 新規 / `DiagramService.generateSoongPuml`)
+    * これまで CLI (`--android-bp`) でしか出せなかった Android.bp モジュール依存図を、GUI のツールバー / Diagram メニューから図種 `Soong` として開けるようにした。
+    * 既存の `AndroidBpParser` (Android.bp 走査・解析) と `PlantUmlSoongDependencyDiagram` (コンポーネント依存図描画) を再利用し、`DiagramService` でプロジェクトルートを起点に走査する (画面遷移図 `SCREEN_FLOW` と同じ「ルート必須」経路)。
+    * Android.bp が 1 つも見つからない / プロジェクト未ロードの場合は、空図でなく案内ノート付きの PlantUML を返す。
+    * ツールバーは `Soong` ラベル + Android.bp 依存ツールチップ、ツリーアイコンは `MODULE` を割当。`DIAGRAMS_ANDROID` セットにも追加。
+    * テスト: `DiagramServiceTest` に 2 ケース追加 (Android.bp 2 モジュール + 依存エッジ検証 / モジュール不在時の案内ノート)。
+    * 目的: AOSP / AAOS プロジェクトを GUI で開いたまま、Java/Gradle の図と同じタブ中心 UI で Soong モジュール依存も可視化できるようにするため。
+
 * **AOSP Phase 3.4: Android.mk (legacy) パーサー** (`AndroidMkParser` 新規)
     * AOSP の legacy GNU Make 形式 `Android.mk` から `LOCAL_MODULE` / `LOCAL_SRC_FILES` / 各種 `LOCAL_*_LIBRARIES` を抽出し、{@link AndroidBpModule} 出力モデルを **再利用** することで Soong (Phase 3.1) の解析結果と統一されたモジュールグラフを構築可能にする。
     * 戦略は完全な make 評価ではなく AOSP のお決まりパターン (Boilerplate) に特化:

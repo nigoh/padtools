@@ -36,7 +36,8 @@ public final class ToolBarBuilder {
     public static final EnumSet<DiagramKind> DIAGRAMS_METHOD = EnumSet.of(
             DiagramKind.SEQUENCE, DiagramKind.ACTIVITY, DiagramKind.CALLGRAPH);
     public static final EnumSet<DiagramKind> DIAGRAMS_ANDROID = EnumSet.of(
-            DiagramKind.MANIFEST, DiagramKind.COMPONENT, DiagramKind.SCREEN_FLOW);
+            DiagramKind.MANIFEST, DiagramKind.COMPONENT, DiagramKind.SCREEN_FLOW,
+            DiagramKind.SOONG);
 
     /** ツールバーアクションのコールバック群。 */
     public static final class Callbacks {
@@ -130,6 +131,7 @@ public final class ToolBarBuilder {
             case NAVIGATION: return "Navigation";
             case MODULE: return "Module";
             case INHERITANCE: return "Inherit";
+            case SOONG: return "Soong";
             default: return k.getDisplayName();
         }
     }
@@ -142,6 +144,7 @@ public final class ToolBarBuilder {
             case LAYOUT:     return " (choose layout file from Diagram menu)";
             case NAVIGATION: return " (choose navigation file from Diagram menu)";
             case COMMON:     return " — top-N most referenced classes (fan-in)";
+            case SOONG:      return " — Android.bp (Soong) module dependencies";
             default: return "";
         }
     }

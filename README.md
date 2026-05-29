@@ -24,6 +24,7 @@ Graphviz / PlantUML の追加インストールは不要です。
 | コンポーネント図 | AndroidManifest の Activity / Service / Receiver / Provider、`exported` 属性、ランチャー強調、uses-permission |
 | Manifest 図 | AndroidManifest の `<application>` 属性 (package / class / theme / debuggable / allowBackup / meta-data) を中央ノードに、配下に Activity / Service / Receiver / Provider をグループ化、周辺に `uses-permission` / `uses-feature` を配置 |
 | Gradle 依存図 | モジュール間 `project(':x')` 依存と外部 Maven ライブラリ、`libs.versions.toml` 解決 |
+| Soong 図 (Android.bp) | プロジェクト下を再帰走査して `Android.bp` (Soong Blueprint) のモジュール宣言を解析し、`shared_libs` / `static_libs` / `defaults` 等の依存をコンポーネント図で可視化。モジュール種別 (`cc` / `java` / `android` / `aidl` / `hidl` / `build`) ごとに色分け・グループ化 |
 
 > 1.7 までは PAD (Problem Analysis Diagram) ツールでしたが、2.0 で
 > Java + Android + Gradle 特化の UML ツールに完全転換しました。旧 PAD / SPD 機能は廃止されています。
@@ -50,11 +51,11 @@ GUI の操作:
 
 * **ウィンドウ上部のツールバー** — 頻用操作を 1 クリックで実行
     * 上段 (Action): `Open` / `Save` / `Refresh` / `Back` / `Search` / `Scope` / `Clear Scope` / `Zoom In` / `Zoom Out` / `100%` / `Fit`
-    * 下段 (Diagram): `Class` / `Package` / `Sequence` / `Activity` / `Common` / `Component` / `Dependency` / `Manifest` / `Layout` をトグルボタンで切り替え。Diagram メニューのラジオ選択と双方向同期。Sequence / Activity / Layout は起点未指定なら自動で選択ダイアログを表示
+    * 下段 (Diagram): `Class` / `Package` / `Sequence` / `Activity` / `Common` / `Component` / `Dependency` / `Manifest` / `Layout` / `Soong` をトグルボタンで切り替え。Diagram メニューのラジオ選択と双方向同期。Sequence / Activity / Layout は起点未指定なら自動で選択ダイアログを表示
     * 既存のショートカット (`Ctrl+O` / `Ctrl+S` / `F5` / `Ctrl+F` / `Ctrl+=` / `Ctrl+-` / `Ctrl+0` / `Alt+←` / `Ctrl+Shift+F`) はそのまま使用可能
 * **File → Open Project...** (Ctrl+O) — Android / Gradle プロジェクトのルートディレクトリを選択
 * **File → Cancel Loading** — 進行中の解析を中断 (AOSP 級プロジェクトで途中で気が変わったとき用)
-* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / 共通クラス図 / コンポーネント図 / 依存図 / Manifest 図 のラジオ選択
+* **Diagram メニュー** — クラス図 / パッケージ図 / シーケンス図 / 共通クラス図 / コンポーネント図 / 依存図 / Manifest 図 / Soong 図 (Android.bp) のラジオ選択
 * **Diagram → Choose Sequence Entry...** — シーケンス図の起点 `Class.method` を絞り込みリストから選択
 * **Diagram → Scope...** — クラス図 / パッケージ図の表示範囲を絞り込み (パッケージ複数選択 / モジュール複数選択 / 正規表現 / 最大クラス数 / シードからの hop 数)
 * **Diagram → Clear Scope** — 絞り込みを解除

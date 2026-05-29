@@ -47,7 +47,7 @@ java -jar PadTools.jar ~/AndroidStudioProjects/MyApp
 │ ツールバー下段 (図種選択)                                    │
 │  Class  Package  Sequence  Activity  Component  Dependency  │
 │  Manifest  Layout  Common  Navigation  Module  Inherit      │
-│  Call Graph  Screen Flow                                    │
+│  Call Graph  Screen Flow  Soong                             │
 ├─────────────────────┬──────────────────────────────────────┤
 │                     │ [Preview][Source][Manifest][Impact]  │
 │  プロジェクトツリー   │                                      │
@@ -123,7 +123,7 @@ java -jar PadTools.jar ~/AndroidStudioProjects/MyApp
 
 ### 下段 — 図種トグルボタン
 
-14 種類の図をトグルボタンで切り替えます（並び順は左から下表のとおり）。ツリーで選択したノードの種類に応じて、利用可能なボタンが自動的に有効/無効化されます。
+15 種類の図をトグルボタンで切り替えます（並び順は左から下表のとおり）。ツリーで選択したノードの種類に応じて、利用可能なボタンが自動的に有効/無効化されます。
 
 | ボタン (表示ラベル) | 図種 |
 |--------|------|
@@ -141,6 +141,7 @@ java -jar PadTools.jar ~/AndroidStudioProjects/MyApp
 | **Inherit** | 継承ツリー (INHERITANCE) |
 | **Call Graph** | メソッド呼び出し階層 (WBS 形式) |
 | **Screen Flow** | 画面遷移フロー (Intent 起動 + Car App Library) |
+| **Soong** | Android.bp (Soong) モジュール依存図。プロジェクト下の `Android.bp` を走査して `shared_libs` / `static_libs` / `defaults` 等の依存をコンポーネント図化 |
 
 ---
 

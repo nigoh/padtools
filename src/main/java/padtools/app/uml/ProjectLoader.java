@@ -32,6 +32,7 @@ public final class ProjectLoader {
     private final ProjectTreePanel treePanel;
     private final ManifestSummaryPanel manifestSummaryPanel;
     private final JProgressBar loadProgress;
+    private final LoadingGlassPane loadingOverlay;
     private final JMenuItem cancelLoadingItem;
     private final JLabel statusLabel;
     private final JFrame parentFrame;
@@ -46,6 +47,7 @@ public final class ProjectLoader {
         this.treePanel = deps.treePanel;
         this.manifestSummaryPanel = deps.manifestSummaryPanel;
         this.loadProgress = deps.loadProgress;
+        this.loadingOverlay = deps.loadingOverlay;
         this.cancelLoadingItem = deps.cancelLoadingItem;
         this.statusLabel = deps.statusLabel;
         this.parentFrame = deps.parentFrame;
@@ -62,6 +64,10 @@ public final class ProjectLoader {
         loadProgress.setVisible(true);
         loadProgress.setIndeterminate(true);
         loadProgress.setString("Scanning...");
+        if (loadingOverlay != null) {
+            loadingOverlay.setStatus("解析中...");
+            loadingOverlay.showOverlay();
+        }
         cancelLoadingItem.setEnabled(true);
         final CancelToken cancel = new CancelToken();
         cancelTokenSetter.accept(cancel);
@@ -90,6 +96,9 @@ public final class ProjectLoader {
             protected void done() {
                 cancelTokenSetter.accept(null);
                 cancelLoadingItem.setEnabled(false);
+                if (loadingOverlay != null) {
+                    loadingOverlay.hideOverlay();
+                }
                 loadProgress.setVisible(false);
                 loadProgress.setIndeterminate(false);
                 loadProgress.setValue(0);
@@ -136,11 +145,17 @@ public final class ProjectLoader {
             loadProgress.setString(done + "/" + total);
             statusLabel.setText("Analyzing " + done + "/" + total
                     + (message != null && !message.isEmpty() ? " — " + message : ""));
+            if (loadingOverlay != null) {
+                loadingOverlay.setStatus("解析中... " + done + "/" + total);
+            }
         } else {
             loadProgress.setIndeterminate(true);
             loadProgress.setString(message != null ? message : "Scanning...");
             if (message != null) {
                 statusLabel.setText(message);
+            }
+            if (loadingOverlay != null && message != null && !message.isEmpty()) {
+                loadingOverlay.setStatus(message);
             }
         }
     }

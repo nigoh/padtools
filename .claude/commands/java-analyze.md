@@ -1,5 +1,5 @@
 ---
-description: PadTools の Java 解析エンジンを使った設計相談・コード分析を java-analyst エージェントに依頼する
+description: Juml の Java 解析エンジンを使った設計相談・コード分析を java-analyst エージェントに依頼する
 allowed-tools: Read, Bash, Agent
 ---
 
@@ -10,14 +10,14 @@ allowed-tools: Read, Bash, Agent
 `$ARGUMENTS` が指定されている場合:
 - ファイルパス（`.java` 拡張子）→ そのファイルの解析ロジック上の問題点・改善点を報告
 - 機能キーワード（例: "シーケンス図", "ジェネリクス", "アノテーション"）→ 関連する解析ロジックの現状と改善アイデアを提案
-- 空欄 → PadTools の Java 解析パイプライン全体のレビューと改善提案
+- 空欄 → Juml の Java 解析パイプライン全体のレビューと改善提案
 
 ## 依頼内容
 
 <task>
 対象: $ARGUMENTS
 
-PadTools の Java 解析パイプライン（JavaLexer → JavaStructureExtractor → JavaClassInfo → PlantUML）の観点から、以下を行ってください:
+Juml の Java 解析パイプライン（JavaLexer → JavaStructureExtractor → JavaClassInfo → PlantUML）の観点から、以下を行ってください:
 
 1. **現状把握**: 対象に関連するソースコードを Read ツールで確認する
 2. **ロジック分析**: 現在の実装のアプローチ・制約・エッジケースを整理する

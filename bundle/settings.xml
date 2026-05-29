@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <java version="1.7.0_79" class="java.beans.XMLDecoder">
- <object class="padtools.Setting">
+ <object class="juml.Setting">
 
   <!-- 「保存」メニューの無効化
   <void property="disableSaveMenu">

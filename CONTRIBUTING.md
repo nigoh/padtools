@@ -1,12 +1,12 @@
 # コントリビューションガイド
 
-PadTools への貢献を歓迎します。バグ報告・機能提案・Pull Request はどなたでも歓迎します。
+Juml への貢献を歓迎します。バグ報告・機能提案・Pull Request はどなたでも歓迎します。
 本プロジェクトは MIT ライセンス（[`LICENSE`](LICENSE)）の下で公開されています。提出された
 コントリビューションは同ライセンスの下で配布されることに同意したものとみなします。
 
 ## バグ報告・機能提案
 
-- まず既存の [Issues](https://github.com/nigoh/padtools/issues) に重複が無いか確認してください。
+- まず既存の [Issues](https://github.com/nigoh/juml/issues) に重複が無いか確認してください。
 - バグ報告は Issue テンプレート（Bug report）に沿って、再現手順・期待結果・実際の結果・
   環境（OS / Java バージョン）を記載してください。
 - 機能提案は Feature request テンプレートに沿って、背景（なぜ必要か）と想定する挙動を記載してください。
@@ -21,7 +21,7 @@ PadTools への貢献を歓迎します。バグ報告・機能提案・Pull Req
 ./gradlew build        # コンパイル + テスト + Checkstyle
 ./gradlew test         # ユニットテスト
 ./gradlew check        # テスト + Checkstyle
-./gradlew jar          # build/libs/PadTools.jar (単体実行可能 fat jar) を生成
+./gradlew jar          # build/libs/Juml.jar (単体実行可能 fat jar) を生成
 ```
 
 Swing GUI テスト（AssertJ-Swing）はディスプレイが必要です。ヘッドレス環境では

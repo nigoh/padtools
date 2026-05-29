@@ -19,11 +19,11 @@ allowed-tools: Read, Bash
 1. **対象のソースファイルを Read で確認する**
 
    主要なターゲット:
-   - `src/main/java/padtools/core/formats/uml/PlantUmlClassDiagram.java`
-   - `src/main/java/padtools/core/formats/uml/PlantUmlSequenceDiagram.java`
-   - `src/main/java/padtools/core/formats/uml/PlantUmlPackageDiagram.java`
-   - `src/main/java/padtools/core/formats/uml/PlantUmlClassLegend.java`
-   - `src/main/java/padtools/core/formats/uml/DiagramStyle.java`
+   - `src/main/java/juml/core/formats/uml/PlantUmlClassDiagram.java`
+   - `src/main/java/juml/core/formats/uml/PlantUmlSequenceDiagram.java`
+   - `src/main/java/juml/core/formats/uml/PlantUmlPackageDiagram.java`
+   - `src/main/java/juml/core/formats/uml/PlantUmlClassLegend.java`
+   - `src/main/java/juml/core/formats/uml/DiagramStyle.java`
 
 2. **以下の観点で分析する**
 

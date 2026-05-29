@@ -1,6 +1,6 @@
 # /release
 
-PadTools の新バージョンをリリースする。
+Juml の新バージョンをリリースする。
 
 ## 使用方法
 
@@ -77,7 +77,7 @@ git push origin v<VERSION>
 ### Step 8: GitHub リリースを作成
 
 タグ `v<VERSION>` から GitHub Release を作成する。リリースノートには `CHANGE.md` の対応バージョンセクションの内容を使う。
-jar ファイル (`build/libs/PadTools.jar`) をリリースアセットとして添付する方法をユーザーに案内する（GitHub MCP に create_release がない場合は手順を説明する）。
+jar ファイル (`build/libs/Juml.jar`) をリリースアセットとして添付する方法をユーザーに案内する（GitHub MCP に create_release がない場合は手順を説明する）。
 
 ### Step 9: PR 作成（ブランチ作業の場合）
 
@@ -89,4 +89,4 @@ feature ブランチで作業している場合は draft PR を作成する。
 
 - リリース前に `./gradlew test` でテストが全通することを確認することを推奨する
 - `CHANGE.md` の新バージョンセクションに変更点が記載されていること
-- GitHub Release の jar アセット添付は `gh release upload v<VERSION> build/libs/PadTools.jar` で可能（`gh` CLI がある環境のみ）
+- GitHub Release の jar アセット添付は `gh release upload v<VERSION> build/libs/Juml.jar` で可能（`gh` CLI がある環境のみ）

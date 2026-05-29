@@ -247,6 +247,7 @@ public final class DiagramController {
             case ACTIVITY:  return TreeNodeIcon.ACTIVITY;
             case CALLGRAPH: return TreeNodeIcon.METHOD;
             case COMPONENT: return TreeNodeIcon.COMPONENT_GROUP;
+            case SOONG:     return TreeNodeIcon.MODULE;
             default:        return TreeNodeIcon.CLASS;
         }
     }

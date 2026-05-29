@@ -66,6 +66,10 @@ public final class DiagramService {
         if (request != null && request.getKind() == DiagramKind.SCREEN_FLOW) {
             return generateScreenFlowPuml(cache.getProjectRoot());
         }
+        // Soong 依存図もソースの Android.bp を再走査するためプロジェクトルートが要る。
+        if (request != null && request.getKind() == DiagramKind.SOONG) {
+            return generateSoongPuml(cache.getProjectRoot());
+        }
         return generatePuml(request, cache.getAnalysis(), cache.getClasses(),
                 cache.getIndex(), cache.getDependencyIndex());
     }
@@ -85,6 +89,27 @@ public final class DiagramService {
             return "@startuml\ntitle Screen Flow\nnote as N\nScan failed: "
                     + ex.getMessage().replace("\n", " ") + "\nend note\n@enduml\n";
         }
+    }
+
+    /**
+     * プロジェクト下を再帰走査して {@code Android.bp} (Soong Blueprint) を解析し、
+     * モジュール依存を {@link padtools.core.aosp.PlantUmlSoongDependencyDiagram} で描画する。
+     * 走査・解析はライブラリ側で完結するので、ここではルートを渡すだけ。
+     */
+    private static String generateSoongPuml(java.io.File projectRoot) {
+        if (projectRoot == null || !projectRoot.isDirectory()) {
+            return "@startuml\ntitle Soong (Android.bp) Module Dependencies\n"
+                    + "note as N\nOpen a project directory to detect Android.bp modules.\nend note\n"
+                    + "@enduml\n";
+        }
+        java.util.List<padtools.core.aosp.AndroidBpModule> modules =
+                new padtools.core.aosp.AndroidBpParser().analyzeProject(projectRoot);
+        if (modules.isEmpty()) {
+            return "@startuml\ntitle Soong (Android.bp) Module Dependencies\n"
+                    + "note as N\nNo Android.bp modules were found under this project.\nend note\n"
+                    + "@enduml\n";
+        }
+        return padtools.core.aosp.PlantUmlSoongDependencyDiagram.render(modules);
     }
 
     /**
@@ -146,6 +171,12 @@ public final class DiagramService {
                 return generateInheritanceDiagram(request, analysis, classes, index, depIndex);
             case CALLGRAPH:
                 return generateCallgraphDiagram(request, analysis, classes, index, depIndex);
+            case SOONG:
+                // Soong 図は Android.bp を再走査するためプロジェクトルートが必須。
+                // ルートを持つ generatePuml(request, cache) 経路から呼ぶこと。
+                throw new IllegalStateException(
+                        "SOONG diagram requires a project root; "
+                                + "call generatePuml(request, cache) instead");
             default:
                 throw new IllegalStateException("Unknown diagram kind: " + request.getKind());
         }

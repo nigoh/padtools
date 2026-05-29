@@ -37,7 +37,9 @@ public enum DiagramKind {
     /** コールグラフ — 任意の {@code Class.method} を起点にどの関数を呼び出しているかをグラフで表示。 */
     CALLGRAPH("Call Graph"),
     /** 画面遷移図 — Intent 起動 + Car App Library の Screen.push を統合した遷移を State 図で表示。 */
-    SCREEN_FLOW("Screen Flow");
+    SCREEN_FLOW("Screen Flow"),
+    /** Soong 依存図 — プロジェクト下の {@code Android.bp} を解析し、モジュール依存をコンポーネント図で表示。 */
+    SOONG("Soong (Android.bp)");
 
     private final String displayName;
 

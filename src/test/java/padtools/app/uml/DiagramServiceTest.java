@@ -66,6 +66,48 @@ public class DiagramServiceTest {
         assertTrue(puml, puml.contains("ProfileFragment"));
     }
 
+    @Test
+    public void testSoongDiagramFromCache() throws java.io.IOException {
+        File dir = new File(tmp.getRoot(), "frameworks/base");
+        assertTrue(dir.mkdirs());
+        try (java.io.Writer w = new java.io.OutputStreamWriter(
+                new java.io.FileOutputStream(new File(dir, "Android.bp")),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            w.write("cc_library {\n"
+                    + "    name: \"libfoo\",\n"
+                    + "    srcs: [\"foo.cpp\"],\n"
+                    + "    shared_libs: [\"libbar\"],\n"
+                    + "}\n"
+                    + "cc_library {\n"
+                    + "    name: \"libbar\",\n"
+                    + "    srcs: [\"bar.cpp\"],\n"
+                    + "}\n");
+        }
+        ProjectAnalysisCache cache = new ProjectAnalysisCache();
+        cache.load(tmp.getRoot(), padtools.util.ErrorListener.silent());
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.SOONG), cache);
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("libfoo"));
+        assertTrue(puml, puml.contains("libbar"));
+        // 依存エッジ libfoo --> libbar が描かれる
+        assertTrue(puml, puml.contains("-->"));
+    }
+
+    @Test
+    public void testSoongDiagramEmptyProjectShowsNote() throws java.io.IOException {
+        ProjectAnalysisCache cache = new ProjectAnalysisCache();
+        cache.load(tmp.getRoot(), padtools.util.ErrorListener.silent());
+        String puml = DiagramService.generatePuml(
+                new DiagramRequest(DiagramKind.SOONG), cache);
+        assertNotNull(puml);
+        assertTrue(puml, puml.contains("@startuml"));
+        assertTrue(puml, puml.contains("@enduml"));
+        assertTrue(puml, puml.contains("No Android.bp modules"));
+    }
+
     private List<JavaClassInfo> sampleClasses() {
         List<JavaClassInfo> infos = new ArrayList<>();
         infos.addAll(JavaStructureExtractor.extract(

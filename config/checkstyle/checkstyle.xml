@@ -4,7 +4,7 @@
         "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
-    PadTools CheckStyle設定
+    Juml CheckStyle設定
     基本的なコード品質チェック。厳格すぎず、実用的な範囲で。
 -->
 <module name="Checker">
@@ -31,7 +31,7 @@
     <module name="TreeWalker">
         <!-- インポートチェック -->
         <module name="AvoidStarImport">
-            <property name="excludes" value="java.awt,java.awt.event,javax.swing,padtools.core.models,padtools.core.view,java.io,java.util,org.junit.Assert"/>
+            <property name="excludes" value="java.awt,java.awt.event,javax.swing,juml.core.models,juml.core.view,java.io,java.util,org.junit.Assert"/>
         </module>
         <module name="RedundantImport"/>
         <module name="UnusedImports"/>

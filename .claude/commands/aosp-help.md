@@ -1,6 +1,6 @@
 # /aosp-help
 
-AOSP × PadTools の知識・リファレンス。エージェント・スキル内容のクイックアクセス。
+AOSP × Juml の知識・リファレンス。エージェント・スキル内容のクイックアクセス。
 
 ## 説明
 
@@ -45,11 +45,11 @@ AOSP トピック別のクイックリファレンス。
 ## 動作
 
 1. Topic とクエリを受け取る
-2. 該当チートシート (`/root/.claude/skills/aosp-padtools-analyzer/cheatsheet-*.md`) をロード
+2. 該当チートシート (`/root/.claude/skills/aosp-juml-analyzer/cheatsheet-*.md`) をロード
 3. 関連セクションを抽出・説明
-4. 必要に応じて PadTools コマンド例を提示
+4. 必要に応じて Juml コマンド例を提示
 
 ---
 
-**Note**: スキル `aosp-padtools-analyzer` が自動ロードされます。
+**Note**: スキル `aosp-juml-analyzer` が自動ロードされます。
 「仕組みを理解したい」「リファレンスが欲しい」というときに活用。

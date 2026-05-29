@@ -88,7 +88,7 @@ Change log
     * **`yield` 文 (Java 14+)** を新 `JavaMethodInfo.Yield` Statement として認識。`switchDepth` をパーサで追跡し、switch アーム内でだけ `yield expr;` を Yield 化する (switch の外では従来通り識別子扱いとし、`int yield = 10;` のような変数名宣言を壊さない)。`yield(...)` のメソッド呼び出し・`yield.foo` のフィールドアクセス・`yield =` の代入を直後トークンで除外。
     * **Class 図 / Package 図でモジュール宣言を除外**: `Kind.MODULE` の `JavaClassInfo` は `PlantUmlClassDiagram` / `PlantUmlPackageDiagram` のクラスループから除外し、空パッケージ集計や `class` 描画にノイズが乗らないようにする。モジュールグラフは後続フェーズの専用図種で扱う想定。
     * テスト: `JavaStructureExtractorModernJavaTest` (新規 12 ケース) で module-info の各ディレクティブ・switch 式 RHS / return / pattern case + when・`yield` の捕捉と switch 外での誤検出回避を回帰防止。`JavaStructureExtractorTest` の既存 76 ケースは全 PASS のまま。
-    * 目的: PadTools の Java パーサーが Java 9 以降の新構文 (module / switch 式 / pattern matching) に追随し、AOSP / AAOS / モダン Android プロジェクトでもクラス図・シーケンス図が穴抜けにならないようにする。後続フェーズの Phase 2 (AAOS の `@SystemApi`/AIDL binder hop 表現) / Phase 3 (AOSP の Android.bp / HIDL) を載せる基盤とする。
+    * 目的: Juml の Java パーサーが Java 9 以降の新構文 (module / switch 式 / pattern matching) に追随し、AOSP / AAOS / モダン Android プロジェクトでもクラス図・シーケンス図が穴抜けにならないようにする。後続フェーズの Phase 2 (AAOS の `@SystemApi`/AIDL binder hop 表現) / Phase 3 (AOSP の Android.bp / HIDL) を載せる基盤とする。
 
 * **「関数を変数として設定するメンバー変数」の解析範囲を拡張** (`JavaStructureExtractor` / `JavaMethodInfo.Call` / `PlantUmlClassDiagram`)
     * これまで匿名クラス/ラムダによるフィールド初期化子のみ inline 解析していたのを、以下のパターンにも拡張
@@ -134,16 +134,16 @@ Change log
     * 目的: `extends AppCompatActivity` のような外部 SDK クラスがクラス図/シーケンス図上で「不在」にならないようにし、依存 JAR が無いプロジェクトでは明示的に警告マーカーで知らせる
 * **CLI / GUI: PlantUML レンダリング失敗を検出して救出 puml にフォールバック** (`PlantUmlRenderer` / `Main` / `UmlMainFrame`)
     * `PlantUmlRenderer.renderSvg` がレンダリング結果に同梱 PlantUML のフォールバック マーカー (`"An error has occured"` / `"I love it when a plan comes together"`) を検出した場合、新例外 `PlantUmlRenderFailedException` を投げる。これまでは PlantUML 内部で Smetana の `IllegalStateException` が握り潰され、エラー画像 SVG がそのまま `dependency-graph.svg` 等として保存されていた
-    * **CLI `--all`**: 各図 (component / manifest / deeplink / dependency / class) のレンダ失敗を個別に補足し、`<name>.puml` を同じ出力ディレクトリに書き出し、`[padtools]     -> X.svg FAILED: ...` を stderr に出して次の図に進む。`--all` 全体は他の図の出力を続行
+    * **CLI `--all`**: 各図 (component / manifest / deeplink / dependency / class) のレンダ失敗を個別に補足し、`<name>.puml` を同じ出力ディレクトリに書き出し、`[juml]     -> X.svg FAILED: ...` を stderr に出して次の図に進む。`--all` 全体は他の図の出力を続行
     * **CLI 単体 (`-c` / `-d` / `-G` / `-M` / `-D`)**: SVG レンダ失敗時に隣接 `.puml` を書き出し、終了コード 2 で終了
     * **GUI `UmlMainFrame`**: SwingWorker のレンダ失敗時、これまでの巨大な base64 を含む `JOptionPane` モーダル ダイアログを廃止。ステータス バーに `<Diagram>: rendering failed — PlantUML layout error (Smetana). See 'PlantUML Source' tab.` を出し、`PlantUML Source` タブに raw puml を残し、Preview ペインをクリアする
     * **Smetana の stderr ノイズ抑制**: `UNSURE_ABOUT: safe_list_append(...)` 等の同梱 Smetana が直接 `System.err` に書くデバッグ ログを、`renderSvg` 呼び出し中だけ捨てるラッパを追加。`-v` (`--verbose`) で抑制を解除可能
     * 目的: `car_app_library` 規模 (~26 ノード) の Gradle 依存グラフで Smetana が落ちた際に、ユーザに壊れた SVG を掴ませず、再レンダリング可能な PUML テキストを救出経路として残す。GUI でも意味のないモーダル ダイアログを廃止して UX を改善する
 
-* **CLI 引数パーサが先頭引数を消費していたバグを修正** (`Main` / `bundle/PadTools.sh`)
-    * 旧 `optParser.parse(args, 1)` が常に `args[0]` をスキップしていたため、`java -jar PadTools.jar -c -o out.svg in.java` のように README 記載どおりに直接呼ぶと `-c` が黙って消費されて GUI モードに落ちていた。同梱 `bundle/PadTools.sh` が `java -jar PadTools.jar -- $@` で `--` を args[0] に注入する設計に依存していた
-    * `Main.java` の `parse(args, 1)` を `parse(args)` に変更。`bundle/PadTools.sh` を `java -jar "$DIR/PadTools.jar" "$@"` に変更し、`--` 注入を撤去 (`OptionParser.parse` の raw モードに意図せず入って後続オプションが全て位置引数化する事故を防止)
-    * `MainCliTest.java` 全 11 箇所の先頭ダミー `"padtools"` を除去
+* **CLI 引数パーサが先頭引数を消費していたバグを修正** (`Main` / `bundle/Juml.sh`)
+    * 旧 `optParser.parse(args, 1)` が常に `args[0]` をスキップしていたため、`java -jar Juml.jar -c -o out.svg in.java` のように README 記載どおりに直接呼ぶと `-c` が黙って消費されて GUI モードに落ちていた。同梱 `bundle/Juml.sh` が `java -jar Juml.jar -- $@` で `--` を args[0] に注入する設計に依存していた
+    * `Main.java` の `parse(args, 1)` を `parse(args)` に変更。`bundle/Juml.sh` を `java -jar "$DIR/Juml.jar" "$@"` に変更し、`--` 注入を撤去 (`OptionParser.parse` の raw モードに意図せず入って後続オプションが全て位置引数化する事故を防止)
+    * `MainCliTest.java` 全 11 箇所の先頭ダミー `"juml"` を除去
     * 目的: README の CLI 例がドキュメントどおりに動くようにする
 
 * **左ペインのプロジェクトツリーが左クリックに反応するように修正** (`ProjectTreePanel` / `UmlMainFrame`)
@@ -189,13 +189,13 @@ Change log
     * CLI: `-D` / `--deeplink-diagram` で生成可能。`--all` の出力に `deeplink-diagram.svg` を追加 (出力数 7 → 8)
 * **クラス図プレビューの右クリックからシーケンス図へ** (`PlantUmlClassDiagram.Options.interactiveLinks` / `PlantUmlSvgRenderer.LinkArea` / `SvgPreviewPanel.setOnLinkPopup`)
     * GUI でクラス図を表示中、クラスの枠を右クリックすると、そのクラスのメソッド一覧が `JPopupMenu` で開く。メソッドを選ぶと既存の `sequenceEntry` 経路でシーケンス図に置き換わる
-    * 仕組み: クラス図生成時に各クラスへ `[[padtools://class/<FQN>]]` を埋め込み、PlantUML が SVG に出力する `<a xlink:href>` 領域を `PlantUmlSvgRenderer` が抽出して `RenderedSvg.getLinkAreas()` で返す。`SvgPreviewPanel` は右クリック (`isPopupTrigger`) でその領域をヒットテストし、ヒットすればリスナを発火する
+    * 仕組み: クラス図生成時に各クラスへ `[[juml://class/<FQN>]]` を埋め込み、PlantUML が SVG に出力する `<a xlink:href>` 領域を `PlantUmlSvgRenderer` が抽出して `RenderedSvg.getLinkAreas()` で返す。`SvgPreviewPanel` は右クリック (`isPopupTrigger`) でその領域をヒットテストし、ヒットすればリスナを発火する
     * URL 埋め込みは GUI プレビュー描画時 (`DiagramRequest.isInteractiveLinks() == true`) のみ。CLI / `Save Diagram As...` / `--per-folder` などの出力には影響しない
     * 抽象メソッドはツリー側と同じく除外する。メソッドラベルは `name(paramType, ...)` 形式
 * **フォルダ単位のクラス図一括出力** (`PerFolderClassDiagrams`)
     * プロジェクトを再帰スキャンし、ソースファイルを直接含む各フォルダごとに 1 枚ずつクラス図 (`classes.puml` + `classes.svg`) を生成。出力ディレクトリ配下に元の相対パス階層を維持して書き出す
     * 大規模プロジェクトで「全クラス 1 枚絵」が読めない/レンダリングが重い問題を緩和。`ClassIndex.source(qn)` でクラスをソース配置フォルダごとに分割する
-    * CLI: `-P` / `--per-folder` を `-c` と併用し、`-o <output_dir>` でルート出力先を指定 (例: `java -jar PadTools.jar -- -c --per-folder -o ./out ~/AndroidStudioProjects/MyApp`)
+    * CLI: `-P` / `--per-folder` を `-c` と併用し、`-o <output_dir>` でルート出力先を指定 (例: `java -jar Juml.jar -- -c --per-folder -o ./out ~/AndroidStudioProjects/MyApp`)
     * GUI: File メニューに「Export Class Diagrams Per Folder…」を追加。ロード済みプロジェクトに対して出力先を選ぶだけで実行でき、進捗バーと完了ダイアログを表示
     * `--no-legend` / `--no-comments` / `--jetpack` 等の既存表示オーバーライドはそのまま尊重 (`UmlOverrides.applyTo` 経由)
 * **新規 UML 図種: Manifest 図** (`PlantUmlManifestDiagram`)
@@ -210,7 +210,7 @@ Change log
         * `AndroidProjectScanner.walk` を `Files.walkFileTree` ベースに置き換え、深い再帰でも安定動作
         * `UmlGenerator.extractFromProjectDetailed` を専用 ExecutorService (CPU - 1 並列) で並列化
         * `Options.maxFiles` で取り込み上限、`Options.cancelToken` で途中中断、`Options.useAospDefaults` で `prebuilts/.repo/out-soong/test_mapping/.cache` を追加除外
-    * **進捗 + キャンセル ユーティリティ** (`padtools.util.ProgressListener`, `padtools.util.CancelToken`)
+    * **進捗 + キャンセル ユーティリティ** (`juml.util.ProgressListener`, `juml.util.CancelToken`)
         * `silent() / console() / throttled(delegate, ms)` ファクトリで GUI/CLI のどちらでも使える
         * `UmlMainFrame` のステータスバーに `JProgressBar` を追加し、`File → Cancel Loading` で進行中の解析を中断可能
     * **Stage A / Stage B 二相パース** (`JavaStructureExtractor.extractHeadersOnly`, `ClassIndex`)
@@ -225,7 +225,7 @@ Change log
         * Diagram メニュー: `Scope...` で編集、`Clear Scope` で解除
         * 絞り込みで件数が減ったり `maxClasses` で切り詰められたら `footer` 行に警告を出す
     * **永続ディスクキャッシュ** (`PersistentAnalysisCache`)
-        * `~/.padtools/cache/<hash>/` に Stage A ヘッダ + ソースパス + モジュール紐付けを保存
+        * `~/.juml/cache/<hash>/` に Stage A ヘッダ + ソースパス + モジュール紐付けを保存
         * キャッシュキー = プロジェクトルート + (path/mtime/size) 列の SHA-256。ファイルが 1 件でも変われば別ディレクトリで自動無効化
         * `lazyDetails=true` + `useDiskCache=true` (デフォルト) で利用
     * **追加テスト**: `AndroidProjectScannerScaleTest`, `UmlGeneratorParallelTest`, `ClassIndexTest`, `DiagramScopeTest`, `DiagramServiceScopeTest`, `JavaClassInfoCodecTest`, `PersistentAnalysisCacheTest`, `CacheKeyTest`, `CancelTokenTest`, `ProgressListenerTest`, `SyntheticAospScaleTest` (`-DrunPerfTests=true` でのみ実行)
@@ -253,14 +253,14 @@ Change log
 2.0 (UML-only pivot)
 --------
 
-* **PadTools を「Java + Android + Gradle 特化の UML ツール」へ完全転換**
+* **Juml を「Java + Android + Gradle 特化の UML ツール」へ完全転換**
     * 旧 PAD (Problem Analysis Diagram) GUI / SPD パーサ / Java→PAD 変換器を全削除 (約 9.7k LoC 減)
-    * 新規 UML 専用 Swing GUI を導入 (`padtools.app.uml.*`)
+    * 新規 UML 専用 Swing GUI を導入 (`juml.app.uml.*`)
         * メニュー: File (Open Project / Save Diagram As... / Exit) / Diagram (5 図種ラジオ + シーケンス図起点選択) / View (Zoom In/Out/Reset/Fit) / Help
         * 左ペイン: プロジェクトのモジュール / パッケージ / クラス ツリー (`ProjectTreePanel`)
         * 右ペイン: タブ式の Preview (ズーム/パン付き `SvgPreviewPanel`) と PlantUML Source (`PumlSourcePanel`)
         * ステータスバーにズーム倍率と解析サマリを表示
-    * 起動: 引数なし `java -jar PadTools.jar` で UML GUI が直接起動
+    * 起動: 引数なし `java -jar Juml.jar` で UML GUI が直接起動
         * プロジェクトディレクトリを引数で渡せば初期解析
         * 旧 `-j` / `-J` / `-s` (Java→PAD) は廃止
 * **新規 UML 図種: パッケージ図** (`PlantUmlPackageDiagram`)
@@ -337,8 +337,8 @@ Change log
     * `plugins {}` ブロック + `java {}` ブロック方式へ書き換え
     * Task の lazy registration (`tasks.register`) へ移行
     * Gradle Wrapper (9.4.1) をリポジトリ同梱
-* `PadTools.jar` を fat jar 化
-    * 依存ライブラリ (Batik 等) を jar 内に同梱し、`java -jar PadTools.jar` 単独で動作可能に
+* `Juml.jar` を fat jar 化
+    * 依存ライブラリ (Batik 等) を jar 内に同梱し、`java -jar Juml.jar` 単独で動作可能に
     * 配布 zip も `libs/` ディレクトリ無しのフラット構成に変更
 
 1.5
@@ -375,9 +375,9 @@ Change log
 1.3
 --------
 
-* フォント及び色の指定機能の実装(PR:https://github.com/knaou/padtools/pull/5)
+* フォント及び色の指定機能の実装(PR:https://github.com/knaou/juml/pull/5)
 * bugfix
-    * https://github.com/knaou/padtools/pull/5
+    * https://github.com/knaou/juml/pull/5
 
 1.2
 --------
@@ -404,8 +404,8 @@ Change log
 * エディやコンバータエントリポイントを統合化
     * -o オプションを使用すると、エディタを起動せず変換（コンバート）のみを行う
     * 例)
-        * PadTools_consoiile.exe -- -o pad.png -s 2 pad.spd
-        * PadTools.sh -o pad.png -s 2 pad.spd
+        * Juml_consoiile.exe -- -o pad.png -s 2 pad.spd
+        * Juml.sh -o pad.png -s 2 pad.spd
 
 
 1.0

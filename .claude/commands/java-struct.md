@@ -7,7 +7,7 @@ allowed-tools: Read, Bash
 
 対象ファイル: `$ARGUMENTS`
 
-`$ARGUMENTS` が空の場合は `src/main/java/padtools/core/formats/uml/JavaStructureExtractor.java` を対象にする。
+`$ARGUMENTS` が空の場合は `src/main/java/juml/core/formats/uml/JavaStructureExtractor.java` を対象にする。
 
 ### 手順
 

@@ -28,7 +28,7 @@ assignees: ''
 
 - OS:
 - Java バージョン (`java -version`):
-- PadTools のバージョン (jar の `Implementation-Version` または配布物のバージョン):
+- Juml のバージョン (jar の `Implementation-Version` または配布物のバージョン):
 
 ## 補足
 

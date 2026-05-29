@@ -1,8 +1,8 @@
-PadTools 統合テスト用サンプルソース
+Juml 統合テスト用サンプルソース
 ====================================
 
 このディレクトリは `RealWorldSampleParseTest` から参照される、外部 OSS プロジェクト由来の
-実ソースファイル群です。PadTools の `JavaLexer` / `JavaStructureExtractor` /
+実ソースファイル群です。Juml の `JavaLexer` / `JavaStructureExtractor` /
 `AidlParser` / `AndroidManifestParser` / `GradleScriptParser` /
 `PlantUmlClassDiagram` が、現実世界の Java/Android プロジェクトでもクラッシュせず
 期待どおりに構造を抽出できることを保証する用途に限って同梱しています。

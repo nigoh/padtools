@@ -221,6 +221,24 @@ figure.uml-fig figcaption b { color: var(--accent); font-weight: 600; }
 .diagram-svg .u-msg-lbl { fill: var(--text); font-size: 10.5px; }
 .diagram-svg .u-self { fill: none; stroke: var(--accent); stroke-width: 1.3; }
 
+/* 状態遷移図（state machine） */
+.diagram-svg .u-state { fill: var(--bg-soft); stroke: var(--accent); stroke-width: 1.2; }
+.diagram-svg .u-state-nm { fill: var(--text); font-weight: 600; }
+.diagram-svg .u-state-sub { fill: var(--text-dim); }
+.diagram-svg .u-init { fill: var(--text); stroke: none; }
+.diagram-svg .u-final-o { fill: none; stroke: var(--text); stroke-width: 1.4; }
+.diagram-svg .u-final-i { fill: var(--text); stroke: none; }
+.diagram-svg .u-trans { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.diagram-svg .u-trans-lbl { fill: var(--text-dim); font-size: 10px; }
+
+/* アクティビティ図（activity） */
+.diagram-svg .u-act-node { fill: var(--bg-soft); stroke: var(--accent-2); stroke-width: 1.2; }
+.diagram-svg .u-act-nm { fill: var(--text); }
+.diagram-svg .u-dec { fill: var(--bg-card); stroke: var(--accent-3); stroke-width: 1.2; }
+.diagram-svg .u-start { fill: var(--text); stroke: none; }
+.diagram-svg .u-end-o { fill: none; stroke: var(--text); stroke-width: 1.6; }
+.diagram-svg .u-end-i { fill: var(--text); stroke: none; }
+
 /* alt / loop / opt などの結合フラグメント枠 */
 .diagram-svg .u-frame { fill: none; stroke: var(--accent-3); stroke-width: 1; stroke-dasharray: 3 3; }
 .diagram-svg .u-frame-tab { fill: var(--bg-soft); stroke: var(--accent-3); stroke-width: 1; }
@@ -249,6 +267,21 @@ figure.uml-fig figcaption b { color: var(--accent); font-weight: 600; }
 .uml-legend .li { display: flex; align-items: center; gap: .55rem; color: var(--text-dim); }
 .uml-legend .li svg { flex: 0 0 auto; }
 .uml-legend code { white-space: nowrap; }
+/* 凡例内のミニ SVG は .diagram-svg の width:100% を打ち消し、属性サイズを保つ */
+.uml-legend .diagram-svg { width: auto; max-width: none; flex: 0 0 auto; }
+
+/* ── 図のタップ拡大（ライトボックス） ───────────────────────────── */
+figure.uml-fig .diagram-svg { cursor: zoom-in; }
+.uml-lightbox { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.88);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.uml-lightbox:not(.open) { display: none; }
+.uml-lightbox .lb-scroll { position: absolute; inset: 0; overflow: auto;
+  -webkit-overflow-scrolling: touch; padding: 3rem .5rem 1rem; }
+.uml-lightbox svg.diagram-svg { max-width: none; height: auto; margin: 0 auto; cursor: default; }
+.uml-lightbox .lb-close { position: fixed; top: .5rem; right: .6rem; z-index: 201;
+  background: var(--pill-bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; font-size: 1.4rem; line-height: 1; padding: .05em .5em; cursor: pointer; }
+.uml-lightbox .lb-close:hover { color: var(--accent); border-color: var(--accent); }
 
 /* mobile */
 .menu-btn { display: none; background: var(--pill-bg); border: 1px solid var(--border); color: var(--text);
@@ -266,4 +299,28 @@ figure.uml-fig figcaption b { color: var(--accent); font-weight: 600; }
   code:not(pre code), .pill, kbd, td code {
     white-space: normal; overflow-wrap: anywhere; word-break: break-word;
   }
+
+  /* 図はタップで拡大できる旨をキャプションに添える */
+  figure.uml-fig figcaption::after { content: " 🔍 タップで拡大"; color: var(--accent); white-space: nowrap; }
+
+  /* テーブルを 1 行 = 1 カードに再構成（app.js が data-label を付与） */
+  .table-wrap.cardify { overflow: visible; border: none; border-radius: 0; }
+  .table-wrap.cardify table, .table-wrap.cardify tbody,
+  .table-wrap.cardify tr, .table-wrap.cardify td { display: block; width: auto; }
+  .table-wrap.cardify thead { display: none; }
+  .table-wrap.cardify tr {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: .55rem .85rem; margin: 0 0 .7rem;
+  }
+  .table-wrap.cardify tr:hover { background: var(--bg-card); }
+  .table-wrap.cardify tr.hidden { display: none; }
+  .table-wrap.cardify td { border: none; padding: .22rem 0; }
+  .table-wrap.cardify td::before {
+    content: attr(data-label); display: block; color: var(--text-faint);
+    font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px;
+    margin-bottom: .05rem;
+  }
+  .table-wrap.cardify td:first-child { color: var(--text); font-weight: 600; }
+  .table-wrap.cardify td:first-child::before { color: var(--accent); }
+  .table-wrap.cardify td:empty { display: none; }
 }

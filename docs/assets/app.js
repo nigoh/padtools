@@ -72,4 +72,51 @@
     input.addEventListener('input', refresh);
     refresh();
   });
+
+  // --- responsive tables: derive per-cell labels from <thead> for mobile cards ---
+  document.querySelectorAll('.table-wrap > table').forEach(function (tbl) {
+    var ths = tbl.querySelectorAll('thead th');
+    if (!ths.length) return;
+    var labels = Array.prototype.map.call(ths, function (t) { return t.textContent.trim(); });
+    tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+      Array.prototype.forEach.call(tr.children, function (td, i) {
+        if (labels[i] && !td.hasAttribute('data-label')) td.setAttribute('data-label', labels[i]);
+      });
+    });
+    if (tbl.parentNode) tbl.parentNode.classList.add('cardify');
+  });
+
+  // --- tap-to-enlarge for UML diagrams (lightbox) ---
+  var figSvgs = document.querySelectorAll('figure.uml-fig .diagram-svg');
+  if (figSvgs.length) {
+    var lb = document.createElement('div');
+    lb.className = 'uml-lightbox';
+    lb.innerHTML = '<button class="lb-close" type="button" aria-label="閉じる">×</button><div class="lb-scroll"></div>';
+    document.body.appendChild(lb);
+    var scroll = lb.querySelector('.lb-scroll');
+    function closeLb() { lb.classList.remove('open'); scroll.innerHTML = ''; document.body.style.overflow = ''; }
+    lb.addEventListener('click', function (e) {
+      if (e.target === lb || e.target === scroll || e.target.classList.contains('lb-close')) closeLb();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLb(); });
+    figSvgs.forEach(function (svg) {
+      svg.addEventListener('click', function () {
+        var clone = svg.cloneNode(true);
+        var vb = (svg.getAttribute('viewBox') || '0 0 960 600').split(/\s+/);
+        var w = parseFloat(vb[2]) || 960;
+        // モバイルでは画面幅の約 1.7 倍まで拡大して文字を読めるサイズに。
+        // デスクトップは自然幅（横スクロール不要）で表示。
+        var target = window.innerWidth <= 880
+          ? Math.max(w, Math.round(window.innerWidth * 1.7))
+          : w;
+        clone.setAttribute('class', 'diagram-svg');
+        clone.style.width = target + 'px';
+        scroll.innerHTML = '';
+        scroll.appendChild(clone);
+        lb.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        scroll.scrollTop = 0; scroll.scrollLeft = 0;
+      });
+    });
+  }
 })();

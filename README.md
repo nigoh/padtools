@@ -42,7 +42,8 @@ GUI の操作、CLI の全オプション、各図種の詳細、ビルド方法
 * [プロジェクト概要](docs/project-summary.html) — 何ができるか・構成・ビルド・主要依存ライブラリ
 * [GUI 操作マニュアル](docs/gui-manual.html) — 起動・ツールバー・各図種の操作・スタイル設定・ショートカット・**巨大な図が描画できないときの対処**
 * [開発者リファレンス](docs/developer-reference.html) — CLI 全フラグ・図種カタログ・GUI 内部・解析エンジン・**解析対象と既知の制約**
-* [Claude エージェント / スキル導入手順](.claude/SETUP_CLAUDE_AGENTS_SKILLS.md) — AOSP / AAOS 解析向けの Claude Code エージェント・スキル (リポジトリの `.claude/` 配下) の導入手順
+* [Claude Code 連携](docs/claude-code.html) — `.claude/` 配下のエージェント・スキル・スラッシュコマンド (AOSP / AAOS 解析・Java 解析エンジン) のカタログと使い方
+* [Claude エージェント / スキル導入手順](.claude/SETUP_CLAUDE_AGENTS_SKILLS.md) — 上記の Claude Code エージェント・スキルをユーザホーム `~/.claude/` に配置する手順
 
 オープンソースについて
 ------------------------------------------------

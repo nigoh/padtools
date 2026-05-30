@@ -528,15 +528,33 @@ body.v2 pre .copy-btn { top: .35rem; opacity: .85; }
 /* --- 図パネルに accent の上帯 --- */
 body.v2 figure.uml-fig { border-top: 3px solid var(--accent); }
 
-/* --- 表→定義リスト（app.js が 2 列表を変換） --- */
-body.v2 .deflist { margin: 1.1rem 0; display: grid; gap: .5rem; }
+/* --- 表→定義リスト（app.js が 2 列表を変換）。
+       「箱」にすると押下できそうな偽アフォーダンスになるため、カード化はせず
+       行区切り＋中立色の用語で「データ一覧」として見せる。 --- */
+body.v2 .deflist { margin: 1.1rem 0; border-top: 1px solid var(--border); }
 body.v2 .deflist .row {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-  padding: .6rem .9rem; display: grid; grid-template-columns: minmax(120px, 16em) 1fr; gap: .2rem 1rem;
+  display: grid; grid-template-columns: minmax(140px, 15em) 1fr; gap: .15rem 1.4rem;
+  padding: .6rem .3rem; border-bottom: 1px solid var(--border);
 }
-body.v2 .deflist dt { color: var(--accent); font-weight: 650; margin: 0; }
+body.v2 .deflist dt { color: var(--text); font-weight: 650; margin: 0; }
+body.v2 .deflist dt::before {
+  content: ""; display: inline-block; width: .5em; height: .5em; margin-right: .5em;
+  border-radius: 2px; background: var(--cat, var(--accent)); vertical-align: middle;
+}
 body.v2 .deflist dd { color: var(--text-dim); margin: 0; }
 @media (max-width: 620px) {
-  body.v2 .deflist .row { grid-template-columns: 1fr; }
-  body.v2 .deflist dt { color: var(--accent); }
+  body.v2 .deflist .row { grid-template-columns: 1fr; gap: .1rem; padding: .55rem .2rem; }
+}
+
+/* --- モバイルのテーブル→カードも「箱」をやめ、区切り線でレコードを分ける
+       （押下できそうな見た目を避ける）。--- */
+@media (max-width: 880px) {
+  body.v2 .table-wrap.cardify { border: none; }
+  body.v2 .table-wrap.cardify tr {
+    background: none; border: none; border-bottom: 1px solid var(--border);
+    border-radius: 0; padding: .7rem .2rem; margin: 0;
+  }
+  body.v2 .table-wrap.cardify tr:first-child { border-top: 1px solid var(--border); }
+  body.v2 .table-wrap.cardify td:first-child { color: var(--text); }
+  body.v2 .table-wrap.cardify td:first-child::before { color: var(--cat, var(--accent)); }
 }

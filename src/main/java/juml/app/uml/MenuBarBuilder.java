@@ -62,6 +62,10 @@ public final class MenuBarBuilder {
         public Consumer<DiagramKind> syncDiagramToggle;
         public Consumer<String> applyTheme;
         public Runnable openStyleSettings;
+        /** Settings &gt; Preferences... のアクション (アプリ全体設定ダイアログ)。 */
+        public Runnable openPreferences;
+        /** Settings &gt; Clear Analysis Cache のアクション。 */
+        public Runnable clearAnalysisCache;
         /** ズーム操作コールバック。 */
         public Runnable zoomIn;
         public Runnable zoomOut;
@@ -127,6 +131,7 @@ public final class MenuBarBuilder {
         bar.add(buildDiagramMenu(diagramItems, diagramGroup));
         bar.add(buildViewMenu());
         bar.add(buildStyleMenu(themeItems, themeGroup));
+        bar.add(buildSettingsMenu());
         bar.add(buildHelpMenu());
 
         return new Result(bar, cancelLoadingItem, diagramItems, themeItems,
@@ -250,13 +255,6 @@ public final class MenuBarBuilder {
         JMenuItem clearScope = new JMenuItem("Clear Scope");
         clearScope.addActionListener(e -> cb.clearScope.run());
         m.add(clearScope);
-        m.addSeparator();
-        JMenuItem enableGraphviz = new JMenuItem("Enable Graphviz (dot)...");
-        enableGraphviz.setToolTipText(
-                "大きな図で純 Java の Smetana レイアウトが破綻する場合、"
-                + "Graphviz dot を有効にすると安定して描画できます");
-        enableGraphviz.addActionListener(e -> cb.enableGraphviz.run());
-        m.add(enableGraphviz);
         return m;
     }
 
@@ -329,6 +327,34 @@ public final class MenuBarBuilder {
         JMenuItem advanced = new JMenuItem("Style Settings...");
         advanced.addActionListener(e -> cb.openStyleSettings.run());
         m.add(advanced);
+        return m;
+    }
+
+    private JMenu buildSettingsMenu() {
+        JMenu m = new JMenu("Settings");
+        m.setMnemonic(KeyEvent.VK_T);
+        JMenuItem preferences = new JMenuItem("Preferences...");
+        preferences.setToolTipText("アプリ全体の設定 (外観 / 起動時の動作)");
+        preferences.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, menuMask));
+        preferences.addActionListener(e -> cb.openPreferences.run());
+        m.add(preferences);
+        m.addSeparator();
+        JMenuItem styleSettings = new JMenuItem("Style Settings...");
+        styleSettings.setToolTipText("図のスタイル / シーケンス / クラス図の詳細設定");
+        styleSettings.addActionListener(e -> cb.openStyleSettings.run());
+        m.add(styleSettings);
+        JMenuItem enableGraphviz = new JMenuItem("Enable Graphviz (dot)...");
+        enableGraphviz.setToolTipText(
+                "大きな図で純 Java の Smetana レイアウトが破綻する場合、"
+                + "Graphviz dot を有効にすると安定して描画できます");
+        enableGraphviz.addActionListener(e -> cb.enableGraphviz.run());
+        m.add(enableGraphviz);
+        m.addSeparator();
+        JMenuItem clearCache = new JMenuItem("Clear Analysis Cache");
+        clearCache.setToolTipText(
+                "現在のプロジェクトの解析キャッシュ (メモリ + ディスク) を破棄して再解析します");
+        clearCache.addActionListener(e -> cb.clearAnalysisCache.run());
+        m.add(clearCache);
         return m;
     }
 

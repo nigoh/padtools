@@ -182,6 +182,8 @@ public class UmlMainFrame extends JFrame {
         mcb.syncDiagramToggle = k -> controller.syncDiagramToggle(k);
         mcb.applyTheme = this::applyTheme;
         mcb.openStyleSettings = this::openStyleSettings;
+        mcb.openPreferences = this::openPreferences;
+        mcb.clearAnalysisCache = this::clearAnalysisCache;
         mcb.zoomIn = () -> tabPane.zoomInActive();
         mcb.zoomOut = () -> tabPane.zoomOutActive();
         mcb.zoomReset = () -> tabPane.zoomResetActive();
@@ -389,6 +391,57 @@ public class UmlMainFrame extends JFrame {
         }
         saveCurrentProjectSettings();
         applyStyle(r.style);
+    }
+
+    /** アプリ全体設定 (Preferences) ダイアログを開き、結果を永続化する。 */
+    private void openPreferences() {
+        Setting setting = Main.getSetting();
+        String curLaf = setting != null ? setting.getLookAndFeel() : "SYSTEM";
+        boolean curRestore = setting != null && setting.isRestoreLastProjectOnStartup();
+        PreferencesDialog.Result r = PreferencesDialog.showDialog(this, curLaf, curRestore);
+        if (r == null) {
+            return;
+        }
+        boolean lafChanged = !r.lookAndFeel.equalsIgnoreCase(curLaf);
+        try {
+            if (setting != null) {
+                setting.setLookAndFeel(r.lookAndFeel);
+                setting.setRestoreLastProjectOnStartup(r.restoreLastProjectOnStartup);
+                Main.saveSetting();
+            }
+        } catch (RuntimeException ignored) {
+            // 設定保存はベストエフォート
+        }
+        if (lafChanged) {
+            JOptionPane.showMessageDialog(this,
+                    "Look & Feel の変更はアプリの再起動後に反映されます。",
+                    "Preferences", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /**
+     * 現在のプロジェクトの解析キャッシュ (メモリ + ディスク) を破棄し、再解析する。
+     * プロジェクト未読込なら何もせず通知のみ。
+     */
+    private void clearAnalysisCache() {
+        File root = cache.getProjectRoot();
+        if (root == null) {
+            JOptionPane.showMessageDialog(this,
+                    "クリアする解析キャッシュがありません (プロジェクト未読込)。",
+                    "Clear Analysis Cache", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "現在のプロジェクトの解析キャッシュ (メモリ + ディスク) を破棄して\n"
+                        + "再解析しますか?",
+                "Clear Analysis Cache",
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (choice != JOptionPane.YES_OPTION) {
+            return;
+        }
+        cache.invalidate();
+        status.setText("Cleared analysis cache. Reloading...");
+        loadProject(root);
     }
 
     /** スタイル変更を全方位 (レンダラ / 永続化 / メニュー UI / 再描画) に反映する。 */

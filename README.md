@@ -180,7 +180,7 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 クラス図などが大きすぎて GUI プレビューで「Couldn't render this diagram」になる場合、純 Java の
 Smetana レイアウトエンジンが破綻しています。より堅牢な **Graphviz (dot)** を使うと描画できます。
 
-* **GUI から有効化 (再起動不要)**: メニューの `Diagram → Enable Graphviz (dot)…` を選択します。
+* **GUI から有効化 (再起動不要)**: メニューの `Settings → Enable Graphviz (dot)…` を選択します。
   PATH / 環境変数 / 同梱バイナリを再検出し、見つからなければ dot 実行ファイルの場所を指定できます。
   有効化すると開いている図がその場で再描画されます。
 * **環境変数で指定**: 起動前に `GRAPHVIZ_DOT=/path/to/dot`

@@ -67,6 +67,11 @@ public class Setting {
     /** コールグラフの最大追跡階層数 (1〜10)。 */
     private int callGraphMaxDepth = 4;
 
+    /** アプリ全体の Look &amp; Feel キー ("SYSTEM" / "CROSS_PLATFORM" / "NIMBUS")。 */
+    private String lookAndFeel = "SYSTEM";
+    /** 起動時に前回開いたプロジェクトを自動で復元するか。 */
+    private boolean restoreLastProjectOnStartup = false;
+
     public int getWindowX() { return windowX; }
     public void setWindowX(int windowX) { this.windowX = windowX; }
     public int getWindowY() { return windowY; }
@@ -126,6 +131,15 @@ public class Setting {
     public int getCallGraphMaxDepth() { return callGraphMaxDepth; }
     public void setCallGraphMaxDepth(int v) {
         this.callGraphMaxDepth = Math.max(1, Math.min(10, v));
+    }
+
+    public String getLookAndFeel() { return lookAndFeel; }
+    public void setLookAndFeel(String v) {
+        this.lookAndFeel = (v == null || v.isEmpty()) ? "SYSTEM" : v;
+    }
+    public boolean isRestoreLastProjectOnStartup() { return restoreLastProjectOnStartup; }
+    public void setRestoreLastProjectOnStartup(boolean v) {
+        this.restoreLastProjectOnStartup = v;
     }
 
     /** 永続化済みの値から {@link DiagramStyle} を組み立てて返す。 */
@@ -193,6 +207,9 @@ public class Setting {
         props.setProperty("classDiagram.hiddenAnnotations",
                 classDiagramHiddenAnnotations);
         props.setProperty("callGraph.maxDepth", Integer.toString(callGraphMaxDepth));
+        props.setProperty("app.lookAndFeel", lookAndFeel);
+        props.setProperty("app.restoreLastProjectOnStartup",
+                Boolean.toString(restoreLastProjectOnStartup));
 
         try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f))) {
             props.storeToXML(bos, "Juml Settings");
@@ -252,6 +269,9 @@ public class Setting {
                 props.getProperty("classDiagram.hiddenAnnotations"),
                 "Override,SuppressWarnings");
         s.callGraphMaxDepth = parseIntSafe(props.getProperty("callGraph.maxDepth"), 4);
+        s.lookAndFeel = stringOrDefault(props.getProperty("app.lookAndFeel"), "SYSTEM");
+        s.restoreLastProjectOnStartup = parseBooleanSafe(
+                props.getProperty("app.restoreLastProjectOnStartup"), false);
 
         return s;
     }

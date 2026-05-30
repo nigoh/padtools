@@ -119,4 +119,92 @@
       });
     });
   }
+
+  // --- v2 readability/navigation enhancements (only on <body class="v2">) ---
+  if (document.body.classList.contains('v2')) {
+    // reading progress bar
+    var bar = document.createElement('div');
+    bar.className = 'read-progress';
+    document.body.appendChild(bar);
+    function updateProgress() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.width = (max > 0 ? (h.scrollTop || document.body.scrollTop) / max * 100 : 0) + '%';
+    }
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    window.addEventListener('resize', updateProgress);
+    updateProgress();
+
+    // back-to-top button
+    var toTop = document.createElement('button');
+    toTop.className = 'to-top'; toTop.type = 'button';
+    toTop.setAttribute('aria-label', 'トップへ戻る'); toTop.textContent = '↑';
+    toTop.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+    document.body.appendChild(toTop);
+    function toggleToTop() { toTop.classList.toggle('show', (window.scrollY || 0) > 600); }
+    window.addEventListener('scroll', toggleToTop, { passive: true });
+    toggleToTop();
+
+    // heading permalink anchors (link h2 to its section id, and h3[id] to itself)
+    document.querySelectorAll('main.content section[id] > h2').forEach(function (h) {
+      addAnchor(h, h.parentNode.id);
+    });
+    document.querySelectorAll('main.content h3[id]').forEach(function (h) {
+      addAnchor(h, h.id);
+    });
+    function addAnchor(h, id) {
+      if (!id || h.querySelector('.anchor')) return;
+      var a = document.createElement('a');
+      a.className = 'anchor'; a.href = '#' + id; a.textContent = '#';
+      a.setAttribute('aria-label', 'このセクションへのリンク');
+      h.appendChild(a);
+    }
+
+    // category colours: assign a hue per TOC group to its sections + sidebar
+    var CAT = ['var(--accent)', 'var(--accent-2)', 'var(--accent-3)', 'var(--warn)'];
+    var toc = document.getElementById('toc');
+    if (toc) {
+      var gi = -1, secCat = {};
+      Array.prototype.forEach.call(toc.children, function (el) {
+        if (el.classList && el.classList.contains('group')) {
+          gi++; el.style.setProperty('--cat', CAT[gi % CAT.length]);
+        } else if (el.tagName === 'A') {
+          var c = CAT[(gi < 0 ? 0 : gi) % CAT.length];
+          el.style.setProperty('--cat', c);
+          var href = el.getAttribute('href') || '';
+          if (href.charAt(0) === '#') secCat[href.slice(1)] = c;
+        }
+      });
+      Object.keys(secCat).forEach(function (id) {
+        var sec = document.getElementById(id);
+        if (sec && sec.tagName === 'SECTION') sec.style.setProperty('--cat', secCat[id]);
+      });
+    }
+
+    // code blocks: tag a language label for the decorative header
+    document.querySelectorAll('main.content pre').forEach(function (pre) {
+      var t = pre.textContent || '';
+      var lang = '';
+      if (/@startuml|@enduml/.test(t)) lang = 'puml';
+      else if (/(^|\n)\s*(java -jar|\.\/gradlew|sudo |apt-get|cd |git )/.test(t)) lang = 'bash';
+      else if (/\b(class |interface |void |public |private |import )/.test(t)) lang = 'java';
+      if (lang) pre.setAttribute('data-lang', lang);
+    });
+
+    // 2-column tables -> definition list (lighter, more scannable)
+    document.querySelectorAll('main.content .table-wrap > table').forEach(function (tbl) {
+      if (tbl.querySelectorAll('thead th').length !== 2) return;
+      var wrap = tbl.parentNode;
+      var dl = document.createElement('dl');
+      dl.className = 'deflist';
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        if (tr.children.length < 2) return;
+        var row = document.createElement('div'); row.className = 'row';
+        var dt = document.createElement('dt'); dt.innerHTML = tr.children[0].innerHTML;
+        var dd = document.createElement('dd'); dd.innerHTML = tr.children[1].innerHTML;
+        row.appendChild(dt); row.appendChild(dd); dl.appendChild(row);
+      });
+      if (dl.children.length && wrap.parentNode) wrap.parentNode.replaceChild(dl, wrap);
+    });
+  }
 })();

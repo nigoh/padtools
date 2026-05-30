@@ -45,6 +45,7 @@
       <a href="#save">図の保存・エクスポート</a>
       <a href="#impact">Impact 解析</a>
       <a href="#persist">設定の自動保存</a>
+      <a href="#graphviz">巨大な図が描画できないとき</a>
       <a href="#shortcuts">ショートカット一覧</a>
     </nav>
   </aside>
@@ -386,6 +387,21 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
           <tr><td>クラス図</td><td>プリセット・フィールド/メソッド/アノテーション表示・PUBLIC_ONLY・コメント最大長</td></tr>
         </tbody>
       </table></div>
+    </section>
+
+    <section id="graphviz">
+      <h2>巨大な図が描画できないとき（Graphviz）</h2>
+      <p>クラス図などが大きすぎて GUI プレビューで <b>「Couldn't render this diagram」</b> になる場合、純 Java の <b>Smetana</b> レイアウトエンジンが破綻しています。より堅牢な <b>Graphviz (dot)</b> を使うと描画できます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>方法</th><th>手順</th></tr></thead>
+        <tbody>
+          <tr><td><b>GUI から有効化</b>（再起動不要）</td><td>メニューの <b>Settings → Enable Graphviz (dot)…</b> を選択。PATH / 環境変数 / 同梱バイナリを再検出し、見つからなければ dot 実行ファイルの場所を指定できます。有効化すると開いている図がその場で再描画されます。</td></tr>
+          <tr><td><b>環境変数で指定</b></td><td>起動前に <code>GRAPHVIZ_DOT=/path/to/dot</code>（または <code>-Dnet.sourceforge.plantuml.GRAPHVIZ_DOT=…</code>）を設定すると、起動時に自動検出されます。</td></tr>
+          <tr><td><b>配布物へ同梱</b></td><td><code>bundle/graphviz/&lt;platform&gt;/dot</code>（例 <code>linux-amd64</code> / <code>mac-aarch64</code> / <code>windows-amd64</code>）に dot を置くと jar 隣接バイナリとして自動検出。Linux/Mac は <code>./gradlew copySystemDot</code> で PATH 上の dot をコピーし、<code>./gradlew makeZip</code> で配布 ZIP に同梱できます（動的リンクのため同一 OS / ライブラリ環境でのみ動作）。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tip"><b>PNG エクスポートで切れる場合:</b> 既定でキャンバス上限を 16384 へ引き上げ、<code>scale max</code> で自動縮小しています。それでも収まらない極端な図は、ベクターで上限の影響を受けない <b>SVG エクスポート</b>を使うか、<b>Diagram → Preset / Scope…</b> で範囲を絞ってください。</div>
+      <div class="note"><b>関連:</b> Smetana / キャンバス上限の詳細は <a href="./developer-reference.html#inputs">開発者リファレンスの既知の制約</a>、dot 検出順は <a href="./developer-reference.html#render">PlantUML 描画</a>を参照。</div>
     </section>
 
     <section id="shortcuts">

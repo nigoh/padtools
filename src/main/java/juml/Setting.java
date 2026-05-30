@@ -37,6 +37,10 @@ public class Setting {
     private String styleFontName = "";
     private int styleFontSize = 0;
     private String styleDirection = DiagramStyle.Direction.DEFAULT.name();
+    private String styleLineType = DiagramStyle.LineType.DEFAULT.name();
+    private String styleShadowing = DiagramStyle.Shadowing.DEFAULT.name();
+    private int styleNodeSep = 0;
+    private int styleRankSep = 0;
     private String styleCustomSkinparam = "";
     /** シーケンス図に JavaDoc / コメントを note として表示するか。 */
     private boolean sequenceShowComments = true;
@@ -136,6 +140,10 @@ public class Setting {
         s.setFontName(styleFontName);
         s.setFontSize(styleFontSize);
         s.setDirection(parseDirection(styleDirection));
+        s.setLineType(parseLineType(styleLineType));
+        s.setShadowing(parseShadowing(styleShadowing));
+        s.setNodeSep(styleNodeSep);
+        s.setRankSep(styleRankSep);
         s.setCustomSkinparam(styleCustomSkinparam);
         return s;
     }
@@ -148,6 +156,10 @@ public class Setting {
         styleFontName = s.getFontName();
         styleFontSize = s.getFontSize();
         styleDirection = s.getDirection().name();
+        styleLineType = s.getLineType().name();
+        styleShadowing = s.getShadowing().name();
+        styleNodeSep = s.getNodeSep();
+        styleRankSep = s.getRankSep();
         styleCustomSkinparam = s.getCustomSkinparam();
     }
 
@@ -171,6 +183,10 @@ public class Setting {
         props.setProperty("style.fontName", styleFontName);
         props.setProperty("style.fontSize", Integer.toString(styleFontSize));
         props.setProperty("style.direction", styleDirection);
+        props.setProperty("style.lineType", styleLineType);
+        props.setProperty("style.shadowing", styleShadowing);
+        props.setProperty("style.nodeSep", Integer.toString(styleNodeSep));
+        props.setProperty("style.rankSep", Integer.toString(styleRankSep));
         props.setProperty("style.customSkinparam", styleCustomSkinparam);
         props.setProperty("sequence.showComments", Boolean.toString(sequenceShowComments));
         props.setProperty("sequence.commentStyle", sequenceCommentStyle);
@@ -225,6 +241,12 @@ public class Setting {
         s.styleFontSize = parseIntSafe(props.getProperty("style.fontSize"), 0);
         s.styleDirection = stringOrDefault(props.getProperty("style.direction"),
                 DiagramStyle.Direction.DEFAULT.name());
+        s.styleLineType = stringOrDefault(props.getProperty("style.lineType"),
+                DiagramStyle.LineType.DEFAULT.name());
+        s.styleShadowing = stringOrDefault(props.getProperty("style.shadowing"),
+                DiagramStyle.Shadowing.DEFAULT.name());
+        s.styleNodeSep = parseIntSafe(props.getProperty("style.nodeSep"), 0);
+        s.styleRankSep = parseIntSafe(props.getProperty("style.rankSep"), 0);
         s.styleCustomSkinparam = stringOrEmpty(props.getProperty("style.customSkinparam"));
         s.sequenceShowComments = parseBooleanSafe(
                 props.getProperty("sequence.showComments"), true);
@@ -293,6 +315,28 @@ public class Setting {
             return DiagramStyle.Direction.valueOf(name);
         } catch (IllegalArgumentException e) {
             return DiagramStyle.Direction.DEFAULT;
+        }
+    }
+
+    private static DiagramStyle.LineType parseLineType(String name) {
+        if (name == null || name.isEmpty()) {
+            return DiagramStyle.LineType.DEFAULT;
+        }
+        try {
+            return DiagramStyle.LineType.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return DiagramStyle.LineType.DEFAULT;
+        }
+    }
+
+    private static DiagramStyle.Shadowing parseShadowing(String name) {
+        if (name == null || name.isEmpty()) {
+            return DiagramStyle.Shadowing.DEFAULT;
+        }
+        try {
+            return DiagramStyle.Shadowing.valueOf(name);
+        } catch (IllegalArgumentException e) {
+            return DiagramStyle.Shadowing.DEFAULT;
         }
     }
 }

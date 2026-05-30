@@ -85,6 +85,10 @@ public class SettingTest {
         assertEquals("", s.getFontName());
         assertEquals(0, s.getFontSize());
         assertEquals(DiagramStyle.Direction.DEFAULT, s.getDirection());
+        assertEquals(DiagramStyle.LineType.DEFAULT, s.getLineType());
+        assertEquals(DiagramStyle.Shadowing.DEFAULT, s.getShadowing());
+        assertEquals(0, s.getNodeSep());
+        assertEquals(0, s.getRankSep());
         assertEquals("", s.getCustomSkinparam());
     }
 
@@ -97,6 +101,10 @@ public class SettingTest {
         style.setFontName("Helvetica");
         style.setFontSize(14);
         style.setDirection(DiagramStyle.Direction.LEFT_TO_RIGHT);
+        style.setLineType(DiagramStyle.LineType.ORTHO);
+        style.setShadowing(DiagramStyle.Shadowing.OFF);
+        style.setNodeSep(45);
+        style.setRankSep(65);
         style.setCustomSkinparam("skinparam shadowing false\n");
         original.setStyle(style);
 
@@ -110,6 +118,10 @@ public class SettingTest {
         assertEquals("Helvetica", out.getFontName());
         assertEquals(14, out.getFontSize());
         assertEquals(DiagramStyle.Direction.LEFT_TO_RIGHT, out.getDirection());
+        assertEquals(DiagramStyle.LineType.ORTHO, out.getLineType());
+        assertEquals(DiagramStyle.Shadowing.OFF, out.getShadowing());
+        assertEquals(45, out.getNodeSep());
+        assertEquals(65, out.getRankSep());
         assertEquals("skinparam shadowing false\n", out.getCustomSkinparam());
     }
 

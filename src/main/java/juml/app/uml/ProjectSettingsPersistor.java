@@ -67,6 +67,20 @@ public final class ProjectSettingsPersistor {
                     style.setDirection(DiagramStyle.Direction.valueOf(saved.get("style.direction")));
                 } catch (IllegalArgumentException ignored) {}
             }
+            if (saved.containsKey("style.lineType")) {
+                try {
+                    style.setLineType(DiagramStyle.LineType.valueOf(saved.get("style.lineType")));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            if (saved.containsKey("style.shadowing")) {
+                try {
+                    style.setShadowing(DiagramStyle.Shadowing.valueOf(saved.get("style.shadowing")));
+                } catch (IllegalArgumentException ignored) {}
+            }
+            if (saved.containsKey("style.nodeSep"))
+                style.setNodeSep(parseIntOrZero(saved.get("style.nodeSep")));
+            if (saved.containsKey("style.rankSep"))
+                style.setRankSep(parseIntOrZero(saved.get("style.rankSep")));
             if (saved.containsKey("style.customSkinparam"))
                 style.setCustomSkinparam(saved.get("style.customSkinparam"));
             s.setStyle(style);
@@ -127,6 +141,10 @@ public final class ProjectSettingsPersistor {
             m.put("style.fontName", style.getFontName());
             m.put("style.fontSize", Integer.toString(style.getFontSize()));
             m.put("style.direction", style.getDirection().name());
+            m.put("style.lineType", style.getLineType().name());
+            m.put("style.shadowing", style.getShadowing().name());
+            m.put("style.nodeSep", Integer.toString(style.getNodeSep()));
+            m.put("style.rankSep", Integer.toString(style.getRankSep()));
             m.put("style.customSkinparam", style.getCustomSkinparam());
             m.put("sequence.showComments", Boolean.toString(s.isSequenceShowComments()));
             m.put("sequence.commentStyle", s.getSequenceCommentStyle());

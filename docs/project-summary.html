@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>プロジェクト概要 — Juml docs</title>
+<meta name="description" content="Juml プロジェクトの概要：何ができるか、構成、ビルド、主要依存ライブラリ。">
+<link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+
+<header class="site-nav">
+  <button class="menu-btn" id="menuBtn" aria-label="メニュー">☰</button>
+  <a class="logo" href="./index.html">Juml<small>docs</small></a>
+  <a class="np" href="./index.html">ホーム</a>
+  <a class="np" href="./developer-reference.html">開発者リファレンス</a>
+  <a class="np" href="./gui-manual.html">GUI マニュアル</a>
+  <a class="np current" href="./project-summary.html">プロジェクト概要</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/nigoh/Juml">GitHub ↗</a>
+</header>
+<div class="backdrop" id="backdrop"></div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <nav id="toc">
+      <a href="#what">これは何？</a>
+      <a href="#features">主な機能</a>
+      <a href="#structure">プロジェクト構成</a>
+      <a href="#build">ビルドと実行</a>
+      <a href="#deps">主要依存ライブラリ</a>
+      <a href="#links">リンク</a>
+    </nav>
+  </aside>
+
+  <main class="content narrow">
+  <div class="content-inner">
+
+    <header class="hero">
+      <h1>Juml プロジェクト概要</h1>
+      <p class="tag">Java / Android プロジェクトを解析し、PlantUML 経由で UML 図を生成する Swing + CLI ツール。</p>
+      <div class="grid" style="margin-top:1.4rem">
+        <div class="card"><div class="stat">v2.1</div><p>UML 専用ツール（旧 PAD/SPD は廃止）</p></div>
+        <div class="card"><div class="stat">256<small> files</small></div><p>本体ソース（約 48.6k LoC）</p></div>
+        <div class="card"><div class="stat">1,553<small> tests</small></div><p>テスト 136 ファイル（約 26k LoC）</p></div>
+        <div class="card"><div class="stat">15</div><p>対応図種</p></div>
+      </div>
+    </header>
+
+    <section id="what">
+      <h2>これは何？</h2>
+      <p><b>Juml 2.1</b> は、Java / Android（Gradle + AndroidManifest.xml + AIDL）プロジェクトを解析し、PlantUML 経由で <b>UML 図を生成する Swing ベースの対話型ツール</b>です。GUI と CLI の両方を備え、PlantUML（Smetana レイアウト）を同梱しているため Graphviz の追加インストールは不要です。</p>
+      <ul>
+        <li>バージョン: <b>2.1</b>（旧 1.x の PAD/SPD 機能は廃止し、UML 専用ツールへ完全転換）</li>
+        <li>ライセンス: <b>MIT</b>（同梱 PlantUML は GPLv3 ではなく MIT 版アーティファクト <code>plantuml-mit</code>）</li>
+        <li>必要環境: <b>Java 17 以上</b>（Windows / macOS / Linux）</li>
+      </ul>
+    </section>
+
+    <section id="features">
+      <h2>主な機能</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>区分</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>UML クラス図</td><td>パッケージ単位グループ化 / 継承・実装・利用関係 / AAOS パターン / Manifest 連携（<code>&lt;&lt;Activity&gt;&gt;</code> 等）/ JavaDoc・アノテーション・enum 定数</td></tr>
+          <tr><td>シーケンス / アクティビティ図</td><td><code>Class.method</code> 起点で多段トレース。<code>if/while/switch/try</code> を <code>alt/loop/group</code> に変換</td></tr>
+          <tr><td>パッケージ / 共通 / 継承 / モジュール図</td><td>パッケージ集約・fan-in 上位・継承ツリー・JPMS（module-info）</td></tr>
+          <tr><td>コンポーネント / Manifest / Deep Link 図</td><td>Activity/Service/Receiver/Provider、<code>exported</code>、uses-permission、VIEW+BROWSABLE</td></tr>
+          <tr><td>Gradle 依存 / Soong 図</td><td>モジュール間 + Maven 依存、<code>libs.versions.toml</code> 解決 / Android.bp 依存</td></tr>
+          <tr><td>解析機能</td><td>影響解析（impact）/ 逆参照（ref-find）/ 関数差分（func-diff）/ 画面遷移 / Room ER / VHAL フロー / AIDL バインディング</td></tr>
+          <tr><td>GUI プレビュー</td><td>Apache Batik による <b>ベクター SVG</b> プレビュー（PNG の 4096×4096 制約を受けない）</td></tr>
+          <tr><td>エクスポート</td><td>SVG / PNG / PUML / Markdown サマリーを出力、<code>--all</code> で一括出力</td></tr>
+        </tbody>
+      </table></div>
+      <p>全機能の詳細は <a href="./developer-reference.html">開発者リファレンス</a>を参照してください。</p>
+    </section>
+
+    <section id="structure">
+      <h2>プロジェクト構成（ソース）</h2>
+      <pre><code>src/main/java/juml/
+├── Main.java                   # CLI / GUI のエントリポイント
+├── app/uml/                    # UML 専用 Swing GUI（UmlMainFrame, DiagramTabPane ほか）
+├── app/cli/                    # CLI ディスパッチと各種コマンド
+├── core/formats/
+│   ├── java/                   # Java/AIDL 字句解析、JavaParser フロントエンド
+│   ├── uml/                    # PlantUML 生成器（クラス/シーケンス/…）、AST 抽出、SQLite db
+│   └── android/                # Gradle / Manifest / Version Catalog / layout / nav パーサ
+├── core/refs, impact, dataflow, funcdiff, screen, aaos, aosp
+└── util/                       # OptionParser / Messages / PathUtil 等</code></pre>
+      <ul>
+        <li>本体: <b>256 ファイル / 約 48.6k LoC</b></li>
+        <li>テスト: JUnit で <b>136 ファイル / 約 26k LoC（約 1,553 テストケース）</b></li>
+      </ul>
+    </section>
+
+    <section id="build">
+      <h2>ビルドと実行</h2>
+      <pre><code>./gradlew test      # ユニットテスト
+./gradlew check     # テスト + Checkstyle (maxWarnings = 0)
+./gradlew jar       # build/libs/Juml.jar（依存内包 fat jar）
+./gradlew makeZip   # 起動補助スクリプト付き配布 zip</code></pre>
+      <pre><code># GUI 起動（引数なしで UML GUI が立ち上がる）
+java -jar Juml.jar [プロジェクトディレクトリ]
+
+# CLI で全成果物を一括出力
+java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp</code></pre>
+    </section>
+
+    <section id="deps">
+      <h2>主要依存ライブラリ</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ライブラリ</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>PlantUML (mit)</td><td>UML 描画（Smetana レイアウトを自動指定し Graphviz 不要）</td></tr>
+          <tr><td>Apache Batik</td><td>SVG をベクターのまま Swing にレンダリング</td></tr>
+          <tr><td>JavaParser + SymbolSolver</td><td>Java 構造抽出・シンボル解決</td></tr>
+          <tr><td>ASM</td><td>外部 JAR/AAR からクラスヘッダ抽出</td></tr>
+          <tr><td>sqlite-jdbc</td><td>解析結果の永続インデックス</td></tr>
+          <tr><td>JFontChooser</td><td>フォント選択ダイアログ</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="links">
+      <h2>リンク</h2>
+      <ul>
+        <li>GitHub: <a href="https://github.com/nigoh/Juml">github.com/nigoh/Juml</a></li>
+        <li><a href="./gui-manual.html">GUI 操作マニュアル</a></li>
+        <li><a href="./developer-reference.html">開発者リファレンス（機能棚卸し）</a></li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>Juml 2.1 — MIT License — Copyright (c) 2015–2026 naou and contributors。</p>
+    </footer>
+
+  </div>
+  </main>
+</div>
+<script src="./assets/app.js"></script>
+</body>
+</html>

@@ -42,11 +42,11 @@ Juml リポジトリから下記をコピー:
 
 ```sh
 # AOSP agent
-cp /home/user/juml/docs/agents/aosp-juml-explorer.md \
+cp .claude/agents/aosp-juml-explorer.md \
    ~/.claude/agents/
 
 # AAOS agent
-cp /home/user/juml/docs/agents/aaos-juml-explorer.md \
+cp .claude/agents/aaos-juml-explorer.md \
    ~/.claude/agents/
 ```
 
@@ -54,11 +54,11 @@ cp /home/user/juml/docs/agents/aaos-juml-explorer.md \
 
 ```sh
 # SKILL.md
-cp /home/user/juml/docs/skills/aosp-juml-analyzer/SKILL.md \
+cp .claude/skills/aosp-juml-analyzer/SKILL.md \
    ~/.claude/skills/aosp-juml-analyzer/
 
 # Cheatsheets
-cp /home/user/juml/docs/skills/aosp-juml-analyzer/cheatsheet-*.md \
+cp .claude/skills/aosp-juml-analyzer/cheatsheet-*.md \
    ~/.claude/skills/aosp-juml-analyzer/
 ```
 
@@ -66,11 +66,11 @@ cp /home/user/juml/docs/skills/aosp-juml-analyzer/cheatsheet-*.md \
 
 ```sh
 # SKILL.md
-cp /home/user/juml/docs/skills/aaos-juml-analyzer/SKILL.md \
+cp .claude/skills/aaos-juml-analyzer/SKILL.md \
    ~/.claude/skills/aaos-juml-analyzer/
 
 # Cheatsheets
-cp /home/user/juml/docs/skills/aaos-juml-analyzer/cheatsheet-*.md \
+cp .claude/skills/aaos-juml-analyzer/cheatsheet-*.md \
    ~/.claude/skills/aaos-juml-analyzer/
 ```
 

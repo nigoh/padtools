@@ -32,16 +32,61 @@ public final class DiagramStyle {
         TOP_TO_BOTTOM
     }
 
+    /**
+     * 関連線（リンク）の描画スタイル。クラス図などで線が交差・湾曲して見づらい場合に
+     * 直交線（ortho）や折れ線（polyline）へ切り替えることで可読性を上げられる。
+     */
+    public enum LineType {
+        /** PlantUML デフォルト（曲線 spline）。指定行を出さない。 */
+        DEFAULT,
+        /** {@code skinparam linetype polyline}（折れ線）。 */
+        POLYLINE,
+        /** {@code skinparam linetype ortho}（直交線）。交差が減り読みやすい。 */
+        ORTHO,
+        /** {@code skinparam linetype spline}（曲線・明示指定）。 */
+        SPLINE
+    }
+
+    /** 影 (shadowing) の有無。DEFAULT は指定行を出さず PlantUML 既定に従う。 */
+    public enum Shadowing {
+        /** 指定なし（PlantUML 既定）。 */
+        DEFAULT,
+        /** {@code skinparam shadowing true}。 */
+        ON,
+        /** {@code skinparam shadowing false}（フラットで見やすい）。 */
+        OFF
+    }
+
     private String theme = "";
     private String backgroundColor = "";
     private String fontName = "";
     private int fontSize = 0;
     private Direction direction = Direction.DEFAULT;
+    private LineType lineType = LineType.DEFAULT;
+    private Shadowing shadowing = Shadowing.DEFAULT;
+    private int nodeSep = 0;
+    private int rankSep = 0;
     private String customSkinparam = "";
 
     /** 全フィールド未指定の既定スタイル。 */
     public static DiagramStyle defaults() {
         return new DiagramStyle();
+    }
+
+    /**
+     * 可読性を優先した推奨スタイルを返す（フォント / 背景は未指定のまま環境依存に委ねる）。
+     *
+     * <p>影なし・直交線・余白広めにすることで、関連の多いクラス図などが読みやすくなる。
+     * Style 設定ダイアログの「可読性優先」ボタンの基準として用いる。</p>
+     */
+    public static DiagramStyle readable() {
+        DiagramStyle s = new DiagramStyle();
+        s.theme = "plain";
+        s.lineType = LineType.ORTHO;
+        s.shadowing = Shadowing.OFF;
+        s.nodeSep = 50;
+        s.rankSep = 60;
+        return s;
     }
 
     /** 値をすべてコピーした独立インスタンスを返す。 */
@@ -52,6 +97,10 @@ public final class DiagramStyle {
         s.fontName = this.fontName;
         s.fontSize = this.fontSize;
         s.direction = this.direction;
+        s.lineType = this.lineType;
+        s.shadowing = this.shadowing;
+        s.nodeSep = this.nodeSep;
+        s.rankSep = this.rankSep;
         s.customSkinparam = this.customSkinparam;
         return s;
     }
@@ -74,6 +123,22 @@ public final class DiagramStyle {
     public void setDirection(Direction direction) {
         this.direction = direction == null ? Direction.DEFAULT : direction;
     }
+
+    public LineType getLineType() { return lineType; }
+    public void setLineType(LineType lineType) {
+        this.lineType = lineType == null ? LineType.DEFAULT : lineType;
+    }
+
+    public Shadowing getShadowing() { return shadowing; }
+    public void setShadowing(Shadowing shadowing) {
+        this.shadowing = shadowing == null ? Shadowing.DEFAULT : shadowing;
+    }
+
+    public int getNodeSep() { return nodeSep; }
+    public void setNodeSep(int nodeSep) { this.nodeSep = Math.max(0, nodeSep); }
+
+    public int getRankSep() { return rankSep; }
+    public void setRankSep(int rankSep) { this.rankSep = Math.max(0, rankSep); }
 
     public String getCustomSkinparam() { return customSkinparam; }
     public void setCustomSkinparam(String customSkinparam) {
@@ -109,6 +174,35 @@ public final class DiagramStyle {
             default:
                 break;
         }
+        switch (lineType) {
+            case POLYLINE:
+                sb.append("skinparam linetype polyline\n");
+                break;
+            case ORTHO:
+                sb.append("skinparam linetype ortho\n");
+                break;
+            case SPLINE:
+                sb.append("skinparam linetype spline\n");
+                break;
+            default:
+                break;
+        }
+        switch (shadowing) {
+            case ON:
+                sb.append("skinparam shadowing true\n");
+                break;
+            case OFF:
+                sb.append("skinparam shadowing false\n");
+                break;
+            default:
+                break;
+        }
+        if (nodeSep > 0) {
+            sb.append("skinparam nodesep ").append(nodeSep).append('\n');
+        }
+        if (rankSep > 0) {
+            sb.append("skinparam ranksep ").append(rankSep).append('\n');
+        }
         if (!customSkinparam.isEmpty()) {
             // ユーザ入力の改行は LF に正規化し、危険なプリプロセッサ系ディレクティブを除去して埋め込む。
             String normalized = customSkinparam.replace("\r\n", "\n").replace('\r', '\n');
@@ -127,15 +221,20 @@ public final class DiagramStyle {
         if (!(o instanceof DiagramStyle)) return false;
         DiagramStyle that = (DiagramStyle) o;
         return fontSize == that.fontSize
+                && nodeSep == that.nodeSep
+                && rankSep == that.rankSep
                 && Objects.equals(theme, that.theme)
                 && Objects.equals(backgroundColor, that.backgroundColor)
                 && Objects.equals(fontName, that.fontName)
                 && direction == that.direction
+                && lineType == that.lineType
+                && shadowing == that.shadowing
                 && Objects.equals(customSkinparam, that.customSkinparam);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(theme, backgroundColor, fontName, fontSize, direction, customSkinparam);
+        return Objects.hash(theme, backgroundColor, fontName, fontSize, direction,
+                lineType, shadowing, nodeSep, rankSep, customSkinparam);
     }
 }

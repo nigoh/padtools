@@ -46,6 +46,70 @@ public class DiagramStyleTest {
     }
 
     @Test
+    public void lineTypeOrthoEmitsSkinparam() {
+        DiagramStyle s = new DiagramStyle();
+        s.setLineType(DiagramStyle.LineType.ORTHO);
+        assertEquals("skinparam linetype ortho\n", s.toPlantUmlPrelude());
+    }
+
+    @Test
+    public void lineTypePolylineEmitsSkinparam() {
+        DiagramStyle s = new DiagramStyle();
+        s.setLineType(DiagramStyle.LineType.POLYLINE);
+        assertEquals("skinparam linetype polyline\n", s.toPlantUmlPrelude());
+    }
+
+    @Test
+    public void shadowingOffEmitsSkinparam() {
+        DiagramStyle s = new DiagramStyle();
+        s.setShadowing(DiagramStyle.Shadowing.OFF);
+        assertEquals("skinparam shadowing false\n", s.toPlantUmlPrelude());
+    }
+
+    @Test
+    public void spacingEmitsNodesepAndRanksep() {
+        DiagramStyle s = new DiagramStyle();
+        s.setNodeSep(40);
+        s.setRankSep(55);
+        String out = s.toPlantUmlPrelude();
+        assertTrue(out, out.contains("skinparam nodesep 40\n"));
+        assertTrue(out, out.contains("skinparam ranksep 55\n"));
+    }
+
+    @Test
+    public void readablePresetEmitsReadabilityLines() {
+        DiagramStyle s = DiagramStyle.readable();
+        String out = s.toPlantUmlPrelude();
+        assertTrue(out, out.contains("!theme plain\n"));
+        assertTrue(out, out.contains("skinparam linetype ortho\n"));
+        assertTrue(out, out.contains("skinparam shadowing false\n"));
+        assertTrue(out, out.contains("skinparam nodesep "));
+        assertTrue(out, out.contains("skinparam ranksep "));
+    }
+
+    @Test
+    public void readablePresetLeavesFontUnspecified() {
+        DiagramStyle s = DiagramStyle.readable();
+        assertEquals("", s.getFontName());
+        assertEquals("", s.getBackgroundColor());
+    }
+
+    @Test
+    public void copyPreservesReadabilityFields() {
+        DiagramStyle s = new DiagramStyle();
+        s.setLineType(DiagramStyle.LineType.ORTHO);
+        s.setShadowing(DiagramStyle.Shadowing.OFF);
+        s.setNodeSep(30);
+        s.setRankSep(70);
+        DiagramStyle c = s.copy();
+        assertEquals(s, c);
+        assertEquals(DiagramStyle.LineType.ORTHO, c.getLineType());
+        assertEquals(DiagramStyle.Shadowing.OFF, c.getShadowing());
+        assertEquals(30, c.getNodeSep());
+        assertEquals(70, c.getRankSep());
+    }
+
+    @Test
     public void topToBottomDirectionEmitsExplicitLine() {
         DiagramStyle s = new DiagramStyle();
         s.setDirection(DiagramStyle.Direction.TOP_TO_BOTTOM);
@@ -88,12 +152,20 @@ public class DiagramStyleTest {
         s.setFontName(null);
         s.setCustomSkinparam(null);
         s.setDirection(null);
+        s.setLineType(null);
+        s.setShadowing(null);
+        s.setNodeSep(-3);
+        s.setRankSep(-9);
         s.setFontSize(-5);
         assertEquals("", s.getTheme());
         assertEquals("", s.getBackgroundColor());
         assertEquals("", s.getFontName());
         assertEquals("", s.getCustomSkinparam());
         assertEquals(DiagramStyle.Direction.DEFAULT, s.getDirection());
+        assertEquals(DiagramStyle.LineType.DEFAULT, s.getLineType());
+        assertEquals(DiagramStyle.Shadowing.DEFAULT, s.getShadowing());
+        assertEquals(0, s.getNodeSep());
+        assertEquals(0, s.getRankSep());
         assertEquals(0, s.getFontSize());
     }
 }

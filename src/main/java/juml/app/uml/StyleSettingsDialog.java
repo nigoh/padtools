@@ -55,12 +55,21 @@ public final class StyleSettingsDialog extends JDialog {
     private final JComboBox<String> themeCombo = new JComboBox<>(THEMES);
     private final JButton bgColorButton = new JButton();
     private final JTextField bgColorField = new JTextField(10);
-    private final JTextField fontField = new JTextField(12);
+    /** フォント選択 (コンボ + プレビュー)。{@link #buildForm} で初期化する。 */
+    private FontPickerField fontPicker;
     private final JSpinner fontSizeSpinner =
             new JSpinner(new SpinnerNumberModel(0, 0, 48, 1));
     private final JRadioButton dirDefault = new JRadioButton("Default (top-to-bottom)");
     private final JRadioButton dirLeftRight = new JRadioButton("Left to right");
     private final JRadioButton dirTopBottom = new JRadioButton("Top to bottom (explicit)");
+    private final JComboBox<String> lineTypeCombo =
+            new JComboBox<>(new String[] { "Default", "Polyline", "Ortho", "Spline" });
+    private final JComboBox<String> shadowingCombo =
+            new JComboBox<>(new String[] { "Default", "On", "Off" });
+    private final JSpinner nodeSepSpinner =
+            new JSpinner(new SpinnerNumberModel(0, 0, 200, 5));
+    private final JSpinner rankSepSpinner =
+            new JSpinner(new SpinnerNumberModel(0, 0, 200, 5));
     private final JTextArea customSkinparamArea = new JTextArea(6, 32);
     private final JCheckBox sequenceShowCommentsCheckbox =
             new JCheckBox("Show JavaDoc / source comments as notes");
@@ -244,14 +253,21 @@ public final class StyleSettingsDialog extends JDialog {
         form.add(bgColorButton, c);
         row++;
 
-        // フォント名
+        // フォント名 (システムにインストールされたフォントから選択。任意入力も可)
         c.gridx = 0; c.gridy = row; c.weightx = 0;
         form.add(new JLabel("Font name:"), c);
-        fontField.setText(initial.getFontName());
-        fontField.setToolTipText(
-                "e.g. Helvetica, Noto Sans CJK JP. Empty = auto-detected Japanese font");
+        fontPicker = new FontPickerField(initial.getFontName());
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
-        form.add(fontField, c);
+        form.add(fontPicker.getComboBox(), c);
+        c.gridwidth = 1;
+        row++;
+
+        // フォントプレビュー
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        fontPicker.getPreview().setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(FontPickerField.previewBorderColor()),
+                BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+        form.add(fontPicker.getPreview(), c);
         c.gridwidth = 1;
         row++;
 
@@ -285,6 +301,64 @@ public final class StyleSettingsDialog extends JDialog {
         dirPanel.add(dirTopBottom);
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
         form.add(dirPanel, c);
+        c.gridwidth = 1;
+        row++;
+
+        // ─── Readability (可読性) ──────────────────────────────────────────
+        // 図が見づらい場合に効く設定群。線種・影・要素間隔を調整できる。
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        c.insets = new Insets(10, 4, 4, 4);
+        form.add(new JSeparator(SwingConstants.HORIZONTAL), c);
+        c.insets = new Insets(4, 4, 4, 4);
+        c.gridwidth = 1;
+        row++;
+
+        c.gridx = 0; c.gridy = row; c.weightx = 1; c.gridwidth = 3;
+        JLabel readHeading = new JLabel("Readability");
+        readHeading.setFont(readHeading.getFont().deriveFont(java.awt.Font.BOLD));
+        form.add(readHeading, c);
+        c.gridwidth = 1;
+        row++;
+
+        // 線種 (linetype)
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Line type:"), c);
+        lineTypeCombo.setSelectedIndex(lineTypeIndex(initial.getLineType()));
+        lineTypeCombo.setToolTipText(
+                "Relation line routing. Ortho (直交線) reduces crossings on dense class diagrams.");
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(lineTypeCombo, c);
+        c.gridwidth = 1;
+        row++;
+
+        // 影 (shadowing)
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Shadowing:"), c);
+        shadowingCombo.setSelectedIndex(shadowingIndex(initial.getShadowing()));
+        shadowingCombo.setToolTipText(
+                "Off gives a flatter, cleaner look that is easier to read.");
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(shadowingCombo, c);
+        c.gridwidth = 1;
+        row++;
+
+        // 要素間隔 (nodesep / ranksep)
+        c.gridx = 0; c.gridy = row; c.weightx = 0;
+        form.add(new JLabel("Spacing:"), c);
+        nodeSepSpinner.setValue(initial.getNodeSep());
+        rankSepSpinner.setValue(initial.getRankSep());
+        ((JSpinner.DefaultEditor) nodeSepSpinner.getEditor()).getTextField()
+                .setToolTipText("nodesep: horizontal gap between nodes. 0 = PlantUML default.");
+        ((JSpinner.DefaultEditor) rankSepSpinner.getEditor()).getTextField()
+                .setToolTipText("ranksep: vertical gap between ranks. 0 = PlantUML default.");
+        JPanel spacingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        spacingPanel.add(new JLabel("node"));
+        spacingPanel.add(nodeSepSpinner);
+        spacingPanel.add(Box.createHorizontalStrut(8));
+        spacingPanel.add(new JLabel("rank"));
+        spacingPanel.add(rankSepSpinner);
+        c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
+        form.add(spacingPanel, c);
         c.gridwidth = 1;
         row++;
 
@@ -478,10 +552,59 @@ public final class StyleSettingsDialog extends JDialog {
         return form;
     }
 
+    private static int lineTypeIndex(DiagramStyle.LineType t) {
+        switch (t) {
+            case POLYLINE: return 1;
+            case ORTHO: return 2;
+            case SPLINE: return 3;
+            default: return 0;
+        }
+    }
+
+    private static DiagramStyle.LineType lineTypeFromIndex(int i) {
+        switch (i) {
+            case 1: return DiagramStyle.LineType.POLYLINE;
+            case 2: return DiagramStyle.LineType.ORTHO;
+            case 3: return DiagramStyle.LineType.SPLINE;
+            default: return DiagramStyle.LineType.DEFAULT;
+        }
+    }
+
+    private static int shadowingIndex(DiagramStyle.Shadowing s) {
+        switch (s) {
+            case ON: return 1;
+            case OFF: return 2;
+            default: return 0;
+        }
+    }
+
+    private static DiagramStyle.Shadowing shadowingFromIndex(int i) {
+        switch (i) {
+            case 1: return DiagramStyle.Shadowing.ON;
+            case 2: return DiagramStyle.Shadowing.OFF;
+            default: return DiagramStyle.Shadowing.DEFAULT;
+        }
+    }
+
+    /** 「可読性優先」: 影なし・直交線・余白広めの推奨スタイルを各コントロールへ適用する。 */
+    private void applyReadabilityPreset() {
+        DiagramStyle r = DiagramStyle.readable();
+        themeCombo.setSelectedItem(r.getTheme());
+        lineTypeCombo.setSelectedIndex(lineTypeIndex(r.getLineType()));
+        shadowingCombo.setSelectedIndex(shadowingIndex(r.getShadowing()));
+        nodeSepSpinner.setValue(r.getNodeSep());
+        rankSepSpinner.setValue(r.getRankSep());
+    }
+
     private JPanel buildButtons() {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton reset = new JButton("Reset to Defaults");
         reset.addActionListener(e -> resetToDefaults());
+        JButton readable = new JButton("Optimize for Readability");
+        readable.setToolTipText(
+                "Apply readability-friendly defaults: plain theme, no shadows, "
+                + "ortho lines, wider spacing. (フォント・背景はそのまま)");
+        readable.addActionListener(e -> applyReadabilityPreset());
         JButton ok = new JButton("OK");
         ok.addActionListener(e -> {
             result = collect();
@@ -492,6 +615,7 @@ public final class StyleSettingsDialog extends JDialog {
             result = null;
             setVisible(false);
         });
+        buttons.add(readable);
         buttons.add(reset);
         buttons.add(Box.createHorizontalStrut(20));
         buttons.add(cancel);
@@ -504,9 +628,13 @@ public final class StyleSettingsDialog extends JDialog {
         DiagramStyle d = DiagramStyle.defaults();
         themeCombo.setSelectedItem(d.getTheme());
         bgColorField.setText(d.getBackgroundColor());
-        fontField.setText(d.getFontName());
+        fontPicker.reset();
         fontSizeSpinner.setValue(d.getFontSize());
         dirDefault.setSelected(true);
+        lineTypeCombo.setSelectedIndex(lineTypeIndex(d.getLineType()));
+        shadowingCombo.setSelectedIndex(shadowingIndex(d.getShadowing()));
+        nodeSepSpinner.setValue(d.getNodeSep());
+        rankSepSpinner.setValue(d.getRankSep());
         customSkinparamArea.setText(d.getCustomSkinparam());
         sequenceShowCommentsCheckbox.setSelected(true);
         sequenceCommentStyleCombo.setSelectedItem("INLINE");
@@ -555,7 +683,7 @@ public final class StyleSettingsDialog extends JDialog {
         Object themeSel = themeCombo.getSelectedItem();
         s.setTheme(themeSel != null ? themeSel.toString() : "");
         s.setBackgroundColor(bgColorField.getText().trim());
-        s.setFontName(fontField.getText().trim());
+        s.setFontName(fontPicker.fontName());
         s.setFontSize((Integer) fontSizeSpinner.getValue());
         if (dirLeftRight.isSelected()) {
             s.setDirection(DiagramStyle.Direction.LEFT_TO_RIGHT);
@@ -564,6 +692,10 @@ public final class StyleSettingsDialog extends JDialog {
         } else {
             s.setDirection(DiagramStyle.Direction.DEFAULT);
         }
+        s.setLineType(lineTypeFromIndex(lineTypeCombo.getSelectedIndex()));
+        s.setShadowing(shadowingFromIndex(shadowingCombo.getSelectedIndex()));
+        s.setNodeSep(((Number) nodeSepSpinner.getValue()).intValue());
+        s.setRankSep(((Number) rankSepSpinner.getValue()).intValue());
         s.setCustomSkinparam(customSkinparamArea.getText());
         Object styleSel = sequenceCommentStyleCombo.getSelectedItem();
         PlantUmlClassDiagram.CommentStyle cs = "NOTE".equals(styleSel)

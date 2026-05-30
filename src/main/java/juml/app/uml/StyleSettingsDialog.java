@@ -52,14 +52,11 @@ public final class StyleSettingsDialog extends JDialog {
             "materia", "hacker", "cyborg", "mars", "amiga", "spacelab"
     };
 
-    /** フォント未指定（自動検出）を表す内部マーカ。実値は空文字。 */
-    private static final String FONT_AUTO = "(Auto / 自動検出)";
-
     private final JComboBox<String> themeCombo = new JComboBox<>(THEMES);
     private final JButton bgColorButton = new JButton();
     private final JTextField bgColorField = new JTextField(10);
-    private final JComboBox<String> fontCombo = new JComboBox<>();
-    private final JLabel fontPreview = new JLabel();
+    /** フォント選択 (コンボ + プレビュー)。{@link #buildForm} で初期化する。 */
+    private FontPickerField fontPicker;
     private final JSpinner fontSizeSpinner =
             new JSpinner(new SpinnerNumberModel(0, 0, 48, 1));
     private final JRadioButton dirDefault = new JRadioButton("Default (top-to-bottom)");
@@ -259,22 +256,18 @@ public final class StyleSettingsDialog extends JDialog {
         // フォント名 (システムにインストールされたフォントから選択。任意入力も可)
         c.gridx = 0; c.gridy = row; c.weightx = 0;
         form.add(new JLabel("Font name:"), c);
-        initFontCombo(initial.getFontName());
-        fontCombo.setToolTipText(
-                "Pick an installed font. (Auto / 自動検出) = auto-detected Japanese font. "
-                + "日本語対応フォントが先頭にまとまります。");
+        fontPicker = new FontPickerField(initial.getFontName());
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
-        form.add(fontCombo, c);
+        form.add(fontPicker.getComboBox(), c);
         c.gridwidth = 1;
         row++;
 
         // フォントプレビュー
         c.gridx = 1; c.gridy = row; c.weightx = 1; c.gridwidth = 2;
-        fontPreview.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(java.awt.Color.LIGHT_GRAY),
+        fontPicker.getPreview().setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(FontPickerField.previewBorderColor()),
                 BorderFactory.createEmptyBorder(4, 6, 4, 6)));
-        updateFontPreview();
-        form.add(fontPreview, c);
+        form.add(fontPicker.getPreview(), c);
         c.gridwidth = 1;
         row++;
 
@@ -559,77 +552,6 @@ public final class StyleSettingsDialog extends JDialog {
         return form;
     }
 
-    /**
-     * システムにインストールされたフォントファミリで {@link #fontCombo} を構築する。
-     * 先頭に「自動検出」(空値) を置き、続けて日本語フォントを優先的に並べる。
-     * {@code initialFont} が一覧に無くても編集可能コンボなので選択値として保持する。
-     */
-    private void initFontCombo(String initialFont) {
-        fontCombo.setEditable(true);
-        fontCombo.removeAllItems();
-        fontCombo.addItem(FONT_AUTO);
-        java.util.List<String> families;
-        try {
-            families = juml.util.SystemFonts.familiesJapaneseFirst();
-        } catch (RuntimeException ex) {
-            families = java.util.Collections.emptyList();
-        }
-        for (String fam : families) {
-            fontCombo.addItem(fam);
-        }
-        String init = initialFont == null ? "" : initialFont.trim();
-        if (init.isEmpty()) {
-            fontCombo.setSelectedItem(FONT_AUTO);
-        } else {
-            fontCombo.setSelectedItem(init);
-            // 一覧に無い任意フォント名でも編集フィールドに反映させる
-            if (!init.equals(selectedFontName())) {
-                fontCombo.getEditor().setItem(init);
-            }
-        }
-        // 選択・入力が変わるたびにプレビューを更新
-        fontCombo.addActionListener(e -> updateFontPreview());
-        Component editor = fontCombo.getEditor().getEditorComponent();
-        if (editor instanceof JTextField) {
-            ((JTextField) editor).getDocument().addDocumentListener(
-                    new javax.swing.event.DocumentListener() {
-                        @Override public void insertUpdate(
-                                javax.swing.event.DocumentEvent e) { updateFontPreview(); }
-                        @Override public void removeUpdate(
-                                javax.swing.event.DocumentEvent e) { updateFontPreview(); }
-                        @Override public void changedUpdate(
-                                javax.swing.event.DocumentEvent e) { updateFontPreview(); }
-                    });
-        }
-    }
-
-    /** コンボの現在値を {@link DiagramStyle#getFontName()} 用の実値 (自動検出は空文字) で返す。 */
-    private String selectedFontName() {
-        Object sel = fontCombo.isEditable()
-                ? fontCombo.getEditor().getItem() : fontCombo.getSelectedItem();
-        String s = sel == null ? "" : sel.toString().trim();
-        return (s.isEmpty() || FONT_AUTO.equals(s)) ? "" : s;
-    }
-
-    /** 選択中フォントでサンプル文字列を描画してプレビューを更新する。 */
-    private void updateFontPreview() {
-        String fam = selectedFontName();
-        String sample = "Aa Bb Cc  あいう 漢字 カタカナ  0123";
-        fontPreview.setText("<html>" + sample + "</html>");
-        int size = 14;
-        if (fam.isEmpty()) {
-            fontPreview.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF,
-                    java.awt.Font.PLAIN, size));
-            fontPreview.setToolTipText("Auto-detected font is used at render time.");
-        } else {
-            fontPreview.setFont(new java.awt.Font(fam, java.awt.Font.PLAIN, size));
-            fontPreview.setToolTipText(
-                    juml.util.SystemFonts.canDisplayJapanese(fam)
-                            ? "This font can display Japanese."
-                            : "This font may not display Japanese (文字化けの可能性)。");
-        }
-    }
-
     private static int lineTypeIndex(DiagramStyle.LineType t) {
         switch (t) {
             case POLYLINE: return 1;
@@ -706,9 +628,7 @@ public final class StyleSettingsDialog extends JDialog {
         DiagramStyle d = DiagramStyle.defaults();
         themeCombo.setSelectedItem(d.getTheme());
         bgColorField.setText(d.getBackgroundColor());
-        fontCombo.setSelectedItem(FONT_AUTO);
-        fontCombo.getEditor().setItem(FONT_AUTO);
-        updateFontPreview();
+        fontPicker.reset();
         fontSizeSpinner.setValue(d.getFontSize());
         dirDefault.setSelected(true);
         lineTypeCombo.setSelectedIndex(lineTypeIndex(d.getLineType()));
@@ -763,7 +683,7 @@ public final class StyleSettingsDialog extends JDialog {
         Object themeSel = themeCombo.getSelectedItem();
         s.setTheme(themeSel != null ? themeSel.toString() : "");
         s.setBackgroundColor(bgColorField.getText().trim());
-        s.setFontName(selectedFontName());
+        s.setFontName(fontPicker.fontName());
         s.setFontSize((Integer) fontSizeSpinner.getValue());
         if (dirLeftRight.isSelected()) {
             s.setDirection(DiagramStyle.Direction.LEFT_TO_RIGHT);

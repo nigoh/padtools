@@ -5,8 +5,6 @@ package juml.app.uml;
 
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
 import java.io.File;
 
 /**
@@ -24,13 +22,18 @@ public final class UmlApp {
     /** UML GUI を起動する。{@code initialProject} は null 可。 */
     public static void launch(File initialProject) {
         System.setProperty("apple.laf.useScreenMenuBar", "true");
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (UnsupportedLookAndFeelException | ClassNotFoundException
-                 | InstantiationException | IllegalAccessException ex) {
-            // システム L&F が使えない環境では既定 L&F のまま続行
-        }
+        PreferencesDialog.applyLookAndFeel(resolveLookAndFeelKey());
         launchWithSplash(initialProject);
+    }
+
+    /** 永続化された Look &amp; Feel キーを取得する。未初期化等では "SYSTEM"。 */
+    private static String resolveLookAndFeelKey() {
+        try {
+            return juml.SettingManager.getInstance().getSetting().getLookAndFeel();
+        } catch (RuntimeException ex) {
+            // SettingManager 未初期化 (テスト等) では既定 (System) を使う
+            return "SYSTEM";
+        }
     }
 
     /** 起動スプラッシュ (GIF) を中央表示しつつメインウィンドウを起動する。 */

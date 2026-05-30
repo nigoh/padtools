@@ -99,6 +99,33 @@ public class Main {
             return;
         }
         // 既定: UML 専用 GUI を起動。引数があれば初期プロジェクトとして渡す。
-        UmlApp.launch(ctx.fileIn);
+        // 引数指定が無い場合のみ、設定に応じて前回プロジェクトの復元を試みる。
+        File initialProject = ctx.fileIn;
+        if (initialProject == null) {
+            initialProject = restoreLastProjectIfEnabled();
+        }
+        UmlApp.launch(initialProject);
+    }
+
+    /**
+     * 設定で「起動時に前回プロジェクトを復元」が有効なとき、最後に開いたプロジェクトの
+     * ルートを返す。無効・履歴なし・ディレクトリ消失時は null。
+     */
+    private static File restoreLastProjectIfEnabled() {
+        try {
+            if (!getSetting().isRestoreLastProjectOnStartup()) {
+                return null;
+            }
+            java.util.List<ProjectRecord> recent =
+                    ProjectRepository.getInstance().listRecent(1);
+            if (recent.isEmpty()) {
+                return null;
+            }
+            File root = recent.get(0).root();
+            return root.isDirectory() ? root : null;
+        } catch (RuntimeException ex) {
+            // 復元はベストエフォート (設定/リポジトリ未初期化など)
+            return null;
+        }
     }
 }

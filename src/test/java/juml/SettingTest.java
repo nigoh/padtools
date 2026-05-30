@@ -251,4 +251,52 @@ public class SettingTest {
         s.setClassDiagramCommentMaxLength(-5);
         assertEquals(0, s.getClassDiagramCommentMaxLength());
     }
+
+    @Test
+    public void testAppSettingsDefaults() {
+        Setting s = new Setting();
+        assertEquals("SYSTEM", s.getLookAndFeel());
+        assertFalse(s.isRestoreLastProjectOnStartup());
+    }
+
+    @Test
+    public void testAppSettingsRoundTrip() throws IOException {
+        Setting original = new Setting();
+        original.setLookAndFeel("NIMBUS");
+        original.setRestoreLastProjectOnStartup(true);
+
+        File file = tempFolder.newFile("settings-app.xml");
+        original.saveToFile(file);
+
+        Setting loaded = Setting.loadFromFile(file);
+        assertEquals("NIMBUS", loaded.getLookAndFeel());
+        assertTrue(loaded.isRestoreLastProjectOnStartup());
+    }
+
+    @Test
+    public void testLookAndFeelEmptyFallsBackToSystem() {
+        Setting s = new Setting();
+        s.setLookAndFeel("");
+        assertEquals("SYSTEM", s.getLookAndFeel());
+        s.setLookAndFeel(null);
+        assertEquals("SYSTEM", s.getLookAndFeel());
+    }
+
+    @Test
+    public void testAppSettingsLegacyFallsBackToDefaults() throws IOException {
+        // app.* キーを持たない旧 XML を読んでも既定値で初期化される
+        File file = tempFolder.newFile("legacy-no-app.xml");
+        String legacy = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                + "<!DOCTYPE properties SYSTEM "
+                + "\"http://java.sun.com/dtd/properties.dtd\">"
+                + "<properties>"
+                + "<entry key=\"windowWidth\">1024</entry>"
+                + "</properties>";
+        java.nio.file.Files.write(file.toPath(),
+                legacy.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        Setting loaded = Setting.loadFromFile(file);
+        assertEquals("SYSTEM", loaded.getLookAndFeel());
+        assertFalse(loaded.isRestoreLastProjectOnStartup());
+    }
 }

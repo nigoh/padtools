@@ -152,6 +152,17 @@ public final class ProjectAnalysisCache {
         }
     }
 
+    /**
+     * 現在のプロジェクトの解析キャッシュをメモリ・ディスク両方から破棄する。
+     * 次回 {@link #load} で再解析が強制される。プロジェクト未読込なら no-op。
+     */
+    public void invalidate() {
+        if (projectRoot != null && disk != null) {
+            disk.invalidate(projectRoot);
+        }
+        clear();
+    }
+
     /** キャッシュをクリアする (プロジェクトを閉じたとき等)。 */
     public void clear() {
         projectRoot = null;

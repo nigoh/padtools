@@ -35,6 +35,8 @@ public class MenuBarBuilderTest {
         cb.syncDiagramToggle = k -> {};
         cb.applyTheme = t -> {};
         cb.openStyleSettings = () -> {};
+        cb.openPreferences = () -> {};
+        cb.clearAnalysisCache = () -> {};
         cb.zoomIn = () -> {};
         cb.zoomOut = () -> {};
         cb.zoomReset = () -> {};
@@ -43,11 +45,19 @@ public class MenuBarBuilderTest {
     }
 
     @Test
-    public void build_menuBarHasFiveTopLevelMenus() {
+    public void build_menuBarHasSixTopLevelMenus() {
         MenuBarBuilder.Result r = buildDefault();
         JMenuBar bar = r.menuBar;
-        // File, Diagram, View, Style, Help
-        assertEquals(5, bar.getMenuCount());
+        // File, Diagram, View, Style, Settings, Help
+        assertEquals(6, bar.getMenuCount());
+    }
+
+    @Test
+    public void build_settingsMenuIsBeforeHelp() {
+        MenuBarBuilder.Result r = buildDefault();
+        JMenuBar bar = r.menuBar;
+        assertEquals("Settings", bar.getMenu(4).getText());
+        assertEquals("Help", bar.getMenu(5).getText());
     }
 
     @Test

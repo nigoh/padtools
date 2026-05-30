@@ -149,9 +149,9 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 
 ドキュメント
 ------------------------------------------------
-詳細なドキュメントは [`docs/`](docs/) に **HTML** で置いています（GitHub Pages で公開可能）。
+詳細なドキュメントは [`docs/`](docs/) に **HTML** で置いており、**GitHub Pages で <https://nigoh.github.io/Juml/> に公開されます**。
 
-* [ドキュメントトップ](docs/index.html) — 概要・GUI マニュアル・開発者リファレンスへの入口
+* [ドキュメントトップ](https://nigoh.github.io/Juml/) — 概要・GUI マニュアル・開発者リファレンスへの入口
 * [プロジェクト概要](docs/project-summary.html) — 何ができるか・構成・ビルド・主要依存ライブラリ
 * [GUI 操作マニュアル](docs/gui-manual.html) — 起動・ツールバー・各図種の操作・スタイル設定・ショートカット一覧
 * [開発者リファレンス](docs/developer-reference.html) — CLI 全フラグ・図種カタログ・GUI 内部・解析エンジンの機能棚卸し

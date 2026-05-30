@@ -86,6 +86,61 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
         </tbody>
       </table></div>
       <div class="note"><b>変更点 (2.x):</b> ツールバー上段はアクション 4 種のみ。Scope / Clear Scope は Diagram メニュー、Zoom は View メニューから操作します。履歴を戻る <b>Back</b> ボタンは廃止されました。</div>
+
+      <h3 id="app-state">アプリ全体の状態遷移</h3>
+      <p>Juml の GUI は「未ロード → 解析中 → 図表示」の 3 状態を行き来します。図を表示している間のタブ操作・図種切替・ズームは状態を変えない<b>内部遷移</b>です。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 780 205" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="s7-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+        </defs>
+
+        <!-- transitions -->
+        <path class="u-trans" d="M50,94 L74,94" marker-end="url(#s7-arr)"/>
+        <path class="u-trans" d="M228,94 L316,94" marker-end="url(#s7-arr)"/>
+        <text class="u-trans-lbl" x="232" y="88">Open Project / 起動引数</text>
+        <path class="u-trans" d="M490,94 L571,94" marker-end="url(#s7-arr)"/>
+        <text class="u-trans-lbl" x="496" y="82">完了 [success]</text>
+        <text class="u-trans-lbl" x="496" y="92">→ 既定タブ</text>
+        <path class="u-trans" d="M405,116 L405,168 L155,168 L155,118" marker-end="url(#s7-arr)"/>
+        <text class="u-trans-lbl" x="210" y="182">Cancel / [error] → ダイアログで「空」へ</text>
+        <path class="u-trans" d="M667,66 L667,40 L405,40 L405,70" marker-end="url(#s7-arr)"/>
+        <text class="u-trans-lbl" x="470" y="34">別プロジェクトを開く</text>
+
+        <!-- initial -->
+        <circle class="u-init" cx="44" cy="94" r="6"/>
+
+        <!-- 空 -->
+        <rect class="u-state" x="78" y="72" width="150" height="44" rx="12"/>
+        <text class="u-state-nm" x="153" y="92" text-anchor="middle">空 (No Project)</text>
+        <text class="u-state-sub" x="153" y="107" text-anchor="middle">プロジェクト未ロード</text>
+
+        <!-- 解析中 -->
+        <rect class="u-state" x="320" y="72" width="170" height="44" rx="12"/>
+        <text class="u-state-nm" x="405" y="92" text-anchor="middle">解析中 (Analyzing)</text>
+        <text class="u-state-sub" x="405" y="107" text-anchor="middle">SwingWorker / 進捗オーバーレイ</text>
+
+        <!-- 図表示（内部遷移つき） -->
+        <rect class="u-state" x="575" y="64" width="190" height="66" rx="12"/>
+        <text class="u-state-nm" x="670" y="82" text-anchor="middle">図表示 (Diagram Shown)</text>
+        <line class="u-div" x1="575" y1="90" x2="765" y2="90"/>
+        <text class="u-state-sub" x="583" y="105">内部遷移（状態は不変）:</text>
+        <text class="u-state-sub" x="583" y="120">タブ操作 / 図種切替 / ズーム・パン</text>
+      </svg>
+      <figcaption><b>図7</b>　アプリ全体の状態遷移（状態機械図）。<code>Open Project</code> または起動引数で「解析中」へ入り、成功時に既定（PACKAGE）図を開いて「図表示」へ。<code>Cancel</code>／エラーは「空」に戻る。図表示中のタブ操作・図種切替・ズームは状態を変えない内部遷移。</figcaption>
+      </figure>
+
+      <div class="uml-legend">
+        <h4>状態遷移図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><circle class="u-init" cx="12" cy="10" r="6"/></svg> 初期状態</div>
+          <div class="li"><svg width="40" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><circle class="u-final-o" cx="14" cy="10" r="8"/><circle class="u-final-i" cx="14" cy="10" r="4"/></svg> 終了状態</div>
+          <div class="li"><svg width="40" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-state" x="2" y="3" width="34" height="14" rx="6"/></svg> 状態（角丸）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lgst-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-trans" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lgst-arr)"/></svg> 遷移（トリガ [ガード] / 動作）</div>
+          <div class="li">状態内の区画 = <b>内部遷移</b>（自己遷移で状態は不変）</div>
+        </div>
+      </div>
     </section>
 
     <section id="open">
@@ -111,6 +166,79 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
         <li>前回のプロジェクト設定（スタイル・プリセット）が自動復元され、<b>既定で Package 図タブが 1 枚開く</b></li>
       </ol>
       <div class="tip"><b>ヒント:</b> 解析途中で中断するには <b>File → Cancel Loading</b> を使います。</div>
+
+      <h3 id="view-flow">図を見るまでの操作フロー</h3>
+      <p>起動から図のエクスポートまで、利用者の操作と Juml の処理を順に並べると次のとおりです。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 580 590" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="a8-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+        </defs>
+
+        <!-- edges -->
+        <path class="u-trans" d="M280,28 L280,40" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,76 L280,96" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,132 L280,152" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,188 L280,198" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,246 L280,276" marker-end="url(#a8-arr)"/>
+        <text class="u-trans-lbl" x="286" y="264">[はい]</text>
+        <path class="u-trans" d="M346,222 L400,222" marker-end="url(#a8-arr)"/>
+        <text class="u-trans-lbl" x="350" y="216">[いいえ]</text>
+        <path class="u-trans" d="M475,240 L475,292" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,312 L280,332" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,368 L280,388" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,424 L280,444" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,480 L280,500" marker-end="url(#a8-arr)"/>
+        <path class="u-trans" d="M280,536 L280,548" marker-end="url(#a8-arr)"/>
+
+        <!-- start -->
+        <circle class="u-start" cx="280" cy="22" r="6"/>
+        <!-- actions -->
+        <rect class="u-act-node" x="130" y="40" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="62" text-anchor="middle">アプリ起動（java -jar Juml.jar）</text>
+        <rect class="u-act-node" x="130" y="96" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="118" text-anchor="middle">プロジェクトを開く（Open / 起動引数 / Recent）</text>
+        <rect class="u-act-node" x="130" y="152" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="174" text-anchor="middle">バックグラウンド解析（進捗オーバーレイ）</text>
+
+        <!-- decision -->
+        <polygon class="u-dec" points="280,198 348,222 280,246 212,222"/>
+        <text class="u-act-nm" x="280" y="226" text-anchor="middle">解析成功?</text>
+
+        <!-- error branch -->
+        <rect class="u-act-node" x="400" y="204" width="150" height="36" rx="9"/>
+        <text class="u-act-nm" x="475" y="226" text-anchor="middle">エラーダイアログ</text>
+        <circle class="u-end-o" cx="475" cy="300" r="9"/><circle class="u-end-i" cx="475" cy="300" r="4"/>
+
+        <!-- main flow -->
+        <rect class="u-act-node" x="130" y="276" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="298" text-anchor="middle">ツリーから題材を選択（package / class / method）</text>
+        <rect class="u-act-node" x="130" y="332" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="354" text-anchor="middle">タブで図を表示（既定は PACKAGE 図）</text>
+        <rect class="u-act-node" x="130" y="388" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="410" text-anchor="middle">図種を切替（ツールバー下段 / Diagram メニュー）</text>
+        <rect class="u-act-node" x="130" y="444" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="466" text-anchor="middle">スコープ・可視性で絞り込み</text>
+        <rect class="u-act-node" x="130" y="500" width="300" height="36" rx="9"/>
+        <text class="u-act-nm" x="280" y="522" text-anchor="middle">右クリック / Save でエクスポート（SVG / PNG / PUML）</text>
+
+        <!-- end -->
+        <circle class="u-end-o" cx="280" cy="556" r="9"/><circle class="u-end-i" cx="280" cy="556" r="4"/>
+      </svg>
+      <figcaption><b>図8</b>　図を見るまでの操作フロー（アクティビティ図）。起動 → プロジェクトを開く → 解析 → （成功なら）ツリーで題材選択 → タブ表示 → 図種切替 → 絞り込み → エクスポート。判断 <code>◇</code> は解析の成否、失敗時はエラーダイアログで終了。</figcaption>
+      </figure>
+
+      <div class="uml-legend">
+        <h4>アクティビティ図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><circle class="u-start" cx="14" cy="10" r="6"/></svg> 開始</div>
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><circle class="u-end-o" cx="14" cy="10" r="8"/><circle class="u-end-i" cx="14" cy="10" r="4"/></svg> 終了</div>
+          <div class="li"><svg width="40" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-act-node" x="2" y="3" width="34" height="14" rx="5"/></svg> アクション</div>
+          <div class="li"><svg width="40" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><polygon class="u-dec" points="20,2 34,10 20,18 6,10"/></svg> 判断（分岐）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lgac-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-trans" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lgac-arr)"/></svg> 制御フロー / [ガード]</div>
+        </div>
+      </div>
     </section>
 
     <section id="toolbar">
@@ -252,7 +380,7 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
         <path class="u-self" d="M304,452 L356,452 L356,464 L306,464" marker-end="url(#f7-arr)"/>
         <text class="u-msg-lbl" x="360" y="462">reflectKindInToolbar(kind) — ツールバー / メニュー同期</text>
       </svg>
-      <figcaption><b>図7</b>　GUI でタブを開く（シーケンス図）。ツリーのダブルクリックが <code>DiagramController.onTreeOpenInNewTab()</code> 経由で <code>DiagramTabPane.addOrFocusTab()</code> を呼び、<code>alt</code> で「既存タブはフォーカスのみ／新規は <code>DiagramTab.startRender()</code> が <code>SwingWorker</code> で非同期描画」を分岐。描画後はタブフォーカスがツリー選択とツールバー図種へ逆同期される。</figcaption>
+      <figcaption><b>図9</b>　GUI でタブを開く（シーケンス図）。ツリーのダブルクリックが <code>DiagramController.onTreeOpenInNewTab()</code> 経由で <code>DiagramTabPane.addOrFocusTab()</code> を呼び、<code>alt</code> で「既存タブはフォーカスのみ／新規は <code>DiagramTab.startRender()</code> が <code>SwingWorker</code> で非同期描画」を分岐。描画後はタブフォーカスがツリー選択とツールバー図種へ逆同期される。</figcaption>
       </figure>
       <div class="uml-legend">
         <h4>シーケンス図の凡例</h4>
@@ -301,6 +429,60 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
           <tr><td>Soong</td><td>Android.bp モジュール依存</td><td>—</td></tr>
         </tbody>
       </table></div>
+
+      <h3 id="kind-sync">図種切替時の連動（ツールバー ⇄ ツリー ⇄ タブ）</h3>
+      <p>図種を切り替えると、アクティブな題材のまま別図種のタブが開く/フォーカスされ、その結果がツリーのハイライトとツールバー/メニューの選択へ逆方向に同期されます。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 820 300" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="q10-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+        </defs>
+
+        <line class="u-life" x1="150" y1="40" x2="150" y2="288"/>
+        <line class="u-life" x1="350" y1="40" x2="350" y2="288"/>
+        <line class="u-life" x1="540" y1="40" x2="540" y2="288"/>
+        <line class="u-life" x1="720" y1="40" x2="720" y2="288"/>
+
+        <g font-size="9">
+          <rect class="u-actor" x="86" y="12" width="128" height="26" rx="6"/><text class="u-name" x="150" y="29" text-anchor="middle">ツールバー / メニュー</text>
+          <rect class="u-actor" x="296" y="12" width="108" height="26" rx="6"/><text class="u-name" x="350" y="29" text-anchor="middle">DiagramController</text>
+          <rect class="u-actor" x="486" y="12" width="108" height="26" rx="6"/><text class="u-name" x="540" y="29" text-anchor="middle">DiagramTabPane</text>
+          <rect class="u-actor" x="666" y="12" width="108" height="26" rx="6"/><text class="u-name" x="720" y="29" text-anchor="middle">ProjectTreePanel</text>
+        </g>
+
+        <rect class="u-act" x="146" y="58" width="8" height="206"/>
+        <rect class="u-act" x="346" y="86" width="8" height="178"/>
+        <rect class="u-act" x="536" y="112" width="8" height="92"/>
+        <rect class="u-act" x="716" y="236" width="8" height="18"/>
+
+        <path class="u-msg" d="M24,58 L144,58" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="26" y="53">図種を選択（トグル / ラジオ）</text>
+        <path class="u-msg" d="M154,86 L344,86" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="158" y="81">selectDiagramKind(kind)</text>
+        <path class="u-msg" d="M354,112 L534,112" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="358" y="107">addOrFocusTab / openDiagram（同じ題材・別図種キー）</text>
+
+        <rect class="u-frame" x="360" y="126" width="392" height="62"/>
+        <rect class="u-frame-tab" x="360" y="126" width="36" height="14"/>
+        <text class="u-frame-op" x="366" y="137">alt</text>
+        <text class="u-guard" x="400" y="137">[既存タブ]</text>
+        <path class="u-self" d="M544,148 L596,148 L596,160 L546,160" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="600" y="158">setSelectedComponent — フォーカスのみ</text>
+        <line class="u-frame-div" x1="360" y1="168" x2="752" y2="168"/>
+        <text class="u-guard" x="366" y="180">[新規]</text>
+        <path class="u-self" d="M544,182 L596,182 L596,194 L546,194" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="600" y="186">new DiagramTab + startRender()</text>
+
+        <path class="u-msg" d="M536,212 L354,212" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="370" y="207">onTabFocused(FocusedTab)</text>
+        <path class="u-msg" d="M354,238 L714,238" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="380" y="233">selectClassNode(fqn)  <tspan class="u-faint">[suppressNotify]</tspan></text>
+        <path class="u-msg" d="M346,262 L154,262" marker-end="url(#q10-arr)"/>
+        <text class="u-msg-lbl" x="170" y="257">reflectKindInToolbar(kind) — トグル / ラジオ同期</text>
+      </svg>
+      <figcaption><b>図10</b>　図種切替時の連動（シーケンス図）。ツールバー/メニューの選択が <code>DiagramController.selectDiagramKind()</code> → <code>DiagramTabPane</code> でタブを開く/フォーカスし、<code>onTabFocused</code> を起点にツリーのハイライト（<code>selectClassNode</code>）とツールバー/メニュー（<code>reflectKindInToolbar</code>）へ逆同期される。凡例はシーケンス図と共通。</figcaption>
+      </figure>
     </section>
 
     <section id="kind-detail">
@@ -400,6 +582,59 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
       <h2>ドリルダウンとタブナビゲーション</h2>
       <p>プレビュー上でクラス名にカーソルを置くと指差しアイコンに変わります。<b>クラス名左クリック</b>で DETAILED 詳細図タブ、<b>メソッド横 ▶</b> で Sequence / Activity ポップアップ。</p>
       <p>Juml は <b>VS Code 風のタブ中心モデル</b>です。同じ題材・図種のタブは重複生成されず既存タブにフォーカスが移ります。図の行き来はタブで行います（Back / Forward は現行版にありません）。</p>
+
+      <h3 id="tab-lifecycle">タブのライフサイクル</h3>
+      <p>1 つの図タブ（題材 + 図種のキー）は、生成 → 非同期描画 → 表示 → フォーカス/非フォーカス → 破棄、という状態をたどります。ドリルダウンは<b>別キーの新しいタブ</b>を生成します。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 780 215" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="s11-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+        </defs>
+
+        <!-- transitions -->
+        <path class="u-trans" d="M46,70 L62,70" marker-end="url(#s11-arr)"/>
+        <path class="u-trans" d="M182,70 L236,70" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="188" y="64">open(key)</text>
+        <path class="u-trans" d="M390,70 L466,70" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="404" y="64">成功</text>
+        <path class="u-trans" d="M315,94 L315,150" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="320" y="124">[error] 失敗</text>
+        <path class="u-trans" d="M545,102 L545,150" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="550" y="128">他タブ選択</text>
+        <path class="u-trans" d="M565,150 L565,102" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="572" y="140">再選択 / 同期</text>
+        <path class="u-trans" d="M478,46 L478,28 L315,28 L315,46" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="330" y="22">Refresh(F5) / スタイル・スコープ変更 → 再描画</text>
+        <path class="u-trans" d="M642,60 L710,104" marker-end="url(#s11-arr)"/>
+        <text class="u-trans-lbl" x="656" y="84">× / Close</text>
+        <path class="u-trans" d="M642,160 L710,118" marker-end="url(#s11-arr)"/>
+
+        <!-- initial -->
+        <circle class="u-init" cx="40" cy="70" r="6"/>
+        <!-- 未生成 -->
+        <rect class="u-state" x="64" y="50" width="118" height="40" rx="12"/>
+        <text class="u-state-nm" x="123" y="74" text-anchor="middle">未生成 (None)</text>
+        <!-- 描画中 -->
+        <rect class="u-state" x="240" y="48" width="150" height="44" rx="12"/>
+        <text class="u-state-nm" x="315" y="66" text-anchor="middle">描画中 (Rendering)</text>
+        <text class="u-state-sub" x="315" y="81" text-anchor="middle">SwingWorker（非同期）</text>
+        <!-- 表示（内部遷移つき） -->
+        <rect class="u-state" x="468" y="44" width="174" height="58" rx="12"/>
+        <text class="u-state-nm" x="555" y="62" text-anchor="middle">表示 (Shown / フォーカス)</text>
+        <line class="u-div" x1="468" y1="70" x2="642" y2="70"/>
+        <text class="u-state-sub" x="555" y="86" text-anchor="middle">同じ key 再要求 = フォーカスのみ</text>
+        <!-- エラー表示 -->
+        <rect class="u-state" x="240" y="150" width="150" height="40" rx="12"/>
+        <text class="u-state-nm" x="315" y="174" text-anchor="middle">エラー表示 (Error)</text>
+        <!-- 非フォーカス -->
+        <rect class="u-state" x="468" y="150" width="174" height="40" rx="12"/>
+        <text class="u-state-nm" x="555" y="174" text-anchor="middle">非フォーカス (Background)</text>
+        <!-- final -->
+        <circle class="u-final-o" cx="722" cy="111" r="9"/><circle class="u-final-i" cx="722" cy="111" r="4"/>
+      </svg>
+      <figcaption><b>図11</b>　タブのライフサイクル（状態機械図）。<code>openDiagram(key)</code> で「描画中」に入り <code>SwingWorker</code> が非同期描画、成功で「表示」、失敗で「エラー表示」。他タブ選択で「非フォーカス」、<code>Refresh</code> やスタイル変更で「描画中」へ戻る。同じ key の再要求はフォーカスのみ（重複生成なし）。<code>×</code>/中クリック/Close で破棄。ドリルダウン（クラス名・メソッド ▶）は<b>別キーの新しいタブ</b>を生成する。</figcaption>
+      </figure>
     </section>
 
     <section id="style">

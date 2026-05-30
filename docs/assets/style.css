@@ -221,6 +221,24 @@ figure.uml-fig figcaption b { color: var(--accent); font-weight: 600; }
 .diagram-svg .u-msg-lbl { fill: var(--text); font-size: 10.5px; }
 .diagram-svg .u-self { fill: none; stroke: var(--accent); stroke-width: 1.3; }
 
+/* 状態遷移図（state machine） */
+.diagram-svg .u-state { fill: var(--bg-soft); stroke: var(--accent); stroke-width: 1.2; }
+.diagram-svg .u-state-nm { fill: var(--text); font-weight: 600; }
+.diagram-svg .u-state-sub { fill: var(--text-dim); }
+.diagram-svg .u-init { fill: var(--text); stroke: none; }
+.diagram-svg .u-final-o { fill: none; stroke: var(--text); stroke-width: 1.4; }
+.diagram-svg .u-final-i { fill: var(--text); stroke: none; }
+.diagram-svg .u-trans { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.diagram-svg .u-trans-lbl { fill: var(--text-dim); font-size: 10px; }
+
+/* アクティビティ図（activity） */
+.diagram-svg .u-act-node { fill: var(--bg-soft); stroke: var(--accent-2); stroke-width: 1.2; }
+.diagram-svg .u-act-nm { fill: var(--text); }
+.diagram-svg .u-dec { fill: var(--bg-card); stroke: var(--accent-3); stroke-width: 1.2; }
+.diagram-svg .u-start { fill: var(--text); stroke: none; }
+.diagram-svg .u-end-o { fill: none; stroke: var(--text); stroke-width: 1.6; }
+.diagram-svg .u-end-i { fill: var(--text); stroke: none; }
+
 /* alt / loop / opt などの結合フラグメント枠 */
 .diagram-svg .u-frame { fill: none; stroke: var(--accent-3); stroke-width: 1; stroke-dasharray: 3 3; }
 .diagram-svg .u-frame-tab { fill: var(--bg-soft); stroke: var(--accent-3); stroke-width: 1; }

@@ -123,8 +123,37 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
         </tbody>
       </table></div>
       <h3>下段 — 図種トグルボタン</h3>
-      <p><code>DiagramKind.values()</code> 順に 15 種を排他トグルで切替。Diagram メニューのラジオ選択と双方向同期します。</p>
+      <p><code>DiagramKind.values()</code> 順に 15 種を排他トグルで切替。Diagram メニューのラジオ選択と双方向同期します。トグルを押すと、現在<b>フォーカス中のタブ</b>を起点に選んだ図種のタブを開きます（VS Code 風タブモデル）。起点や対象ファイルが必要な図種（Sequence / Activity / Call Graph / Layout / Navigation）は、未指定なら選択ダイアログを誘導します。</p>
       <p><span class="pill">Class</span><span class="pill">Package</span><span class="pill">Sequence</span><span class="pill">Activity</span><span class="pill">Component</span><span class="pill">Dependency</span><span class="pill">Manifest</span><span class="pill">Layout</span><span class="pill">Common</span><span class="pill">Navigation</span><span class="pill">Module</span><span class="pill">Inherit</span><span class="pill">Call Graph</span><span class="pill">Screen Flow</span><span class="pill">Soong</span></p>
+
+      <h4>各トグルがどう解析して図解化するか</h4>
+      <p>各トグルは <code>DiagramService.generatePuml</code> から対応する <code>PlantUml*Diagram</code> 生成器にディスパッチされます。入力源は大きく 3 系統です。</p>
+      <ul>
+        <li><b>解析済み Java モデル（<code>JavaClassInfo</code> 群）</b>: ロード時に構築済みのモデルを再利用。スコープで絞り込み、必要なクラスだけ Stage B（詳細）へ昇格してから描画。</li>
+        <li><b>Android XML / Gradle 解析（<code>AndroidProjectAnalysis</code>）</b>: AndroidManifest・layout・navigation・build.gradle を解析した結果から生成。</li>
+        <li><b>プロジェクト再走査</b>: <b>Screen Flow / Soong</b> のみ、生成時にプロジェクトルート配下のソース（Java/Kotlin・<code>Android.bp</code>）を改めて走査して解析。</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <thead><tr><th>図種</th><th>入力源</th><th>解析方法</th><th>図解化（PlantUML へのマッピング）</th></tr></thead>
+        <tbody>
+          <tr><td><b>Class</b></td><td>Java モデル</td><td>スコープ適用後に Stage B 詳細へ昇格。フィールド型・継承・実装関係を走査</td><td><code>class</code> ノード + 可視性記号。継承 <code>&lt;|--</code> / 実装 <code>&lt;|..</code> / 使用 <code>--&gt;</code></td></tr>
+          <tr><td><b>Package</b></td><td>Java モデル</td><td>パッケージ名でクラスを集約し、継承 / 実装 / フィールド型の参照をパッケージ間に集計</td><td><code>package</code> ノード（クラス数付き）+ パッケージ間 <code>--&gt;</code></td></tr>
+          <tr><td><b>Sequence</b></td><td>Java モデル（メソッド本体）</td><td>起点 <code>Class.method</code> から呼び出し木を DFS 展開（深さ制限・循環検出）</td><td><code>participant</code> + メッセージ矢印。if→<code>opt/alt</code>、loop→<code>loop</code>、switch→<code>alt</code>、try→<code>group</code>、synchronized→<code>critical</code></td></tr>
+          <tr><td><b>Activity</b></td><td>Java モデル（1 メソッド本体）</td><td>起点メソッド本体の制御構造を順次走査（呼び出し先は展開せずノード化）</td><td><code>if/elseif/else</code>、<code>while/repeat</code>、<code>switch/case</code>、try→<code>partition</code></td></tr>
+          <tr><td><b>Component</b></td><td>Android 解析</td><td>AndroidManifest の 4 種コンポーネント + intent-filter の action を解析</td><td><code>component</code>（<code>&lt;&lt;Activity&gt;&gt;</code> 等のステレオ）+ action <code>usecase</code> → <code>--&gt;</code></td></tr>
+          <tr><td><b>Dependency</b></td><td>Gradle 解析</td><td>build.gradle(.kts) の dependencies を解析。<code>libs.versions.toml</code> も解決</td><td><code>component</code>（module / library / external）+ scope 別の <code>--&gt;</code> / <code>..&gt;</code></td></tr>
+          <tr><td><b>Manifest</b></td><td>Android 解析</td><td><code>&lt;application&gt;</code> 属性 + 4 種コンポーネント + permission / feature を sourceSet 別に集計</td><td>Application <code>rectangle</code> を中心に <code>package</code> でグループ化、包含 <code>*--</code></td></tr>
+          <tr><td><b>Layout</b></td><td>選択した layout XML</td><td>View 階層を再帰分類（ViewGroup / View / include / fragment / merge）</td><td>入れ子 <code>rectangle</code>。ノード / 深さ上限超過は truncated note</td></tr>
+          <tr><td><b>Common</b></td><td>Java モデル</td><td>全クラスの fan-in（継承 / 実装 / フィールド / 引数 / 戻り値での被参照数）を集計し上位 N（既定 20）を抽出</td><td>ハブクラスを <code>&lt;&lt;common&gt;&gt;</code> 強調色、参照元から <code>..&gt; : uses</code></td></tr>
+          <tr><td><b>Navigation</b></td><td>選択した navigation XML</td><td>Destination（fragment / activity / dialog 等）と Action（id 参照）を解析</td><td><code>state</code> ノード + <code>--&gt;</code>、開始は <code>[*] --&gt;</code>、Deep Link は note</td></tr>
+          <tr><td><b>Module</b></td><td>Java モデル（module-info）</td><td>module-info.java の requires / exports / opens / uses / provides を抽出</td><td><code>component</code>。requires→<code>--&gt;</code>、requires transitive→<code>==&gt;</code>、exports / opens は note</td></tr>
+          <tr><td><b>Inherit</b></td><td>Java モデル</td><td>Class 図と同じ生成器を、関係線のみ（フィールド / メソッド非表示・上→下レイアウト）に固定</td><td>継承 <code>&lt;|--</code> / 実装 <code>&lt;|..</code> のツリー。兄弟 5 個超で折返し</td></tr>
+          <tr><td><b>Call Graph</b></td><td>Java モデル（メソッド本体）</td><td>起点から呼び出し先を DFS 再帰展開（既定 maxDepth=4）。循環はマーク</td><td>WBS（<code>*</code> / <code>**</code> / <code>***</code>）。プロジェクト内は色付き、循環は <code>[↩]</code></td></tr>
+          <tr><td><b>Screen Flow</b></td><td>プロジェクト再走査</td><td>Java / Kotlin を正規表現で走査し、Intent 起動・<code>Screen.push</code>・Fragment 遷移を検出</td><td><code>state</code> + 遷移種別ごとに色分けした矢印。重複は <code>×N</code></td></tr>
+          <tr><td><b>Soong</b></td><td>プロジェクト再走査</td><td>配下の <code>Android.bp</code> を軽量パースし、module 名と <code>*_libs</code> / <code>required</code> 等の依存キーを抽出</td><td><code>component</code>（cc / java / android 等カテゴリ別 <code>package</code>）+ 依存 <code>--&gt;</code>。外部は <code>external</code> 枠</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><b>もっと詳しく:</b> 各生成器のファイル位置・固有ロジック（fan-in 集計・BFS 深さ・truncate 上限など）は <a href="./developer-reference.html#diagrams">開発者リファレンスの図種カタログ</a>に整理しています。</div>
     </section>
 
     <section id="tree">

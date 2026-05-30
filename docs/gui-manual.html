@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GUI 操作マニュアル — Juml docs</title>
+<meta name="description" content="Juml の Swing GUI 操作マニュアル：起動・画面構成・ツールバー・図種・スタイル設定・エクスポート・ショートカット。">
+<link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+
+<header class="site-nav">
+  <button class="menu-btn" id="menuBtn" aria-label="メニュー">☰</button>
+  <a class="logo" href="./index.html">Juml<small>docs</small></a>
+  <a class="np" href="./index.html">ホーム</a>
+  <a class="np" href="./developer-reference.html">開発者リファレンス</a>
+  <a class="np current" href="./gui-manual.html">GUI マニュアル</a>
+  <a class="np" href="./project-summary.html">プロジェクト概要</a>
+  <span class="spacer"></span>
+  <a class="gh" href="https://github.com/nigoh/Juml">GitHub ↗</a>
+</header>
+<div class="backdrop" id="backdrop"></div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <nav id="toc">
+      <div class="group">基本</div>
+      <a href="#start">起動と画面構成</a>
+      <a href="#open">プロジェクトを開く</a>
+      <a href="#toolbar">ツールバー</a>
+      <a href="#tree">左ペイン — ツリー</a>
+      <a href="#tabs">右ペイン — タブ</a>
+      <div class="group">図を作る</div>
+      <a href="#kinds">図種の選択と切り替え</a>
+      <a href="#kind-detail">各図種の詳細操作</a>
+      <a href="#methodlink">クラス図のメソッドリンク</a>
+      <a href="#scope">スコープ絞り込み</a>
+      <a href="#search">エンティティ検索</a>
+      <div class="group">操作</div>
+      <a href="#zoom">ズーム・パン</a>
+      <a href="#drilldown">ドリルダウンとタブ</a>
+      <a href="#style">スタイル設定</a>
+      <div class="group">出力・解析</div>
+      <a href="#export">右クリックエクスポート</a>
+      <a href="#save">図の保存・エクスポート</a>
+      <a href="#impact">Impact 解析</a>
+      <a href="#persist">設定の自動保存</a>
+      <a href="#shortcuts">ショートカット一覧</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+  <div class="content-inner">
+
+    <header class="hero">
+      <h1>GUI 操作マニュアル</h1>
+      <p class="tag">Juml の Swing GUI（VS Code 風タブ中心モデル）の使い方。起動からエクスポート、ショートカットまで。</p>
+      <div class="badges">
+        <span class="badge">対象: <b>GUI</b></span>
+        <span class="badge">図種 <b>15</b></span>
+        <span class="badge">タブ = エディタ</span>
+      </div>
+    </header>
+
+    <section id="start">
+      <h2>起動と画面構成</h2>
+      <h3>起動方法</h3>
+      <pre><code># GUI を起動
+java -jar Juml.jar
+
+# 起動と同時にプロジェクトを解析開始
+java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
+      <h3>画面レイアウト</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>領域</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>メニューバー</td><td>File / Diagram / View / Style / Help</td></tr>
+          <tr><td>ツールバー上段</td><td>アクション（Open / Save / Refresh / Search）</td></tr>
+          <tr><td>ツールバー下段</td><td>図種トグル（全 15 種）</td></tr>
+          <tr><td>左ペイン</td><td>プロジェクトツリー（サイドバー / ナビゲータ）</td></tr>
+          <tr><td>右ペイン</td><td>動的ダイアグラムタブ + 固定ユーティリティタブ 6 本</td></tr>
+          <tr><td>ステータスバー</td><td>進捗メッセージ / プログレスバー / ズーム率</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><b>変更点 (2.x):</b> ツールバー上段はアクション 4 種のみ。Scope / Clear Scope は Diagram メニュー、Zoom は View メニューから操作します。履歴を戻る <b>Back</b> ボタンは廃止されました。</div>
+    </section>
+
+    <section id="open">
+      <h2>プロジェクトを開く</h2>
+      <h3>Open Project ダイアログ</h3>
+      <p><b>File → Open Project…</b>（または <kbd>Ctrl+O</kbd>、ツールバー <b>Open</b>）で開きます。最近使ったプロジェクト一覧と「新しいフォルダを参照…」が表示されます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>操作</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td>リストをダブルクリック</td><td>そのプロジェクトをロード</td></tr>
+          <tr><td>リスト選択 → <b>開く</b></td><td>そのプロジェクトをロード</td></tr>
+          <tr><td><b>新しいフォルダを参照…</b></td><td>フォルダ選択ダイアログで選ぶ</td></tr>
+        </tbody>
+      </table></div>
+      <h3>File → Open Recent</h3>
+      <p>最近開いたプロジェクトが最大 10 件表示されます。存在しないディレクトリは自動的に無効化（グレー表示）されます。</p>
+      <h3>プロジェクトのロード</h3>
+      <ol>
+        <li>フォルダ選択でバックグラウンド解析が開始（全面 GIF オーバーレイ表示）</li>
+        <li>ステータスバーに <code>Analyzing 1234 / 56789</code> のような進捗</li>
+        <li>完了後、左ツリーにモジュール・パッケージ・クラス・メソッドが展開</li>
+        <li>前回のプロジェクト設定（スタイル・プリセット）が自動復元され、<b>既定で Package 図タブが 1 枚開く</b></li>
+      </ol>
+      <div class="tip"><b>ヒント:</b> 解析途中で中断するには <b>File → Cancel Loading</b> を使います。</div>
+    </section>
+
+    <section id="toolbar">
+      <h2>ツールバー</h2>
+      <h3>上段 — アクションボタン</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ボタン</th><th>SC</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td>Open</td><td><kbd>Ctrl+O</kbd></td><td>Open Project ダイアログ</td></tr>
+          <tr><td>Save</td><td><kbd>Ctrl+S</kbd></td><td>アクティブタブを SVG / PNG / PUML 保存</td></tr>
+          <tr><td>Refresh</td><td><kbd>F5</kbd></td><td>アクティブタブを再生成</td></tr>
+          <tr><td>Search</td><td><kbd>Ctrl+Shift+F</kbd></td><td>エンティティ横断検索</td></tr>
+        </tbody>
+      </table></div>
+      <h3>下段 — 図種トグルボタン</h3>
+      <p><code>DiagramKind.values()</code> 順に 15 種を排他トグルで切替。Diagram メニューのラジオ選択と双方向同期します。</p>
+      <p><span class="pill">Class</span><span class="pill">Package</span><span class="pill">Sequence</span><span class="pill">Activity</span><span class="pill">Component</span><span class="pill">Dependency</span><span class="pill">Manifest</span><span class="pill">Layout</span><span class="pill">Common</span><span class="pill">Navigation</span><span class="pill">Module</span><span class="pill">Inherit</span><span class="pill">Call Graph</span><span class="pill">Screen Flow</span><span class="pill">Soong</span></p>
+    </section>
+
+    <section id="tree">
+      <h2>左ペイン — プロジェクトツリー</h2>
+      <p>module → package → class → method を遅延展開するツリー。各モジュール直下に <code>[manifest] AndroidManifest.xml</code> ノードも表示されます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>操作</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td>パッケージ / クラスノード</td><td>クラス図に切替（クラスは 1 ホップ近傍）。ダブルクリック / 中クリックで新タブ</td></tr>
+          <tr><td>メソッドノードをクリック</td><td>そのメソッドを起点に <b>シーケンス図タブを直接開く</b></td></tr>
+          <tr><td>Manifest 系ノード</td><td>Manifest 図に自動切替</td></tr>
+          <tr><td>パッケージ右クリック</td><td>「Show class diagram of this package」でそのパッケージのみのクラス図へドリルダウン</td></tr>
+        </tbody>
+      </table></div>
+      <div class="warn"><b>注:</b> 同じ <code>Class.method</code> の別図種（Activity / Call Graph）へは、メソッド系タブにフォーカスした状態でツールバーの図種ボタンを押すと新タブで開きます。</div>
+    </section>
+
+    <section id="tabs">
+      <h2>右ペイン — タブ</h2>
+      <p>各図は 1 枚 = 1 タブ（上に SVG プレビュー、下に PlantUML ソース）。末尾に固定ユーティリティタブが 6 本あります。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>固定タブ</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><b>Manifest</b></td><td>AndroidManifest.xml の Markdown サマリー</td></tr>
+          <tr><td><b>Impact</b></td><td>シンボルへの逆参照を層別にたどる影響解析</td></tr>
+          <tr><td><b>References</b></td><td>シンボルの逆参照を表形式で列挙</td></tr>
+          <tr><td><b>Func Diff</b></td><td>2 メソッドの呼び出し列を比較</td></tr>
+          <tr><td><b>Functions</b></td><td>全クラスの関数一覧（遅延生成）</td></tr>
+          <tr><td><b>Members</b></td><td>全クラスのメンバー一覧（遅延生成）</td></tr>
+        </tbody>
+      </table></div>
+      <p>図タブは ×ボタン / 中クリック / 右クリック「Close / Close Others / Close All」で閉じられます。固定 6 タブは常に残ります。</p>
+    </section>
+
+    <section id="kinds">
+      <h2>図種の選択と切り替え</h2>
+      <p>ツールバー下段のトグル、または Diagram メニューのラジオで選択します。15 種の詳細は <a href="./developer-reference.html#diagrams">開発者リファレンスの図種カタログ</a>も参照してください。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>図種</th><th>用途</th><th>起点指定</th></tr></thead>
+        <tbody>
+          <tr><td>Class</td><td>クラス構造と依存関係</td><td>—</td></tr>
+          <tr><td>Package</td><td>パッケージ間依存</td><td>—（ロード後の既定）</td></tr>
+          <tr><td>Sequence</td><td>メソッド呼び出しの時系列</td><td>メソッド選択 or Choose Sequence Entry</td></tr>
+          <tr><td>Activity</td><td>メソッド内の制御フロー</td><td>メソッド選択 or Choose Activity Method</td></tr>
+          <tr><td>Call Graph</td><td>呼び出し階層（WBS）</td><td>メソッド選択（未指定時ダイアログ）</td></tr>
+          <tr><td>Common</td><td>fan-in 上位 N 件の共通クラス</td><td>—</td></tr>
+          <tr><td>Component</td><td>Android コンポーネント構成</td><td>—</td></tr>
+          <tr><td>Dependency</td><td>Gradle 依存グラフ</td><td>—</td></tr>
+          <tr><td>Manifest</td><td>AndroidManifest 構造図</td><td>—</td></tr>
+          <tr><td>Layout</td><td>Layout XML の ViewGroup 階層</td><td>Choose Layout File</td></tr>
+          <tr><td>Navigation</td><td>Navigation Graph の画面遷移</td><td>Choose Navigation Graph</td></tr>
+          <tr><td>Module</td><td>module-info.java の requires/exports/opens</td><td>—</td></tr>
+          <tr><td>Inheritance</td><td>継承ツリー</td><td>—</td></tr>
+          <tr><td>Screen Flow</td><td>Intent + Car App Library 統合の画面遷移</td><td>—</td></tr>
+          <tr><td>Soong</td><td>Android.bp モジュール依存</td><td>—</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="kind-detail">
+      <h2>各図種の詳細操作</h2>
+      <h3>クラス図 (Class)</h3>
+      <p>クラス・インターフェース・列挙体の構造と相互関係を表示。プリセットで密度を切替できます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>プリセット</th><th>SC</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>Minimal</td><td><kbd>Ctrl+1</kbd></td><td>フィールド非表示・関係線のみ</td></tr>
+          <tr><td>Balanced</td><td><kbd>Ctrl+2</kbd></td><td>デフォルト（フィールド + 主要メソッド）</td></tr>
+          <tr><td>Detailed</td><td><kbd>Ctrl+3</kbd></td><td>フィールド + 全メソッド + アノテーション</td></tr>
+        </tbody>
+      </table></div>
+      <p>プレビュー上の<b>クラス名クリック</b>で 1 ホップ近傍の詳細図へドリルダウン、<b>メソッド名横の ▶</b> で Sequence / Activity を選ぶポップアップ。</p>
+      <h3>シーケンス図 (Sequence)</h3>
+      <p>呼び出し連鎖を時系列で図示。制御構造は <code>if→opt/alt</code>、<code>loop</code>、<code>switch→alt</code>、<code>try→group</code>、<code>synchronized→critical</code> に変換されます。起点は左ツリーのメソッド選択、または <b>Diagram → Choose Sequence Entry…</b>。<b>Filter Sequence Participants…</b> で participant を絞り込めます。</p>
+      <h3>アクティビティ図 (Activity)</h3>
+      <p>1 メソッド本体の制御フロー（if / while / switch / try）をフローチャート化。起点はメソッド選択または <b>Choose Activity Method…</b>。</p>
+      <h3>コールグラフ図 (Call Graph)</h3>
+      <p>起点メソッドから呼び出し先を WBS 形式で可視化。プロジェクト内は黄色、起点は水色で強調。循環は <code>[↩]</code>。既定の再帰深さは 4（Style Settings で変更可）。</p>
+      <h3>共通クラス図 (Common)</h3>
+      <p>fan-in（被参照数）上位 N 件（既定 20）を強調表示。設計ボトルネック候補の発見に。</p>
+      <h3>その他の図種</h3>
+      <ul>
+        <li><b>Component / Manifest / Dependency:</b> AndroidManifest / Gradle 解析から自動生成。<code>libs.versions.toml</code> も解決。</li>
+        <li><b>Layout / Navigation:</b> <b>Choose Layout File… / Choose Navigation Graph…</b> でファイルを選択。</li>
+        <li><b>Module:</b> <code>module-info.java</code> の JPMS 関係（requires/exports/opens）。</li>
+        <li><b>Inheritance:</b> extends / implements 階層のみの軽量図。</li>
+        <li><b>Screen Flow:</b> Intent 起動 + Car App Library <code>Screen.push</code> を統合した状態遷移図。</li>
+        <li><b>Soong:</b> プロジェクト下の <code>Android.bp</code> を走査し依存をコンポーネント図化。</li>
+      </ul>
+    </section>
+
+    <section id="methodlink">
+      <h2>クラス図のメソッドリンク</h2>
+      <p>Detailed / Balanced プリセットのクラス図では、メソッド名の横に <b>▶</b> リンクが表示されます。クリックするとポップアップが開きます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>選択肢</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td>Sequence Diagram</td><td>そのメソッドを起点にシーケンス図タブを開く</td></tr>
+          <tr><td>Activity Diagram</td><td>そのメソッドを起点にアクティビティ図タブを開く</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note"><b>注:</b> ▶ の選択肢は Sequence / Activity の 2 つ。コールグラフは左ツリーのメソッドを選び Call Graph ボタンで開きます。</div>
+    </section>
+
+    <section id="scope">
+      <h2>スコープ（表示範囲）の絞り込み</h2>
+      <p><b>Diagram → Scope…</b> でダイアログを開きます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>項目</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td>Include / Exclude packages</td><td>表示 / 除外するパッケージ（複数可）</td></tr>
+          <tr><td>Modules</td><td>対象モジュール（複数可）</td></tr>
+          <tr><td>Class name regex</td><td>クラス名の正規表現フィルタ</td></tr>
+          <tr><td>Max classes</td><td>表示する最大クラス数</td></tr>
+          <tr><td>Seed class + neighbor hops</td><td>特定クラス中心に N ホップ以内のみ</td></tr>
+          <tr><td>Relation kinds</td><td>関係線の種類（継承 / 実装 / 使用）</td></tr>
+          <tr><td>Visibility / Exclude external</td><td>可視性フィルタ / 外部ライブラリ除外</td></tr>
+          <tr><td>Parse mode</td><td>Full / Headers-only（高速・軽量）</td></tr>
+          <tr><td>Preset</td><td>Minimal / Balanced / Detailed を一括適用</td></tr>
+        </tbody>
+      </table></div>
+      <p>リセットは <b>Diagram → Clear Scope</b>。</p>
+    </section>
+
+    <section id="search">
+      <h2>エンティティ検索</h2>
+      <p><b>Diagram → Search Entities…</b>（<kbd>Ctrl+Shift+F</kbd>）。名前の一部を入力するとリアルタイム（150ms debounce）で候補が絞り込まれます。Kind チェックボックス（CLASS / METHOD / FIELD）で対象を限定。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>ボタン</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td><b>OK</b></td><td>CLASS → クラス図 / METHOD → Sequence・Activity 選択 / FIELD → 所属クラスの図</td></tr>
+          <tr><td><b>Drill-down</b></td><td>DETAILED プリセットで詳細クラス図（seed + neighborHops=1）</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="zoom">
+      <h2>ズーム・パン操作</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>操作</th><th>動作 / SC</th></tr></thead>
+        <tbody>
+          <tr><td>ズームイン / アウト</td><td><kbd>Ctrl+=</kbd> / <kbd>Ctrl+-</kbd></td></tr>
+          <tr><td>100% リセット / 全体を収める</td><td><kbd>Ctrl+0</kbd> / <kbd>Ctrl+F</kbd></td></tr>
+          <tr><td><kbd>Ctrl</kbd>+ホイール</td><td>ポインタ基点でズーム（範囲 0.1〜8.0）</td></tr>
+          <tr><td>左 / 中ドラッグ</td><td>パン（移動）</td></tr>
+          <tr><td><kbd>Alt</kbd>+左ドラッグ</td><td>範囲選択 → 矩形内テキストをクリップボードへ</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+A</td><td>全テキストコピー</td></tr>
+        </tbody>
+      </table></div>
+      <p>ズーム倍率はステータスバー右端に常時表示されます。</p>
+    </section>
+
+    <section id="drilldown">
+      <h2>ドリルダウンとタブナビゲーション</h2>
+      <p>プレビュー上でクラス名にカーソルを置くと指差しアイコンに変わります。<b>クラス名左クリック</b>で DETAILED 詳細図タブ、<b>メソッド横 ▶</b> で Sequence / Activity ポップアップ。</p>
+      <p>Juml は <b>VS Code 風のタブ中心モデル</b>です。同じ題材・図種のタブは重複生成されず既存タブにフォーカスが移ります。図の行き来はタブで行います（Back / Forward は現行版にありません）。</p>
+    </section>
+
+    <section id="style">
+      <h2>スタイル設定</h2>
+      <h3>クイック切替（テーマ）</h3>
+      <p><b>Style メニュー</b>からテーマ名をクリックで即時切替。</p>
+      <p><span class="pill">(None)</span><span class="pill">plain</span><span class="pill">cerulean</span><span class="pill">sketchy</span><span class="pill">mono</span><span class="pill">vibrant</span><span class="pill">materia</span><span class="pill">hacker</span><span class="pill">cyborg</span><span class="pill">mars</span><span class="pill">amiga</span><span class="pill">spacelab</span></p>
+      <h3>詳細設定（Style Settings…）</h3>
+      <p><b>共通:</b> テーマ / 背景色 / フォント・サイズ / レイアウト方向 / カスタム SkinParam。</p>
+      <div class="tip"><b>日本語フォントの既定:</b> フォントを未指定（空欄）にすると、実行環境の日本語フォント（Noto Sans CJK JP / Yu Gothic / Meiryo / Hiragino Sans / IPAGothic など）を自動検出し、文字化け（豆腐 □）を防ぎます。特定フォントを使う場合は名前を入力すると優先されます。</div>
+      <p><b>シーケンス図固有:</b> JavaDoc 表示 ON/OFF、コメントスタイル INLINE/NOTE、配置 AT_CALL_SITE/PARTICIPANT_TOP、メソッド名修飾。<br>
+      <b>クラス図固有:</b> フィールド / メソッド / アノテーション表示、PUBLIC_ONLY、外部ライブラリ除外、コメント最大長、hidden annotations。<br>
+      <b>コールグラフ:</b> 最大再帰深さ（既定 4）。</p>
+      <p>設定は OK で永続化（SQLite）され、次回起動時も保持されます。</p>
+    </section>
+
+    <section id="export">
+      <h2>右クリックエクスポート</h2>
+      <p>プレビュー上を<b>右クリック</b>するとエクスポートポップアップが表示されます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>項目</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td>Save as SVG…</td><td>SVG ファイルとして保存</td></tr>
+          <tr><td>Save as PNG…</td><td>PNG ファイルとして保存</td></tr>
+          <tr><td>Save as PlantUML…</td><td>PlantUML ソース (.puml) として保存</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="save">
+      <h2>図の保存・エクスポート</h2>
+      <h3>File メニューから保存</h3>
+      <p><b>File → Save Diagram As…</b>（<kbd>Ctrl+S</kbd>）。拡張子で形式を自動判別します。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>拡張子</th><th>出力形式</th></tr></thead>
+        <tbody>
+          <tr><td><code>.svg</code></td><td>SVG ベクター（高品質・無制限サイズ）</td></tr>
+          <tr><td><code>.png</code></td><td>PNG ラスター（4096×4096 上限あり）</td></tr>
+          <tr><td><code>.puml</code> / <code>.txt</code></td><td>PlantUML テキスト</td></tr>
+        </tbody>
+      </table></div>
+      <h3>一括エクスポート（File メニュー）</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>項目</th><th>動作</th></tr></thead>
+        <tbody>
+          <tr><td>Export Class Diagrams Per Folder…</td><td>フォルダ（パッケージ）ごとに classes.puml + classes.svg を出力（CLI <code>--per-folder</code> 相当）</td></tr>
+          <tr><td>Export Function List…</td><td>メソッド一覧を Markdown 表 / CSV で出力（CLI <code>--function-list</code> 相当）</td></tr>
+          <tr><td>Export Members to Excel…</td><td>全クラスのメンバーを .xlsx で出力</td></tr>
+        </tbody>
+      </table></div>
+      <div class="tip"><b>ヒント:</b> 大きな図は <code>.svg</code> 出力を推奨。PNG は PlantUML のキャンバス上限に達すると切り詰められます。</div>
+    </section>
+
+    <section id="impact">
+      <h2>Impact 解析</h2>
+      <p>あるクラスやメソッドに<b>依存している箇所（逆参照）</b>を BFS で辿り、変更影響範囲を把握します。</p>
+      <ol>
+        <li>右ペインの <b>Impact</b> タブをクリック</li>
+        <li><b>Symbol</b> に完全修飾名を入力（クラス <code>com.example.MyClass</code> / メソッド <code>com.example.MyClass.myMethod</code>）</li>
+        <li><b>Depth</b> スピナーで BFS 深さを指定（既定 3、範囲 1–10）</li>
+        <li><b>Analyze</b> で層別の呼び出し元ツリーを表示</li>
+      </ol>
+      <div class="tip"><b>ヒント:</b> 初回は参照インデックス構築に時間がかかります。2 回目以降はキャッシュが利用されます。</div>
+    </section>
+
+    <section id="persist">
+      <h2>プロジェクト設定の自動保存</h2>
+      <p>プロジェクトごとの設定が SQLite に自動保存され、開き直すと復元されます。ウィンドウ位置・サイズも保存されます。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>分類</th><th>保存される項目</th></tr></thead>
+        <tbody>
+          <tr><td>スタイル</td><td>テーマ・背景色・フォント・サイズ・方向・カスタム SkinParam</td></tr>
+          <tr><td>シーケンス図</td><td>コメント表示・スタイル・配置・メソッド名修飾</td></tr>
+          <tr><td>クラス図</td><td>プリセット・フィールド/メソッド/アノテーション表示・PUBLIC_ONLY・コメント最大長</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="shortcuts">
+      <h2>キーボードショートカット一覧</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>SC</th><th>機能</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Ctrl+O</kbd></td><td>プロジェクトを開く</td></tr>
+          <tr><td><kbd>Ctrl+S</kbd></td><td>図を保存</td></tr>
+          <tr><td><kbd>F5</kbd></td><td>図を再描画</td></tr>
+          <tr><td><kbd>Ctrl+Shift+F</kbd></td><td>エンティティ検索</td></tr>
+          <tr><td><kbd>Ctrl+1 / 2 / 3</kbd></td><td>プリセット Minimal / Balanced / Detailed</td></tr>
+          <tr><td><kbd>Ctrl+= / - / 0 / F</kbd></td><td>ズーム イン / アウト / 100% / 全体</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+ホイール</td><td>マウスホイールズーム</td></tr>
+          <tr><td>左 / 中ドラッグ</td><td>パン（移動）</td></tr>
+          <tr><td><kbd>Alt</kbd>+左ドラッグ</td><td>範囲テキストをコピー</td></tr>
+          <tr><td><kbd>F1</kbd></td><td>使い方 (Usage)</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <footer>
+      <p>Juml — GUI 操作マニュアル。より深い内部仕様は <a href="./developer-reference.html">開発者リファレンス</a>へ。</p>
+      <p>MIT License — Copyright (c) 2015–2026 naou and contributors。</p>
+    </footer>
+
+  </div>
+  </main>
+</div>
+<script src="./assets/app.js"></script>
+</body>
+</html>

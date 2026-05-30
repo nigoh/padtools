@@ -149,10 +149,13 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp
 
 ドキュメント
 ------------------------------------------------
-詳細なドキュメントは [`docs/`](docs/) に置いています。
+詳細なドキュメントは [`docs/`](docs/) に **HTML** で置いています（GitHub Pages で公開可能）。
 
-* [GUI 操作マニュアル](docs/gui-manual.md) — 起動・プロジェクトを開く・ツールバー・各図種の操作・ショートカット一覧などを網羅した GUI の使い方ガイド
-* [Claude エージェント / スキル導入手順](docs/SETUP_CLAUDE_AGENTS_SKILLS.md) — AOSP / AAOS 解析向けの Claude Code エージェント・スキルを `~/.claude/` に導入する手順
+* [ドキュメントトップ](docs/index.html) — 概要・GUI マニュアル・開発者リファレンスへの入口
+* [プロジェクト概要](docs/project-summary.html) — 何ができるか・構成・ビルド・主要依存ライブラリ
+* [GUI 操作マニュアル](docs/gui-manual.html) — 起動・ツールバー・各図種の操作・スタイル設定・ショートカット一覧
+* [開発者リファレンス](docs/developer-reference.html) — CLI 全フラグ・図種カタログ・GUI 内部・解析エンジンの機能棚卸し
+* [Claude エージェント / スキル導入手順](.claude/SETUP_CLAUDE_AGENTS_SKILLS.md) — AOSP / AAOS 解析向けの Claude Code エージェント・スキル（リポジトリの `.claude/` 配下）の導入手順
 
 既知の制約
 ------------------------------------------------

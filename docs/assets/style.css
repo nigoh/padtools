@@ -324,3 +324,219 @@ figure.uml-fig .diagram-svg { cursor: zoom-in; }
   .table-wrap.cardify td:first-child::before { color: var(--accent); }
   .table-wrap.cardify td:empty { display: none; }
 }
+
+/* ============================================================================
+   v2 試作スタイル（body.v2 にのみ適用）— 視覚階層 / 可読性 / 認知負荷 /
+   配色・アクセシビリティ / ナビゲーション / 図の見せ方を強化する。
+   コンテナ幅(1080)は変えず、本文の measure だけ快適幅に絞る。
+   ========================================================================== */
+
+/* --- 読書進捗バー（最上部） --- */
+.read-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  z-index: 80; transition: width .08s linear; pointer-events: none;
+}
+/* --- トップへ戻る --- */
+.to-top {
+  position: fixed; right: 1rem; bottom: 1rem; z-index: 70;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--pill-bg); color: var(--text); border: 1px solid var(--border);
+  font-size: 1.2rem; cursor: pointer; opacity: 0; transform: translateY(8px);
+  transition: opacity .2s, transform .2s, border-color .2s; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.to-top.show { opacity: 1; transform: translateY(0); }
+.to-top:hover { border-color: var(--accent); color: var(--accent); }
+
+body.v2 {
+  font-size: 15.5px; line-height: 1.78;
+}
+
+/* --- 可読性: 本文(段落/リスト)の measure を快適幅に。表・図・コードは全幅維持 --- */
+body.v2 main.content section > p,
+body.v2 main.content section > ul,
+body.v2 main.content section > ol,
+body.v2 main.content .content-inner > p {
+  max-width: 44em;
+}
+body.v2 p { letter-spacing: .01em; }
+/* リード文: 各 section 見出し直後の段落を少し大きく・淡く */
+body.v2 section > h2 + p { font-size: 1.06rem; color: var(--text-dim); max-width: 46em; }
+
+/* --- 視覚階層: h2 / h3 / h4 を明確化 --- */
+body.v2 section > h2 {
+  font-size: 1.7rem; margin: 3.4rem 0 1.1rem; padding: 0 0 .5rem .9rem;
+  border-bottom: 1px solid var(--border); position: relative; letter-spacing: -.2px;
+}
+body.v2 section > h2::before {
+  content: ""; position: absolute; left: 0; top: .15em; bottom: .55rem; width: 5px;
+  border-radius: 3px; background: linear-gradient(var(--accent), var(--accent-2));
+}
+body.v2 h3 {
+  font-size: 1.22rem; font-weight: 650; color: var(--text); margin: 2.1rem 0 .7rem;
+  padding-left: .7rem; border-left: 3px solid color-mix(in srgb, var(--accent) 60%, transparent);
+}
+body.v2 section > h4, body.v2 main.content .content-inner > h4 {
+  font-size: .82rem; color: var(--accent-2); text-transform: uppercase;
+  letter-spacing: .8px; margin: 1.5rem 0 .5rem; font-weight: 700;
+}
+
+/* --- 見出しのパーマリンク（# アンカー） --- */
+body.v2 .anchor {
+  margin-left: .4rem; color: var(--text-faint); opacity: 0; text-decoration: none;
+  font-weight: 400; transition: opacity .15s;
+}
+body.v2 h2:hover .anchor, body.v2 h3:hover .anchor, body.v2 .anchor:focus { opacity: 1; }
+body.v2 .anchor:hover { color: var(--accent); }
+
+/* --- セクション間リズム --- */
+body.v2 section { margin-bottom: 3.6rem; }
+
+/* --- ナビ: サイドバー現在地を強調 --- */
+body.v2 .sidebar nav a { position: relative; }
+body.v2 .sidebar nav a.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
+}
+body.v2 .sidebar nav a.active::before {
+  content: ""; position: absolute; left: -1rem; top: 4px; bottom: 4px; width: 3px;
+  border-radius: 2px; background: var(--accent);
+}
+body.v2 .sidebar { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* --- 認知負荷: テーブルを軽く・走査しやすく --- */
+body.v2 .table-wrap { border-radius: 12px; }
+body.v2 table { font-size: .88rem; }
+body.v2 thead th {
+  background: var(--bg-soft); font-size: .74rem; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--text-dim);
+}
+body.v2 th, body.v2 td { padding: .6rem .9rem; }
+body.v2 tbody tr:nth-child(even) { background: color-mix(in srgb, var(--bg-soft) 45%, transparent); }
+body.v2 tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* --- callout にアイコンを付与して種別を即判別 --- */
+body.v2 .note, body.v2 .tip, body.v2 .warn {
+  position: relative; padding-left: 2.6rem; border-radius: 0 10px 10px 0;
+}
+body.v2 .note::before, body.v2 .tip::before, body.v2 .warn::before {
+  position: absolute; left: .9rem; top: .65rem; font-size: 1rem; line-height: 1;
+}
+body.v2 .note::before { content: "ℹ"; color: var(--accent); }
+body.v2 .tip::before  { content: "💡"; }
+body.v2 .warn::before { content: "⚠"; color: var(--warn); }
+
+/* --- 配色 / アクセシビリティ --- */
+body.v2 .badge, body.v2 .src, body.v2 .count-tag { color: var(--text-dim); }
+body.v2 a:focus-visible, body.v2 button:focus-visible,
+body.v2 .sidebar nav a:focus-visible, body.v2 .site-nav a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 5px;
+}
+
+/* --- 図: 周囲と分離し、拡大できることを明示 --- */
+body.v2 figure.uml-fig {
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px;
+  padding: 1rem 1rem .4rem; margin: 2rem auto;
+}
+body.v2 figure.uml-fig .diagram-svg { background: var(--bg-card); border-radius: 10px; }
+body.v2 figure.uml-fig figcaption { margin-top: .7rem; }
+@media (min-width: 881px) {
+  body.v2 figure.uml-fig figcaption::after {
+    content: " 🔍 クリックで拡大"; color: var(--accent); white-space: nowrap;
+  }
+}
+
+/* --- モーション配慮 --- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .read-progress, .to-top, body.v2 .anchor { transition: none; }
+}
+
+/* --- モバイルの見出しを少し抑える（縦の消費を軽減） --- */
+@media (max-width: 880px) {
+  body.v2 section > h2 { font-size: 1.4rem; margin-top: 2.4rem; }
+  body.v2 h3 { font-size: 1.1rem; }
+  body.v2 main.content section > p,
+  body.v2 main.content .content-inner > p { max-width: none; }
+  body.v2 .to-top { right: .7rem; bottom: .7rem; }
+}
+
+/* ====================== v2 大胆版（差し色で鮮やかに） ====================== */
+
+/* --- 装飾ヒーロー（index）: 空手家ピクセルロゴ + グラデ文字 + フロア + アクセント光 --- */
+body.v2 .hero-brand {
+  display: flex; align-items: center; gap: clamp(1.2rem, 4vw, 2.6rem);
+  position: relative; padding: 1.4rem 0 1rem; margin-bottom: 2.4rem;
+}
+body.v2 .hero-brand::before {
+  content: ""; position: absolute; left: -8%; top: -40%; width: 460px; height: 320px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+body.v2 .hero-logo { position: relative; z-index: 1; flex: 0 0 auto; }
+body.v2 .karateka {
+  width: clamp(96px, 13vw, 150px); height: auto; display: block;
+  filter: drop-shadow(0 8px 22px rgba(0,0,0,.55));
+}
+body.v2 .karateka .k-gi  { fill: var(--text); }
+body.v2 .karateka .k-acc { fill: var(--danger); }
+body.v2 .karateka .k-out { fill: var(--border); }
+body.v2 .hero-floor {
+  display: block; height: 6px; margin: 8px auto 0; width: 78%; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 70%, transparent), transparent);
+}
+body.v2 .hero-text { position: relative; z-index: 1; min-width: 0; }
+body.v2 .hero-brand h1 { margin: 0 0 .35rem; }
+body.v2 .grad {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+@media (max-width: 560px) {
+  body.v2 .hero-brand { flex-direction: column; align-items: flex-start; }
+}
+
+/* --- セクションのカテゴリ色（app.js が TOC グループ順に --cat を付与） --- */
+body.v2 section { --cat: var(--accent); }
+body.v2 section > h2::before { background: var(--cat); }
+body.v2 h3 { border-left-color: color-mix(in srgb, var(--cat) 65%, transparent); }
+/* サイドバー: グループ見出しとリンクにカテゴリ色 */
+body.v2 .sidebar nav .group { color: color-mix(in srgb, var(--cat, var(--text-faint)) 80%, var(--text-faint)); }
+body.v2 .sidebar nav a.active { background: color-mix(in srgb, var(--cat, var(--accent)) 16%, transparent); color: var(--cat, var(--accent)); }
+body.v2 .sidebar nav a.active::before { background: var(--cat, var(--accent)); }
+
+/* --- callout を色付きパネルに（淡い色面 + 強い左帯 + アイコン） --- */
+body.v2 .note, body.v2 .tip, body.v2 .warn {
+  border-left-width: 4px; background: color-mix(in srgb, var(--accent) 9%, var(--bg-soft));
+}
+body.v2 .note { border-left-color: var(--accent); }
+body.v2 .tip  { background: color-mix(in srgb, var(--accent-2) 10%, var(--bg-soft)); border-left-color: var(--accent-2); }
+body.v2 .warn { background: color-mix(in srgb, var(--warn) 12%, var(--bg-soft)); border-left-color: var(--warn); }
+
+/* --- コードブロックを装飾（ヘッダ帯 + 言語ラベル + 信号ドット） --- */
+body.v2 pre { padding-top: 2.4rem; }
+body.v2 pre::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1.9rem;
+  background: var(--bg-soft); border-bottom: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+body.v2 pre::after {
+  content: "•••"; position: absolute; top: .15rem; left: .8rem; letter-spacing: .15em;
+  color: var(--accent-3); font-size: .9rem; line-height: 1.9rem;
+}
+body.v2 pre[data-lang]::after { content: "• " attr(data-lang); color: var(--text-dim); font-family: var(--mono); font-size: .72rem; }
+body.v2 pre .copy-btn { top: .35rem; opacity: .85; }
+
+/* --- 図パネルに accent の上帯 --- */
+body.v2 figure.uml-fig { border-top: 3px solid var(--accent); }
+
+/* --- 表→定義リスト（app.js が 2 列表を変換） --- */
+body.v2 .deflist { margin: 1.1rem 0; display: grid; gap: .5rem; }
+body.v2 .deflist .row {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  padding: .6rem .9rem; display: grid; grid-template-columns: minmax(120px, 16em) 1fr; gap: .2rem 1rem;
+}
+body.v2 .deflist dt { color: var(--accent); font-weight: 650; margin: 0; }
+body.v2 .deflist dd { color: var(--text-dim); margin: 0; }
+@media (max-width: 620px) {
+  body.v2 .deflist .row { grid-template-columns: 1fr; }
+  body.v2 .deflist dt { color: var(--accent); }
+}

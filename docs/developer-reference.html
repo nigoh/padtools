@@ -14,6 +14,7 @@
   <a class="logo" href="./index.html">Juml<small>docs</small></a>
   <a class="np" href="./index.html">ホーム</a>
   <a class="np current" href="./developer-reference.html">開発者リファレンス</a>
+  <a class="np" href="./source-analysis.html">ソース解析</a>
   <a class="np" href="./gui-manual.html">GUI マニュアル</a>
   <a class="np" href="./project-summary.html">プロジェクト概要</a>
   <a class="np" href="./claude-code.html">Claude Code 連携</a>
@@ -470,6 +471,7 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp</code></pre>
 
     <section id="engine">
       <h2>解析エンジン (core) の詳細</h2>
+      <div class="note"><b>関連:</b> <code>core/formats</code> がソースから何を取得し、どのように PlantUML へ変換して各図を組み立てるかは、専用ページ <a href="./source-analysis.html">ソース解析パイプライン</a>に詳しくまとめています（データモデル / Adapter 群 / 図種別の生成ロジック）。</div>
       <p>シーケンス図の制御構造変換が最も特徴的です。<code>StatementAdapter</code> が構造化したツリーを <code>SeqEmitters</code> が PlantUML フラグメントに射影します。</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Java 構文</th><th>PlantUML</th></tr></thead>

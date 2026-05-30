@@ -1,6 +1,16 @@
 # Juml ドキュメント
 
-Juml 2.0 のドキュメント置き場です。各ファイルは GitHub 上でそのまま閲覧できます。
+Juml のドキュメント置き場です。各ファイルは GitHub 上でそのまま閲覧できます。
+
+## 開発者ドキュメント（HTML / GitHub Pages）
+
+- [index.html](index.html) — CLI・GUI・解析エンジン (core) を網羅した **開発者向けの機能棚卸し**。
+  自己完結 HTML（サイドバーナビ・CLI オプションのライブ絞り込み・インライン構成図）で、
+  GitHub Pages 公開時はサイトのトップページになります。
+
+> **GitHub Pages 公開手順**: リポジトリの **Settings → Pages** で
+> Source を「Deploy from a branch」、Branch を `main` / フォルダ `/docs` に設定すると
+> `https://nigoh.github.io/<repo>/` で公開されます（`.nojekyll` 同梱済み）。
 
 ## GUI 操作マニュアル
 

@@ -83,6 +83,7 @@
       <h2>アーキテクチャ</h2>
       <p>Juml は大きく <b>CLI/GUI エントリ層</b>・<b>UML GUI 層</b>・<b>解析エンジン (core)</b> の 3 層で構成されます。エントリは <code>juml.Main</code>。引数なし（または図モード非該当）で Swing GUI が起動し、図モードフラグがあれば CLI として単発／一括出力を行います。</p>
 
+      <figure class="uml-fig">
       <svg class="diagram-svg" viewBox="0 0 760 430" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="12">
         <defs>
           <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
@@ -146,6 +147,8 @@
         <line x1="160" y1="150" x2="150" y2="226" marker-end="url(#arr)"/>
         <line x1="600" y1="150" x2="320" y2="226" marker-end="url(#arr)"/>
       </svg>
+      <figcaption><b>図1</b>　Juml の 3 層アーキテクチャ（<code>juml.Main</code> を起点に Swing GUI 層・CLI 層・解析エンジン <code>core</code> へ分岐）。矢印は主要な制御の流れ。</figcaption>
+      </figure>
 
       <h3>パッケージ責務マップ</h3>
       <div class="table-wrap">
@@ -362,7 +365,170 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp</code></pre>
 
     <section id="gui">
       <h2>GUI ガイド</h2>
-      <p>ルートは <code>UmlMainFrame extends JFrame</code>（BorderLayout）。「タブ = エディタ」の VS Code 風モデルで、特別な Home タブは廃止済み。</p>
+      <p>ルートは <code>UmlMainFrame extends JFrame</code>（BorderLayout）。「タブ = エディタ」の VS Code 風モデルで、特別な Home タブは廃止済み。次のクラス図は、その配線（<code>UmlMainFrame</code>）と状態遷移（<code>DiagramController</code>）・タブ管理（<code>DiagramTabPane</code>）・状態保持（<code>DiagramState</code>）の責務分離を表します。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 970 600" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f2-tri" markerWidth="15" markerHeight="13" refX="13" refY="6.5" orient="auto"><path class="mk-tri" d="M1,1 L13,6.5 L1,12 Z"/></marker>
+          <marker id="f2-vee" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-open" d="M1,1 L10,5.5 L1,10"/></marker>
+          <marker id="f2-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+          <marker id="f2-dia" markerWidth="18" markerHeight="12" refX="2" refY="6" orient="auto"><path class="mk-dia" d="M2,6 L9,2 L16,6 L9,10 Z"/></marker>
+        </defs>
+
+        <!-- relations (drawn first, under boxes) -->
+        <path class="u-rel" d="M390,159 L250,440" marker-start="url(#f2-dia)"/>
+        <path class="u-rel" d="M470,159 L490,205" marker-start="url(#f2-dia)"/>
+        <path class="u-rel" d="M495,159 L150,250" marker-start="url(#f2-dia)"/>
+        <path class="u-rel" d="M655,95 L700,150" marker-start="url(#f2-dia)"/>
+        <path class="u-rel" d="M800,244 L800,300" marker-start="url(#f2-dia)"/>
+        <text class="u-mult" x="808" y="285">1..*</text>
+        <text class="u-rel-lbl" x="808" y="272">openTabs</text>
+
+        <path class="u-rel" d="M650,250 L700,205" marker-end="url(#f2-arr)"/>
+        <text class="u-rel-lbl" x="652" y="222">openDiagram()</text>
+        <path class="u-rel" d="M350,300 L276,332" marker-end="url(#f2-arr)"/>
+        <text class="u-rel-lbl" x="286" y="318">selectClassNode()</text>
+        <path class="u-rel" d="M500,329 L500,468" marker-end="url(#f2-arr)"/>
+        <text class="u-rel-lbl" x="506" y="400">state</text>
+        <path class="u-rel" d="M720,244 L645,470" marker-end="url(#f2-arr)"/>
+        <text class="u-rel-lbl" x="660" y="380">state</text>
+        <path class="u-rel" d="M150,440 L150,369" marker-end="url(#f2-arr)"/>
+        <text class="u-rel-lbl" x="156" y="405">populate()</text>
+
+        <path class="u-rel-dash" d="M276,262 L348,250" marker-end="url(#f2-vee)"/>
+        <text class="u-rel-lbl" x="250" y="245">onClassSelected()</text>
+        <path class="u-rel-dash" d="M800,417 L800,478" marker-end="url(#f2-vee)"/>
+        <text class="u-rel-lbl" x="808" y="452">generatePuml()</text>
+
+        <!-- UmlMainFrame -->
+        <g>
+          <rect class="u-cls" x="330" y="12" width="330" height="147" rx="7"/>
+          <rect class="u-cls-hdr" x="330" y="12" width="330" height="30" rx="7"/>
+          <text class="u-stereo" x="495" y="25" text-anchor="middle">«JFrame»</text>
+          <text class="u-name" x="495" y="38" text-anchor="middle">UmlMainFrame</text>
+          <line class="u-div" x1="330" y1="42" x2="660" y2="42"/>
+          <text class="u-member" x="338" y="56"><tspan class="u-vis">-</tspan> state: DiagramState</text>
+          <text class="u-member" x="338" y="71"><tspan class="u-vis">-</tspan> treePanel: ProjectTreePanel</text>
+          <text class="u-member" x="338" y="86"><tspan class="u-vis">-</tspan> tabPane: DiagramTabPane</text>
+          <text class="u-member" x="338" y="101"><tspan class="u-vis">-</tspan> controller: DiagramController</text>
+          <text class="u-member" x="338" y="116"><tspan class="u-vis">-</tspan> projectLoader: ProjectLoader</text>
+          <line class="u-div" x1="330" y1="123" x2="660" y2="123"/>
+          <text class="u-member" x="338" y="137"><tspan class="u-vis">-</tspan> createDiagramController(): DiagramController</text>
+          <text class="u-member" x="338" y="152"><tspan class="u-vis">-</tspan> loadProject(File): void</text>
+        </g>
+
+        <!-- DiagramController -->
+        <g>
+          <rect class="u-cls" x="350" y="205" width="300" height="124" rx="7"/>
+          <rect class="u-cls-hdr" x="350" y="205" width="300" height="22" rx="7"/>
+          <text class="u-name" x="500" y="220" text-anchor="middle">DiagramController</text>
+          <line class="u-div" x1="350" y1="227" x2="650" y2="227"/>
+          <text class="u-member" x="358" y="241"><tspan class="u-vis">#</tspan> state: DiagramState</text>
+          <text class="u-member" x="358" y="256"><tspan class="u-vis">-</tspan> tabPane: DiagramTabPane</text>
+          <text class="u-member" x="358" y="271"><tspan class="u-vis">-</tspan> treePanel: ProjectTreePanel</text>
+          <line class="u-div" x1="350" y1="278" x2="650" y2="278"/>
+          <text class="u-member" x="358" y="292"><tspan class="u-vis">+</tspan> onTreeClassSelected(JavaClassInfo)</text>
+          <text class="u-member" x="358" y="307"><tspan class="u-vis">+</tspan> selectDiagramKind(DiagramKind)</text>
+          <text class="u-member" x="358" y="322"><tspan class="u-vis">+</tspan> onTabFocused(FocusedTab)</text>
+        </g>
+
+        <!-- DiagramTabPane -->
+        <g>
+          <rect class="u-cls" x="700" y="120" width="255" height="124" rx="7"/>
+          <rect class="u-cls-hdr" x="700" y="120" width="255" height="22" rx="7"/>
+          <text class="u-name" x="827" y="135" text-anchor="middle">DiagramTabPane</text>
+          <line class="u-div" x1="700" y1="142" x2="955" y2="142"/>
+          <text class="u-member" x="708" y="156"><tspan class="u-vis">-</tspan> tabs: JTabbedPane</text>
+          <text class="u-member" x="708" y="171"><tspan class="u-vis">-</tspan> openTabs: Map&lt;String,DiagramTab&gt;</text>
+          <text class="u-member" x="708" y="186"><tspan class="u-vis">-</tspan> state: DiagramState</text>
+          <line class="u-div" x1="700" y1="193" x2="955" y2="193"/>
+          <text class="u-member" x="708" y="207"><tspan class="u-vis">+</tspan> addOrFocusTab(TreeNodeOpenRequest)</text>
+          <text class="u-member" x="708" y="222"><tspan class="u-vis">+</tspan> openDiagram(key, label, …, spec)</text>
+          <text class="u-member" x="708" y="237"><tspan class="u-vis">+</tspan> rerenderAllTabs()</text>
+        </g>
+
+        <!-- DiagramTab (inner) -->
+        <g>
+          <rect class="u-cls" x="700" y="300" width="255" height="117" rx="7"/>
+          <rect class="u-cls-hdr" x="700" y="300" width="255" height="30" rx="7"/>
+          <text class="u-stereo" x="827" y="313" text-anchor="middle">«inner class»</text>
+          <text class="u-name" x="827" y="326" text-anchor="middle">DiagramTab</text>
+          <line class="u-div" x1="700" y1="330" x2="955" y2="330"/>
+          <text class="u-member" x="708" y="344"><tspan class="u-vis">-</tspan> spec: DiagramRequest</text>
+          <text class="u-member" x="708" y="359"><tspan class="u-vis">-</tspan> previewPanel: SvgPreviewPanel</text>
+          <text class="u-member" x="708" y="374"><tspan class="u-vis">-</tspan> sourcePanel: PumlSourcePanel</text>
+          <line class="u-div" x1="700" y1="381" x2="955" y2="381"/>
+          <text class="u-member" x="708" y="395"><tspan class="u-vis">~</tspan> startRender(): void  <tspan class="u-faint">«SwingWorker»</tspan></text>
+          <text class="u-member" x="708" y="410"><tspan class="u-vis">~</tspan> mirrorToState(): void</text>
+        </g>
+
+        <!-- DiagramState -->
+        <g>
+          <rect class="u-cls" x="360" y="470" width="280" height="109" rx="7"/>
+          <rect class="u-cls-hdr" x="360" y="470" width="280" height="22" rx="7"/>
+          <text class="u-name" x="500" y="485" text-anchor="middle">DiagramState  <tspan class="u-faint">«状態保持のみ»</tspan></text>
+          <line class="u-div" x1="360" y1="492" x2="640" y2="492"/>
+          <text class="u-member" x="368" y="506"><tspan class="u-vis">#</tspan> sequenceEntry: String</text>
+          <text class="u-member" x="368" y="521"><tspan class="u-vis">#</tspan> currentScope: DiagramScope</text>
+          <text class="u-member" x="368" y="536"><tspan class="u-vis">#</tspan> currentPuml: String</text>
+          <text class="u-member" x="368" y="551"><tspan class="u-vis">#</tspan> currentSvgXml: String</text>
+          <line class="u-div" x1="360" y1="558" x2="640" y2="558"/>
+          <text class="u-member" x="368" y="572"><tspan class="u-vis">#</tspan> setAllMethodEntries(String)</text>
+        </g>
+
+        <!-- ProjectTreePanel -->
+        <g>
+          <rect class="u-cls" x="24" y="250" width="252" height="119" rx="7"/>
+          <rect class="u-cls-hdr" x="24" y="250" width="252" height="30" rx="7"/>
+          <text class="u-stereo" x="150" y="263" text-anchor="middle">«JPanel»</text>
+          <text class="u-name" x="150" y="276" text-anchor="middle">ProjectTreePanel</text>
+          <line class="u-div" x1="24" y1="280" x2="276" y2="280"/>
+          <text class="u-member" x="32" y="294"><tspan class="u-vis">-</tspan> onClassSelected: Consumer</text>
+          <text class="u-member" x="32" y="309"><tspan class="u-vis">-</tspan> onMethodSelected: Consumer</text>
+          <text class="u-member" x="32" y="324"><tspan class="u-vis">-</tspan> onOpenInNewTab: Consumer</text>
+          <line class="u-div" x1="24" y1="331" x2="276" y2="331"/>
+          <text class="u-member" x="32" y="345"><tspan class="u-vis">+</tspan> populate(analysis, classes, …)</text>
+          <text class="u-member" x="32" y="360"><tspan class="u-vis">+</tspan> selectClassNode(String)</text>
+        </g>
+
+        <!-- ProjectLoader -->
+        <g>
+          <rect class="u-cls" x="24" y="440" width="252" height="87" rx="7"/>
+          <rect class="u-cls-hdr" x="24" y="440" width="252" height="30" rx="7"/>
+          <text class="u-stereo" x="150" y="453" text-anchor="middle">«SwingWorker ラッパ»</text>
+          <text class="u-name" x="150" y="466" text-anchor="middle">ProjectLoader</text>
+          <line class="u-div" x1="24" y1="470" x2="276" y2="470"/>
+          <text class="u-member" x="32" y="484"><tspan class="u-vis">-</tspan> cache: ProjectAnalysisCache</text>
+          <text class="u-member" x="32" y="499"><tspan class="u-vis">-</tspan> onLoadSuccess: Consumer&lt;File&gt;</text>
+          <line class="u-div" x1="24" y1="506" x2="276" y2="506"/>
+          <text class="u-member" x="32" y="520"><tspan class="u-vis">+</tspan> start(File): void</text>
+        </g>
+
+        <!-- DiagramService -->
+        <g>
+          <rect class="u-cls" x="690" y="478" width="265" height="51" rx="7"/>
+          <rect class="u-cls-hdr" x="690" y="478" width="265" height="30" rx="7"/>
+          <text class="u-stereo" x="822" y="491" text-anchor="middle">«utility»</text>
+          <text class="u-name" x="822" y="504" text-anchor="middle">DiagramService</text>
+          <line class="u-div" x1="690" y1="508" x2="955" y2="508"/>
+          <text class="u-member" x="698" y="522"><tspan class="u-vis">+</tspan> generatePuml(DiagramRequest, cache): String</text>
+        </g>
+      </svg>
+      <figcaption><b>図2</b>　GUI タブアーキテクチャ（クラス図）。◆ はコンポジション（<code>UmlMainFrame</code> が各パネルを保持／<code>DiagramTabPane</code> が <code>DiagramTab</code> を <code>1..*</code> 保持）、実線矢印は関連、破線矢印は依存（ツリーのコールバック・<code>DiagramService</code> 呼び出し）。状態は <code>DiagramState</code> に集約。</figcaption>
+      </figure>
+
+      <div class="uml-legend">
+        <h4>クラス図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg2-tri" markerWidth="13" markerHeight="11" refX="11" refY="5.5" orient="auto"><path class="mk-tri" d="M1,1 L11,5.5 L1,10 Z"/></marker></defs><line class="u-rel" x1="2" y1="10" x2="44" y2="10" marker-end="url(#lg2-tri)"/></svg> 継承 / 実装（▷）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg2-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-rel" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg2-arr)"/></svg> 関連（実線→）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg2-vee" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-open" d="M1,1 L10,5.5 L1,10"/></marker></defs><line class="u-rel-dash" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg2-vee)"/></svg> 依存（破線⇢）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg2-dia" markerWidth="18" markerHeight="12" refX="2" refY="6" orient="auto"><path class="mk-dia" d="M2,6 L9,2 L16,6 L9,10 Z"/></marker></defs><line class="u-rel" x1="46" y1="10" x2="14" y2="10" marker-end="url(#lg2-dia)"/></svg> コンポジション（◆）</div>
+          <div class="li"><code><b class="u-vis" style="color:var(--accent-2)">+</b></code> public ／ <code><b style="color:var(--accent-2)">#</b></code> protected ／ <code><b style="color:var(--accent-2)">~</b></code> package ／ <code><b style="color:var(--accent-2)">-</b></code> private</div>
+          <div class="li"><code>1..*</code> 多重度 ／ <code>«stereotype»</code> ステレオタイプ ／ 3 段（名前・属性・操作）</div>
+        </div>
+      </div>
 
       <h3 id="gui-layout">画面構成</h3>
       <div class="table-wrap"><table>
@@ -533,6 +699,143 @@ java -jar Juml.jar --all -o ./out ~/AndroidStudioProjects/MyApp</code></pre>
         <li><b>日本語フォント:</b> スタイル未指定時 <code>JapaneseFontSupport.defaultFontFamily()</code> を <code>skinparam defaultFontName</code> で補い文字化け防止。</li>
         <li><b>Batik:</b> SVG → ラスタ表示 / GraphicsNode 描画は GUI 層（Apache Batik）。core はバイト列を返すのみ。</li>
       </ul>
+
+      <p>図生成層は <b>共通の基底クラス・インターフェースを持たない独立した <code>final</code> クラス群</b>で、いずれも <code>+ generate(List&lt;JavaClassInfo&gt;[, entry…], Options): String</code> という同形のエントリを公開します。<code>UmlGenerator</code> がそれらを呼び分け、出力 PlantUML 文字列を <code>PlantUmlRenderer</code> が SVG 化します。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f3-vee" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-open" d="M1,1 L10,5.5 L1,10"/></marker>
+          <marker id="f3-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+        </defs>
+
+        <!-- relations -->
+        <path class="u-rel-dash" d="M205,110 L205,148" marker-end="url(#f3-vee)"/>
+        <text class="u-rel-lbl" x="212" y="132">«create» extract → generate()</text>
+        <path class="u-rel" d="M430,360 L628,392" marker-end="url(#f3-arr)"/>
+        <text class="u-rel-lbl" x="470" y="368">puml: String</text>
+        <path class="u-rel" d="M628,382 L344,452" marker-end="url(#f3-arr)"/>
+        <text class="u-rel-lbl" x="430" y="430">currentStyle</text>
+        <path class="u-rel-dash" d="M790,406 L790,438" marker-end="url(#f3-vee)"/>
+        <text class="u-rel-lbl" x="796" y="426">«throws»</text>
+        <path class="u-rel-dash" d="M595,200 L628,188" marker-end="url(#f3-vee)"/>
+        <path class="u-rel-dash" d="M595,212 L628,258" marker-end="url(#f3-vee)"/>
+        <text class="u-rel-lbl" x="600" y="234">uses</text>
+
+        <!-- UmlGenerator -->
+        <g>
+          <rect class="u-cls" x="40" y="14" width="340" height="96" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="14" width="340" height="30" rx="7"/>
+          <text class="u-stereo" x="210" y="27" text-anchor="middle">«façade»</text>
+          <text class="u-name" x="210" y="40" text-anchor="middle">UmlGenerator</text>
+          <line class="u-div" x1="40" y1="44" x2="380" y2="44"/>
+          <text class="u-member" x="48" y="58"><tspan class="u-vis">+</tspan> extractFromSource(src, …): List&lt;JavaClassInfo&gt;</text>
+          <text class="u-member" x="48" y="73"><tspan class="u-vis">+</tspan> extractFromProjectDetailed(…): ProjectParseResult</text>
+          <text class="u-member" x="48" y="88"><tspan class="u-vis">+</tspan> classDiagram(src): String</text>
+          <text class="u-member" x="48" y="103"><tspan class="u-vis">+</tspan> sequenceDiagram(src, cls, m): String</text>
+        </g>
+
+        <!-- group frame -->
+        <rect class="u-frame" x="40" y="150" width="560" height="212" rx="8"/>
+        <rect class="u-frame-tab" x="40" y="150" width="320" height="20"/>
+        <text class="u-frame-op" x="48" y="164">PlantUml*Diagram（独立 final・共通基底/IF なし）</text>
+
+        <!-- group cells -->
+        <g>
+          <rect class="u-cls" x="55" y="185" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="55" y="185" width="170" height="24" rx="6"/>
+          <text class="u-name" x="140" y="201" text-anchor="middle">PlantUmlPackageDiagram</text>
+          <text class="u-member" x="63" y="224"><tspan class="u-vis">+</tspan> generate(): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="240" y="185" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="240" y="185" width="170" height="24" rx="6"/>
+          <text class="u-name" x="325" y="201" text-anchor="middle">PlantUmlSequenceDiagram</text>
+          <text class="u-member" x="248" y="224"><tspan class="u-vis">+</tspan> generate(…, entry): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="425" y="185" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="425" y="185" width="170" height="24" rx="6"/>
+          <text class="u-name" x="510" y="201" text-anchor="middle">PlantUmlClassDiagram</text>
+          <text class="u-member" x="433" y="224"><tspan class="u-vis">+</tspan> generate(): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="55" y="250" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="55" y="250" width="170" height="24" rx="6"/>
+          <text class="u-name" x="140" y="266" text-anchor="middle">PlantUmlModuleDiagram</text>
+          <text class="u-member" x="63" y="289"><tspan class="u-vis">+</tspan> generate(): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="240" y="250" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="240" y="250" width="170" height="24" rx="6"/>
+          <text class="u-name" x="325" y="266" text-anchor="middle">PlantUmlCallGraphDiagram</text>
+          <text class="u-member" x="248" y="289"><tspan class="u-vis">+</tspan> generate(…, entry): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="425" y="250" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="425" y="250" width="170" height="24" rx="6"/>
+          <text class="u-name" x="510" y="266" text-anchor="middle">PlantUmlActivityDiagram</text>
+          <text class="u-member" x="433" y="289"><tspan class="u-vis">+</tspan> generate(…, entry): String</text>
+        </g>
+        <g>
+          <rect class="u-cls" x="55" y="315" width="170" height="46" rx="6"/><rect class="u-cls-hdr" x="55" y="315" width="170" height="24" rx="6"/>
+          <text class="u-name" x="140" y="331" text-anchor="middle">PlantUmlCommonClasses…</text>
+          <text class="u-member" x="63" y="354"><tspan class="u-vis">+</tspan> generate(): String</text>
+        </g>
+        <text class="u-faint" x="248" y="332">共通シグネチャ:</text>
+        <text class="u-member" x="248" y="348">+ generate(List&lt;JavaClassInfo&gt;,</text>
+        <text class="u-member" x="248" y="361">          [entry…], Options): String</text>
+
+        <!-- PlantUmlClassRelations -->
+        <g>
+          <rect class="u-cls" x="630" y="150" width="320" height="73" rx="7"/>
+          <rect class="u-cls-hdr" x="630" y="150" width="320" height="22" rx="7"/>
+          <text class="u-name" x="790" y="165" text-anchor="middle">PlantUmlClassRelations  <tspan class="u-faint">«~ helper»</tspan></text>
+          <line class="u-div" x1="630" y1="172" x2="950" y2="172"/>
+          <text class="u-member" x="638" y="186"><tspan class="u-vis">~</tspan> emitInheritance(out, c, o, …)</text>
+          <text class="u-member" x="638" y="200"><tspan class="u-vis">~</tspan> emitUsage(out, c, known, …)</text>
+          <text class="u-member" x="638" y="214"><tspan class="u-vis">~</tspan> pickUsageTarget(type, known): String</text>
+        </g>
+        <!-- PlantUmlClassLegend -->
+        <g>
+          <rect class="u-cls" x="630" y="240" width="320" height="46" rx="7"/>
+          <rect class="u-cls-hdr" x="630" y="240" width="320" height="24" rx="7"/>
+          <text class="u-name" x="790" y="256" text-anchor="middle">PlantUmlClassLegend  <tspan class="u-faint">«~ helper»</tspan></text>
+          <text class="u-member" x="638" y="279"><tspan class="u-vis">~</tspan> emit(out, classes, o)</text>
+        </g>
+        <!-- PlantUmlRenderer -->
+        <g>
+          <rect class="u-cls" x="630" y="310" width="320" height="96" rx="7"/>
+          <rect class="u-cls-hdr" x="630" y="310" width="320" height="22" rx="7"/>
+          <text class="u-name" x="790" y="325" text-anchor="middle">PlantUmlRenderer  <tspan class="u-faint">«utility»</tspan></text>
+          <line class="u-div" x1="630" y1="332" x2="950" y2="332"/>
+          <text class="u-member" x="638" y="346"><tspan class="u-vis">+</tspan> renderSvg(puml, out|file): void</text>
+          <text class="u-member" x="638" y="361"><tspan class="u-vis">+</tspan> injectLayout(puml, style): String</text>
+          <text class="u-member" x="638" y="376"><tspan class="u-vis">+</tspan> injectScaleMax(puml, maxPx): String</text>
+          <text class="u-member" x="638" y="391"><tspan class="u-vis">+</tspan> getStyle() / setStyle(style)</text>
+        </g>
+        <!-- DiagramStyle -->
+        <g>
+          <rect class="u-cls" x="40" y="400" width="300" height="147" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="400" width="300" height="30" rx="7"/>
+          <text class="u-stereo" x="190" y="413" text-anchor="middle">«value object»</text>
+          <text class="u-name" x="190" y="426" text-anchor="middle">DiagramStyle</text>
+          <line class="u-div" x1="40" y1="430" x2="340" y2="430"/>
+          <text class="u-member" x="48" y="444"><tspan class="u-vis">-</tspan> theme: String</text>
+          <text class="u-member" x="48" y="459"><tspan class="u-vis">-</tspan> fontName: String</text>
+          <text class="u-member" x="48" y="474"><tspan class="u-vis">-</tspan> fontSize: int</text>
+          <text class="u-member" x="48" y="489"><tspan class="u-vis">-</tspan> direction: Direction</text>
+          <text class="u-member" x="48" y="504"><tspan class="u-vis">-</tspan> lineType: LineType</text>
+          <line class="u-div" x1="40" y1="511" x2="340" y2="511"/>
+          <text class="u-member" x="48" y="525"><tspan class="u-vis">+</tspan> defaults() / readable(): DiagramStyle</text>
+          <text class="u-member" x="48" y="540"><tspan class="u-vis">+</tspan> copy(): DiagramStyle</text>
+        </g>
+        <!-- PlantUmlRenderFailedException -->
+        <g>
+          <rect class="u-cls" x="630" y="438" width="320" height="54" rx="7"/>
+          <rect class="u-cls-hdr" x="630" y="438" width="320" height="30" rx="7"/>
+          <text class="u-stereo" x="790" y="451" text-anchor="middle">«exception» ↳ extends java.io.IOException</text>
+          <text class="u-name" x="790" y="464" text-anchor="middle">PlantUmlRenderFailedException</text>
+          <line class="u-div" x1="630" y1="468" x2="950" y2="468"/>
+          <text class="u-member" x="638" y="483"><tspan class="u-vis">+</tspan> PlantUmlRenderFailedException(String)</text>
+        </g>
+      </svg>
+      <figcaption><b>図3</b>　PlantUML 図生成階層（クラス図）。<code>UmlGenerator</code>（façade）が独立 <code>final</code> クラス群を呼び、各 <code>generate()</code> が返す <code>String</code> を <code>PlantUmlRenderer</code> が SVG 化（<code>DiagramStyle</code> を <code>currentStyle</code> として参照、失敗時 <code>PlantUmlRenderFailedException</code> を送出）。<code>PlantUmlClassDiagram</code> だけが補助 <code>~</code> ヘルパ 2 種に依存。</figcaption>
+      </figure>
     </section>
 
     <section id="build">

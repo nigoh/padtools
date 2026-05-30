@@ -176,7 +176,94 @@ java -jar Juml.jar ~/AndroidStudioProjects/MyApp</code></pre>
 
     <section id="tabs">
       <h2>右ペイン — タブ</h2>
-      <p>各図は 1 枚 = 1 タブ（上に SVG プレビュー、下に PlantUML ソース）。末尾に固定ユーティリティタブが 6 本あります。</p>
+      <p>各図は 1 枚 = 1 タブ（上に SVG プレビュー、下に PlantUML ソース）。末尾に固定ユーティリティタブが 6 本あります。左ペインのツリーでノードをダブルクリックすると、次の流れでタブが開く（既存タブがあればフォーカスのみ）か、新規タブが非同期で描画されます。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 960 500" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f7-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+          <marker id="f7-ret" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-ret" d="M1,1 L10,5.5 L1,10"/></marker>
+        </defs>
+
+        <line class="u-life" x1="130" y1="40" x2="130" y2="480"/>
+        <line class="u-life" x1="300" y1="40" x2="300" y2="480"/>
+        <line class="u-life" x1="480" y1="40" x2="480" y2="480"/>
+        <line class="u-life" x1="660" y1="40" x2="660" y2="480"/>
+        <line class="u-life" x1="850" y1="40" x2="850" y2="480"/>
+
+        <g font-size="9">
+          <rect class="u-actor" x="74" y="12" width="112" height="26" rx="6"/><text class="u-name" x="130" y="29" text-anchor="middle">ProjectTreePanel</text>
+          <rect class="u-actor" x="244" y="12" width="112" height="26" rx="6"/><text class="u-name" x="300" y="29" text-anchor="middle">DiagramController</text>
+          <rect class="u-actor" x="424" y="12" width="112" height="26" rx="6"/><text class="u-name" x="480" y="29" text-anchor="middle">DiagramTabPane</text>
+          <rect class="u-actor" x="612" y="12" width="96" height="26" rx="6"/><text class="u-name" x="660" y="29" text-anchor="middle">DiagramTab</text>
+          <rect class="u-actor" x="796" y="12" width="108" height="26" rx="6"/><text class="u-name" x="850" y="29" text-anchor="middle">DiagramService</text>
+        </g>
+
+        <!-- activations -->
+        <rect class="u-act" x="126" y="58" width="8" height="404"/>
+        <rect class="u-act" x="296" y="110" width="8" height="352"/>
+        <rect class="u-act" x="476" y="136" width="8" height="278"/>
+        <rect class="u-act" x="656" y="250" width="8" height="132"/>
+        <rect class="u-act" x="846" y="300" width="8" height="16"/>
+
+        <path class="u-msg" d="M22,58 L124,58" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="24" y="53">ノードをダブルクリック / 選択</text>
+        <path class="u-self" d="M134,76 L186,76 L186,90 L136,90" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="190" y="86">notifySelection() → onOpenInNewTab(req)</text>
+        <path class="u-msg" d="M134,112 L294,112" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="150" y="107">onTreeOpenInNewTab(req)  <tspan class="u-faint">（callback 配線）</tspan></text>
+        <path class="u-msg" d="M304,136 L474,136" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="320" y="131">addOrFocusTab(req)</text>
+        <path class="u-self" d="M484,156 L536,156 L536,170 L486,170" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="540" y="166">openDiagram(key, label, spec, treeSync)</text>
+
+        <!-- alt: 重複チェック -->
+        <rect class="u-frame" x="110" y="180" width="820" height="208"/>
+        <rect class="u-frame-tab" x="110" y="180" width="36" height="14"/>
+        <text class="u-frame-op" x="116" y="191">alt</text>
+        <text class="u-guard" x="150" y="191">[openTabs.get(key) != null — 既存タブ]</text>
+        <path class="u-self" d="M484,204 L536,204 L536,216 L486,216" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="540" y="214">tabs.setSelectedComponent(existing) — フォーカスのみ</text>
+
+        <line class="u-frame-div" x1="110" y1="230" x2="930" y2="230"/>
+        <text class="u-guard" x="116" y="243">[else 新規タブを生成]</text>
+        <path class="u-msg" d="M484,254 L654,254" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="500" y="249">new DiagramTab() / insertTab()</text>
+        <path class="u-msg" d="M484,280 L654,280" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="500" y="275">startRender()  <tspan class="u-faint">«SwingWorker»</tspan></text>
+        <path class="u-msg" d="M664,302 L844,302" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="668" y="297">generatePuml(spec, cache)</text>
+        <path class="u-ret" d="M844,318 L666,318" marker-end="url(#f7-ret)"/>
+        <text class="u-msg-lbl" x="690" y="332">puml: String</text>
+        <path class="u-self" d="M664,344 L716,344 L716,356 L666,356" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="668" y="354">render(puml) ⇒ svg  <tspan class="u-faint">背景スレッド</tspan></text>
+
+        <rect class="u-frame" x="618" y="362" width="312" height="22"/>
+        <rect class="u-frame-tab" x="618" y="362" width="34" height="14"/>
+        <text class="u-frame-op" x="624" y="373">opt</text>
+        <text class="u-guard" x="656" y="373">[success]</text>
+        <text class="u-msg-lbl" x="656" y="377">setSvg() / mirrorToState() → done() EDT</text>
+
+        <!-- focus sync -->
+        <path class="u-msg" d="M476,410 L304,410" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="320" y="405">onTabFocused(FocusedTab)</text>
+        <path class="u-msg" d="M296,434 L134,434" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="150" y="429">selectClassNode(fqn)  <tspan class="u-faint">[suppressNotify=true]</tspan></text>
+        <path class="u-self" d="M304,452 L356,452 L356,464 L306,464" marker-end="url(#f7-arr)"/>
+        <text class="u-msg-lbl" x="360" y="462">reflectKindInToolbar(kind) — ツールバー / メニュー同期</text>
+      </svg>
+      <figcaption><b>図7</b>　GUI でタブを開く（シーケンス図）。ツリーのダブルクリックが <code>DiagramController.onTreeOpenInNewTab()</code> 経由で <code>DiagramTabPane.addOrFocusTab()</code> を呼び、<code>alt</code> で「既存タブはフォーカスのみ／新規は <code>DiagramTab.startRender()</code> が <code>SwingWorker</code> で非同期描画」を分岐。描画後はタブフォーカスがツリー選択とツールバー図種へ逆同期される。</figcaption>
+      </figure>
+      <div class="uml-legend">
+        <h4>シーケンス図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg7-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-msg" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg7-arr)"/></svg> 同期呼び出し（実線→）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg7-ret" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-ret" d="M1,1 L10,5.5 L1,10"/></marker></defs><line class="u-ret" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg7-ret)"/></svg> 戻り値（破線⇠）</div>
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-act" x="14" y="2" width="8" height="16"/></svg> 活性区間（バー）</div>
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-frame" x="2" y="2" width="30" height="16"/><rect class="u-frame-tab" x="2" y="2" width="16" height="9"/></svg> <code>alt/opt/loop</code> 結合フラグメント</div>
+        </div>
+      </div>
+
       <div class="table-wrap"><table>
         <thead><tr><th>固定タブ</th><th>説明</th></tr></thead>
         <tbody>

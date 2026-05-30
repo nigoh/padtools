@@ -71,7 +71,116 @@
 
     <section id="pipeline">
       <h2>解析パイプライン全体</h2>
-      <p>入力（ソースファイル / プロジェクトルート）から UML 図までの流れは、大きく <b>スキャン → パース → データモデル構築 → 図生成</b> の 4 段です。エンジンには 2 つの入口があります。</p>
+      <p>入力（ソースファイル / プロジェクトルート）から UML 図までの流れは、大きく <b>スキャン → パース → データモデル構築 → 図生成</b> の 4 段です。エンジンには 2 つの入口があります。次のシーケンス図は、1 つの <code>.java</code> ソース文字列を <code>JavaStructureExtractor.extract()</code> に渡してから <code>PlantUmlClassDiagram</code> に至るまでの内部呼び出しを表します。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f5-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+          <marker id="f5-ret" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-ret" d="M1,1 L10,5.5 L1,10"/></marker>
+        </defs>
+
+        <!-- lifelines -->
+        <line class="u-life" x1="110" y1="40" x2="110" y2="540"/>
+        <line class="u-life" x1="270" y1="40" x2="270" y2="540"/>
+        <line class="u-life" x1="410" y1="40" x2="410" y2="540"/>
+        <line class="u-life" x1="560" y1="40" x2="560" y2="540"/>
+        <line class="u-life" x1="710" y1="40" x2="710" y2="540"/>
+        <line class="u-life" x1="870" y1="40" x2="870" y2="540"/>
+
+        <!-- headers -->
+        <g font-size="9">
+          <rect class="u-actor" x="52" y="12" width="116" height="26" rx="6"/><text class="u-name" x="110" y="29" text-anchor="middle">JavaStructureExtractor</text>
+          <rect class="u-actor" x="214" y="12" width="112" height="26" rx="6"/><text class="u-name" x="270" y="29" text-anchor="middle">JavaParserFrontend</text>
+          <rect class="u-actor" x="360" y="12" width="100" height="26" rx="6"/><text class="u-name" x="410" y="29" text-anchor="middle">JavaLexer</text>
+          <rect class="u-actor" x="502" y="12" width="116" height="26" rx="6"/><text class="u-name" x="560" y="29" text-anchor="middle">TypeDeclAdapter</text>
+          <rect class="u-actor" x="654" y="12" width="112" height="26" rx="6"/><text class="u-name" x="710" y="29" text-anchor="middle">MemberAdapter</text>
+          <rect class="u-actor" x="808" y="12" width="124" height="26" rx="6"/><text class="u-name" x="870" y="29" text-anchor="middle">PlantUmlClassDiagram</text>
+        </g>
+
+        <!-- activations -->
+        <rect class="u-act" x="106" y="58" width="8" height="408"/>
+        <rect class="u-act" x="266" y="88" width="8" height="350"/>
+        <rect class="u-act" x="406" y="112" width="8" height="22"/>
+        <rect class="u-act" x="556" y="244" width="8" height="156"/>
+        <rect class="u-act" x="706" y="276" width="8" height="18"/>
+        <rect class="u-act" x="706" y="312" width="8" height="58"/>
+        <rect class="u-act" x="866" y="488" width="8" height="26"/>
+
+        <!-- messages -->
+        <path class="u-msg" d="M22,58 L104,58" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="24" y="53">extract(source)</text>
+        <path class="u-msg" d="M114,88 L264,88" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="118" y="83">parse(source, headersOnly, solver)</text>
+        <path class="u-msg" d="M274,112 L404,112" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="278" y="107">expandUnicodeEscapes(source)</text>
+        <text class="u-guard" x="330" y="124">[各 char を走査]</text>
+        <path class="u-ret" d="M404,132 L276,132" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="290" y="146">expanded: String</text>
+
+        <!-- self: JavaParser parse -->
+        <path class="u-self" d="M274,160 L330,160 L330,176 L276,176" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="334" y="164">new JavaParser(…).parse() ⇒ CompilationUnit</text>
+        <text class="u-faint" x="334" y="177">（JavaParser + SymbolSolver）</text>
+
+        <!-- opt: parse error -->
+        <rect class="u-frame" x="234" y="186" width="240" height="30"/>
+        <rect class="u-frame-tab" x="234" y="186" width="34" height="14"/>
+        <text class="u-frame-op" x="240" y="197">opt</text>
+        <text class="u-guard" x="272" y="197">[!successful]</text>
+        <text class="u-msg-lbl" x="278" y="211">→ listener.onError(line, message)</text>
+
+        <!-- loop: each TypeDeclaration -->
+        <rect class="u-frame" x="236" y="226" width="540" height="194"/>
+        <rect class="u-frame-tab" x="236" y="226" width="40" height="14"/>
+        <text class="u-frame-op" x="242" y="237">loop</text>
+        <text class="u-guard" x="280" y="237">[cu の各 TypeDeclaration]</text>
+
+        <path class="u-msg" d="M274,250 L554,250" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="300" y="245">adapt(td, enclosing, ctx)</text>
+
+        <path class="u-msg" d="M564,278 L704,278" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="566" y="273">addField(classInfo, fd, ctx)</text>
+        <text class="u-guard" x="600" y="290">[各 field]</text>
+
+        <path class="u-msg" d="M564,314 L704,314" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="566" y="309">addMethod(classInfo, md, ctx)</text>
+        <text class="u-guard" x="592" y="326">[各 method]</text>
+
+        <rect class="u-frame" x="640" y="332" width="150" height="30"/>
+        <rect class="u-frame-tab" x="640" y="332" width="34" height="14"/>
+        <text class="u-frame-op" x="646" y="343">opt</text>
+        <text class="u-guard" x="678" y="343">[!headersOnly]</text>
+        <text class="u-msg-lbl" x="646" y="357">emitBody() ⇒ Statement 木</text>
+
+        <path class="u-ret" d="M704,372 L566,372" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="576" y="386">JavaMethodInfo</text>
+
+        <path class="u-ret" d="M554,398 L276,398" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="360" y="412">JavaClassInfo</text>
+
+        <path class="u-ret" d="M264,438 L116,438" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="128" y="433">List&lt;JavaClassInfo&gt;</text>
+        <path class="u-ret" d="M104,464 L22,464" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="24" y="459">List&lt;JavaClassInfo&gt;</text>
+
+        <path class="u-msg" d="M22,488 L864,488" marker-end="url(#f5-arr)"/>
+        <text class="u-msg-lbl" x="300" y="483">PlantUmlClassDiagram.generate(classes, opts)</text>
+        <path class="u-ret" d="M864,514 L22,514" marker-end="url(#f5-ret)"/>
+        <text class="u-msg-lbl" x="300" y="509">puml: String  →  PlantUmlRenderer.renderSvg()</text>
+      </svg>
+      <figcaption><b>図4</b>　解析パイプライン内部（シーケンス図）。<code>extract()</code> から <code>JavaParserFrontend</code> が字句展開（<code>JavaLexer</code>）→ JavaParser 構文解析 → <code>TypeDeclAdapter</code>／<code>MemberAdapter</code> による <code>JavaClassInfo</code> 組み立てを行い、最終的に <code>PlantUmlClassDiagram.generate()</code> が PlantUML 文字列を返す。実線=同期呼び出し、破線=戻り値、<code>loop/opt</code>=反復・条件。</figcaption>
+      </figure>
+
+      <div class="uml-legend">
+        <h4>シーケンス図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lgs-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-msg" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lgs-arr)"/></svg> 同期呼び出し（実線→）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lgs-ret" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-ret" d="M1,1 L10,5.5 L1,10"/></marker></defs><line class="u-ret" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lgs-ret)"/></svg> 戻り値（破線⇠）</div>
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-act" x="14" y="2" width="8" height="16"/></svg> 活性区間（バー）</div>
+          <div class="li"><svg width="34" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><rect class="u-frame" x="2" y="2" width="30" height="16"/><rect class="u-frame-tab" x="2" y="2" width="16" height="9"/></svg> <code>alt/opt/loop</code> 結合フラグメント</div>
+        </div>
+      </div>
 
       <h3>① Java / AIDL / Kotlin の構造抽出</h3>
       <p>ファサードは <code>UmlGenerator</code>。拡張子で適切なパーサへ振り分け、パース後にステレオタイプを付与します。</p>
@@ -111,11 +220,230 @@
         </tbody>
       </table></div>
       <p>Stage B への昇格は <code>ClassIndex.detail(qn, listener)</code> がオンデマンドで実行し、<code>detailedCache</code>（ConcurrentHashMap）で再パースを回避します。<code>JavaClassInfo.isDetailed()</code> がその状態を表します。</p>
+
+      <p>プロジェクト全体の解析は GUI からは非同期（<code>SwingWorker</code>）で実行されます。次のシーケンス図は <code>ProjectLoader.start()</code> がバックグラウンドで解析し、完了後に EDT でツリー更新・既定タブ表示まで行う流れです。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f6-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+          <marker id="f6-ret" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-ret" d="M1,1 L10,5.5 L1,10"/></marker>
+        </defs>
+
+        <line class="u-life" x1="130" y1="40" x2="130" y2="520"/>
+        <line class="u-life" x1="290" y1="40" x2="290" y2="520"/>
+        <line class="u-life" x1="440" y1="40" x2="440" y2="520"/>
+        <line class="u-life" x1="590" y1="40" x2="590" y2="520"/>
+        <line class="u-life" x1="730" y1="40" x2="730" y2="520"/>
+        <line class="u-life" x1="880" y1="40" x2="880" y2="520"/>
+
+        <g font-size="9">
+          <rect class="u-actor" x="74" y="12" width="112" height="26" rx="6"/><text class="u-name" x="130" y="29" text-anchor="middle">UmlMainFrame</text>
+          <rect class="u-actor" x="236" y="12" width="108" height="26" rx="6"/><text class="u-name" x="290" y="29" text-anchor="middle">ProjectLoader</text>
+          <rect class="u-actor" x="386" y="12" width="108" height="26" rx="6"/><text class="u-name" x="440" y="29" text-anchor="middle">SwingWorker</text>
+          <rect class="u-actor" x="528" y="12" width="124" height="26" rx="6"/><text class="u-name" x="590" y="29" text-anchor="middle">ProjectAnalysisCache</text>
+          <rect class="u-actor" x="676" y="12" width="108" height="26" rx="6"/><text class="u-name" x="730" y="29" text-anchor="middle">ProjectTreePanel</text>
+          <rect class="u-actor" x="822" y="12" width="116" height="26" rx="6"/><text class="u-name" x="880" y="29" text-anchor="middle">DiagramController</text>
+        </g>
+
+        <!-- activations -->
+        <rect class="u-act" x="126" y="58" width="8" height="455"/>
+        <rect class="u-act" x="286" y="86" width="8" height="64"/>
+        <rect class="u-act" x="436" y="146" width="8" height="360"/>
+        <rect class="u-act" x="586" y="190" width="8" height="54"/>
+        <rect class="u-act" x="726" y="396" width="8" height="20"/>
+        <rect class="u-act" x="876" y="440" width="8" height="32"/>
+
+        <path class="u-msg" d="M24,58 L124,58" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="26" y="53">loadProject(root)</text>
+        <path class="u-msg" d="M134,86 L284,86" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="150" y="81">start(root)</text>
+
+        <path class="u-self" d="M294,108 L348,108 L348,122 L296,122" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="352" y="113">UI 準備（status / progress / overlay）</text>
+        <text class="u-faint" x="352" y="126">EDT</text>
+
+        <path class="u-msg" d="M294,146 L434,146" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="300" y="141">execute()</text>
+        <text class="u-faint" x="388" y="166">doInBackground()（背景スレッド）</text>
+
+        <path class="u-msg" d="M444,190 L584,190" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="448" y="185">load(root, listener, prog, cancel)</text>
+
+        <!-- loop progress -->
+        <rect class="u-frame" x="150" y="204" width="330" height="24"/>
+        <rect class="u-frame-tab" x="150" y="204" width="40" height="14"/>
+        <text class="u-frame-op" x="156" y="215">loop</text>
+        <text class="u-guard" x="194" y="215">[進捗 throttled 150ms]</text>
+        <path class="u-msg" d="M436,222 L134,222" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="200" y="237">invokeLater(updateLoadProgress(done, total))</text>
+
+        <path class="u-ret" d="M584,244 L444,244" marker-end="url(#f6-ret)"/>
+        <text class="u-msg-lbl" x="470" y="258">load 完了</text>
+        <text class="u-faint" x="388" y="276">done()（EDT で後処理）</text>
+
+        <!-- alt -->
+        <rect class="u-frame" x="110" y="284" width="820" height="226"/>
+        <rect class="u-frame-tab" x="110" y="284" width="36" height="14"/>
+        <text class="u-frame-op" x="116" y="295">alt</text>
+        <text class="u-guard" x="150" y="295">[error != null]</text>
+        <path class="u-msg" d="M436,316 L134,316" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="150" y="311">showMessageDialog("Failed to analyze project …")</text>
+
+        <line class="u-frame-div" x1="110" y1="334" x2="930" y2="334"/>
+        <text class="u-guard" x="116" y="347">[cancelled]</text>
+        <path class="u-msg" d="M436,366 L134,366" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="150" y="361">status.setText("Cancelled.")</text>
+
+        <line class="u-frame-div" x1="110" y1="380" x2="930" y2="380"/>
+        <text class="u-guard" x="116" y="393">[success → onLoadSuccess]</text>
+        <path class="u-msg" d="M444,400 L724,400" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="470" y="395">populate(analysis, classes, classToModule)</text>
+        <path class="u-ret" d="M724,416 L444,416" marker-end="url(#f6-ret)"/>
+
+        <path class="u-msg" d="M444,444 L874,444" marker-end="url(#f6-arr)"/>
+        <text class="u-msg-lbl" x="470" y="439">openDefaultDiagram()</text>
+        <text class="u-faint" x="600" y="466">→ tabPane.openDiagram("KIND:PACKAGE")</text>
+        <path class="u-ret" d="M874,472 L444,472" marker-end="url(#f6-ret)"/>
+      </svg>
+      <figcaption><b>図5</b>　プロジェクト解析（シーケンス図）。<code>ProjectLoader.start()</code> が <code>SwingWorker</code> を起動し、背景スレッドの <code>doInBackground()</code> で <code>ProjectAnalysisCache.load()</code> を実行（進捗は <code>invokeLater</code> で EDT に通知）。完了後 <code>done()</code> が <code>alt</code> でエラー／キャンセル／成功を分岐し、成功時はツリー更新と既定（PACKAGE）タブ表示まで行う。</figcaption>
+      </figure>
     </section>
 
     <section id="model">
       <h2>抽出データモデル</h2>
-      <p>パーサが「ソースから取り出して保持する」中心オブジェクトは <code>JavaClassInfo</code> です。フィールド／メソッドは Stage B のみ充填されます。</p>
+      <p>パーサが「ソースから取り出して保持する」中心オブジェクトは <code>JavaClassInfo</code> です。フィールド／メソッドは Stage B のみ充填されます。次のクラス図は、字句解析から中心モデルまでの解析エンジンの主要型を表します。</p>
+
+      <figure class="uml-fig">
+      <svg class="diagram-svg" viewBox="0 0 960 450" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" font-size="11">
+        <defs>
+          <marker id="f4-vee" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-open" d="M1,1 L10,5.5 L1,10"/></marker>
+          <marker id="f4-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker>
+          <marker id="f4-dia" markerWidth="18" markerHeight="12" refX="2" refY="6" orient="auto"><path class="mk-dia" d="M2,6 L9,2 L16,6 L9,10 Z"/></marker>
+        </defs>
+
+        <!-- relations -->
+        <path class="u-rel-dash" d="M190,80 L190,108" marker-end="url(#f4-vee)"/>
+        <path class="u-rel-dash" d="M110,153 L110,178" marker-end="url(#f4-vee)"/>
+        <text class="u-rel-lbl" x="114" y="170">expandUnicodeEscapes()</text>
+        <path class="u-rel-dash" d="M340,134 L398,142" marker-end="url(#f4-vee)"/>
+        <text class="u-rel-lbl" x="344" y="130">«create»</text>
+        <path class="u-rel-dash" d="M140,274 L140,298" marker-end="url(#f4-vee)"/>
+        <text class="u-rel-lbl" x="146" y="290">produces 0..*</text>
+        <path class="u-rel" d="M700,150 L738,150" marker-start="url(#f4-dia)" marker-end="url(#f4-arr)"/>
+        <text class="u-mult" x="704" y="145">fields 0..*</text>
+        <path class="u-rel" d="M700,205 L738,288" marker-start="url(#f4-dia)" marker-end="url(#f4-arr)"/>
+        <text class="u-mult" x="708" y="250">methods 0..*</text>
+        <path class="u-rel" d="M740,170 L632,360" marker-end="url(#f4-arr)"/>
+        <text class="u-rel-lbl" x="660" y="250">visibility</text>
+        <path class="u-rel" d="M740,300 L632,388" marker-end="url(#f4-arr)"/>
+
+        <!-- JavaStructureExtractor -->
+        <g>
+          <rect class="u-cls" x="40" y="14" width="300" height="66" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="14" width="300" height="30" rx="7"/>
+          <text class="u-stereo" x="190" y="27" text-anchor="middle">«façade · final»</text>
+          <text class="u-name" x="190" y="40" text-anchor="middle">JavaStructureExtractor</text>
+          <line class="u-div" x1="40" y1="44" x2="340" y2="44"/>
+          <text class="u-member" x="48" y="58"><tspan class="u-vis">+</tspan> extract(source): List&lt;JavaClassInfo&gt;</text>
+          <text class="u-member" x="48" y="73"><tspan class="u-vis">+</tspan> extractHeadersOnly(source, listener): List&lt;…&gt;</text>
+        </g>
+        <!-- JavaParserFrontend -->
+        <g>
+          <rect class="u-cls" x="40" y="110" width="300" height="43" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="110" width="300" height="22" rx="7"/>
+          <text class="u-name" x="190" y="125" text-anchor="middle">JavaParserFrontend  <tspan class="u-faint">«final»</tspan></text>
+          <line class="u-div" x1="40" y1="132" x2="340" y2="132"/>
+          <text class="u-member" x="48" y="146"><tspan class="u-vis">+</tspan> parse(source, headersOnly, listener, solver): List&lt;…&gt;</text>
+        </g>
+        <!-- JavaLexer -->
+        <g>
+          <rect class="u-cls" x="40" y="180" width="260" height="94" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="180" width="260" height="22" rx="7"/>
+          <text class="u-name" x="170" y="195" text-anchor="middle">JavaLexer  <tspan class="u-faint">«final»</tspan></text>
+          <line class="u-div" x1="40" y1="202" x2="300" y2="202"/>
+          <text class="u-member" x="48" y="216"><tspan class="u-vis">-</tspan> src: String</text>
+          <line class="u-div" x1="40" y1="223" x2="300" y2="223"/>
+          <text class="u-member" x="48" y="237"><tspan class="u-vis">+</tspan> tokenize(): List&lt;JavaToken&gt;</text>
+          <text class="u-member" x="48" y="252"><tspan class="u-vis">+</tspan> getSource(): String</text>
+          <text class="u-member" x="48" y="267"><tspan class="u-vis">~</tspan> expandUnicodeEscapes(src): String</text>
+        </g>
+        <!-- JavaToken -->
+        <g>
+          <rect class="u-cls" x="40" y="300" width="300" height="94" rx="7"/>
+          <rect class="u-cls-hdr" x="40" y="300" width="300" height="22" rx="7"/>
+          <text class="u-name" x="190" y="315" text-anchor="middle">JavaToken  <tspan class="u-faint">«final»</tspan></text>
+          <line class="u-div" x1="40" y1="322" x2="340" y2="322"/>
+          <text class="u-member" x="48" y="336"><tspan class="u-vis">+</tspan> type: Type</text>
+          <text class="u-member" x="48" y="351"><tspan class="u-vis">+</tspan> text: String</text>
+          <text class="u-member" x="48" y="366"><tspan class="u-vis">+</tspan> start, end, line: int</text>
+          <line class="u-div" x1="40" y1="373" x2="340" y2="373"/>
+          <text class="u-member" x="48" y="387"><tspan class="u-faint">enum Type =</tspan> IDENT|NUMBER|STRING|CHAR|PUNCT|OP|EOF</text>
+        </g>
+
+        <!-- JavaClassInfo (central) -->
+        <g>
+          <rect class="u-cls" x="400" y="110" width="300" height="139" rx="7"/>
+          <rect class="u-cls-hdr" x="400" y="110" width="300" height="22" rx="7"/>
+          <text class="u-name" x="550" y="125" text-anchor="middle">JavaClassInfo  <tspan class="u-faint">«final · 中核»</tspan></text>
+          <line class="u-div" x1="400" y1="132" x2="700" y2="132"/>
+          <text class="u-member" x="408" y="146"><tspan class="u-vis">-</tspan> packageName, simpleName: String</text>
+          <text class="u-member" x="408" y="161"><tspan class="u-vis">-</tspan> kind: Kind  <tspan class="u-faint">«enum»</tspan></text>
+          <text class="u-member" x="408" y="176"><tspan class="u-vis">-</tspan> superClass: String, interfaces: List</text>
+          <text class="u-member" x="408" y="191"><tspan class="u-vis">-</tspan> fields: List&lt;JavaFieldInfo&gt;</text>
+          <text class="u-member" x="408" y="206"><tspan class="u-vis">-</tspan> methods: List&lt;JavaMethodInfo&gt;</text>
+          <text class="u-member" x="408" y="221"><tspan class="u-vis">-</tspan> moduleDirectives: List&lt;JavaModuleDirective&gt;</text>
+          <line class="u-div" x1="400" y1="228" x2="700" y2="228"/>
+          <text class="u-member" x="408" y="242"><tspan class="u-vis">+</tspan> getKind() / getFields() / getMethods()</text>
+        </g>
+        <!-- JavaFieldInfo -->
+        <g>
+          <rect class="u-cls" x="740" y="110" width="210" height="88" rx="7"/>
+          <rect class="u-cls-hdr" x="740" y="110" width="210" height="22" rx="7"/>
+          <text class="u-name" x="845" y="125" text-anchor="middle">JavaFieldInfo  <tspan class="u-faint">«final»</tspan></text>
+          <line class="u-div" x1="740" y1="132" x2="950" y2="132"/>
+          <text class="u-member" x="748" y="146"><tspan class="u-vis">-</tspan> name, type: String</text>
+          <text class="u-member" x="748" y="161"><tspan class="u-vis">-</tspan> visibility: Visibility</text>
+          <text class="u-member" x="748" y="176"><tspan class="u-vis">-</tspan> isStatic: boolean</text>
+          <text class="u-member" x="748" y="191"><tspan class="u-vis">-</tspan> isFinal: boolean</text>
+        </g>
+        <!-- JavaMethodInfo -->
+        <g>
+          <rect class="u-cls" x="740" y="250" width="210" height="88" rx="7"/>
+          <rect class="u-cls-hdr" x="740" y="250" width="210" height="22" rx="7"/>
+          <text class="u-name" x="845" y="265" text-anchor="middle">JavaMethodInfo  <tspan class="u-faint">«final»</tspan></text>
+          <line class="u-div" x1="740" y1="272" x2="950" y2="272"/>
+          <text class="u-member" x="748" y="286"><tspan class="u-vis">-</tspan> name, returnType: String</text>
+          <text class="u-member" x="748" y="301"><tspan class="u-vis">-</tspan> visibility: Visibility</text>
+          <text class="u-member" x="748" y="316"><tspan class="u-vis">-</tspan> parameterTypes: List&lt;String&gt;</text>
+          <text class="u-member" x="748" y="331"><tspan class="u-vis">-</tspan> statements: List&lt;Statement&gt;</text>
+        </g>
+        <!-- Visibility enum -->
+        <g>
+          <rect class="u-cls" x="400" y="330" width="230" height="108" rx="7"/>
+          <rect class="u-cls-hdr" x="400" y="330" width="230" height="30" rx="7"/>
+          <text class="u-stereo" x="515" y="343" text-anchor="middle">«enumeration»</text>
+          <text class="u-name" x="515" y="356" text-anchor="middle">Visibility</text>
+          <line class="u-div" x1="400" y1="360" x2="630" y2="360"/>
+          <text class="u-member" x="408" y="374">PUBLIC(+)   PROTECTED(#)</text>
+          <text class="u-member" x="408" y="389">PACKAGE(~)   PRIVATE(-)</text>
+          <line class="u-div" x1="400" y1="396" x2="630" y2="396"/>
+          <text class="u-member" x="408" y="410"><tspan class="u-vis">-</tspan> mark: String</text>
+          <text class="u-member" x="408" y="425"><tspan class="u-vis">+</tspan> fromModifiers(Collection): Visibility</text>
+        </g>
+      </svg>
+      <figcaption><b>図6</b>　Java 解析エンジン（クラス図）。<code>JavaStructureExtractor</code> が <code>JavaParserFrontend</code> へ委譲し、<code>JavaLexer</code> が <code>JavaToken</code> を生成、結果が中核モデル <code>JavaClassInfo</code> に集約される。◆ はコンポジション（<code>fields</code>/<code>methods</code> を <code>0..*</code> 保持）、実線矢印は <code>Visibility</code> への関連、破線は生成・依存。</figcaption>
+      </figure>
+
+      <div class="uml-legend">
+        <h4>クラス図の凡例</h4>
+        <div class="legend-grid">
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg4-arr" markerWidth="11" markerHeight="10" refX="9" refY="5" orient="auto"><path class="mk-fill" d="M0,0 L9,5 L0,10 Z"/></marker></defs><line class="u-rel" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg4-arr)"/></svg> 関連（実線→）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg4-vee" markerWidth="12" markerHeight="11" refX="10" refY="5.5" orient="auto"><path class="mk-open" d="M1,1 L10,5.5 L1,10"/></marker></defs><line class="u-rel-dash" x1="2" y1="10" x2="46" y2="10" marker-end="url(#lg4-vee)"/></svg> 依存／生成（破線⇢）</div>
+          <div class="li"><svg width="58" height="20" class="diagram-svg" style="border:none;background:none;margin:0"><defs><marker id="lg4-dia" markerWidth="18" markerHeight="12" refX="2" refY="6" orient="auto"><path class="mk-dia" d="M2,6 L9,2 L16,6 L9,10 Z"/></marker></defs><line class="u-rel" x1="46" y1="10" x2="14" y2="10" marker-end="url(#lg4-dia)"/></svg> コンポジション（◆）</div>
+          <div class="li"><code><b style="color:var(--accent-2)">+</b></code>public <code><b style="color:var(--accent-2)">#</b></code>protected <code><b style="color:var(--accent-2)">~</b></code>package <code><b style="color:var(--accent-2)">-</b></code>private ／ <code>0..*</code> 多重度</div>
+        </div>
+      </div>
 
       <h3>JavaClassInfo</h3>
       <div class="table-wrap"><table>

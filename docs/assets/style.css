@@ -179,6 +179,77 @@ footer { border-top: 1px solid var(--border); margin-top: 3rem; padding-top: 1.4
 
 .diagram-svg { width: 100%; max-width: 760px; margin: 1.2rem auto; display: block; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 
+/* ── UML figures (class / sequence diagrams) ─────────────────────────────
+   手描きインライン SVG 用の共有スタイル。配色は既存 .diagram-svg 系を踏襲。
+   各 SVG は <defs> に矢じり marker のみ持ち、色・線は下記クラスを参照する。 */
+figure.uml-fig { margin: 1.4rem auto; max-width: 860px; }
+figure.uml-fig .diagram-svg { margin: 0 auto .55rem; max-width: 100%; }
+figure.uml-fig figcaption {
+  color: var(--text-dim); font-size: .82rem; text-align: center; line-height: 1.5;
+}
+figure.uml-fig figcaption b { color: var(--accent); font-weight: 600; }
+
+/* SVG 内テキスト/図形の共通色（.diagram-svg 配下にスコープ） */
+.diagram-svg text { fill: var(--text); }
+.diagram-svg .u-dim { fill: var(--text-dim); }
+.diagram-svg .u-faint { fill: var(--text-faint); }
+.diagram-svg .u-acc { fill: var(--accent); }
+.diagram-svg .u-acc2 { fill: var(--accent-2); }
+.diagram-svg .u-warn { fill: var(--warn); }
+
+/* クラス図: クラスボックス（3 段コンパートメント） */
+.diagram-svg .u-cls { fill: var(--bg-soft); stroke: var(--border); }
+.diagram-svg .u-cls-hdr { fill: var(--pill-bg); stroke: var(--border); }
+.diagram-svg .u-name { fill: var(--text); font-weight: 600; }
+.diagram-svg .u-stereo { fill: var(--accent-3); font-style: italic; }
+.diagram-svg .u-member { fill: var(--text-dim); }
+.diagram-svg .u-vis { fill: var(--accent-2); font-weight: 600; }
+.diagram-svg .u-div { stroke: var(--border); stroke-width: 1; }
+
+/* 関係線（継承/実装/関連/依存/コンポジション） */
+.diagram-svg .u-rel { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.diagram-svg .u-rel-dash { stroke: var(--accent); stroke-width: 1.3; fill: none; stroke-dasharray: 5 3; }
+.diagram-svg .u-rel-lbl { fill: var(--text-faint); font-size: 10px; }
+.diagram-svg .u-mult { fill: var(--accent-2); font-size: 10px; }
+
+/* シーケンス図 */
+.diagram-svg .u-actor { fill: var(--pill-bg); stroke: var(--border); }
+.diagram-svg .u-life { stroke: var(--border); stroke-width: 1; stroke-dasharray: 4 4; }
+.diagram-svg .u-act { fill: var(--bg-card); stroke: var(--accent); stroke-width: 1; }
+.diagram-svg .u-msg { stroke: var(--accent); stroke-width: 1.3; fill: none; }
+.diagram-svg .u-ret { stroke: var(--text-faint); stroke-width: 1.1; fill: none; stroke-dasharray: 5 3; }
+.diagram-svg .u-msg-lbl { fill: var(--text); font-size: 10.5px; }
+.diagram-svg .u-self { fill: none; stroke: var(--accent); stroke-width: 1.3; }
+
+/* alt / loop / opt などの結合フラグメント枠 */
+.diagram-svg .u-frame { fill: none; stroke: var(--accent-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.diagram-svg .u-frame-tab { fill: var(--bg-soft); stroke: var(--accent-3); stroke-width: 1; }
+.diagram-svg .u-frame-op { fill: var(--accent-3); font-size: 10px; font-weight: 700; }
+.diagram-svg .u-guard { fill: var(--text-dim); font-size: 10px; }
+.diagram-svg .u-frame-div { stroke: var(--accent-3); stroke-width: 1; stroke-dasharray: 3 3; }
+
+/* 矢じり marker 用の共通色（各 SVG は <defs> に固有 id の marker を置き、
+   その中の <path> へ下記クラスを付ける） */
+.diagram-svg .mk-tri { fill: var(--bg-soft); stroke: var(--accent); stroke-width: 1; }
+.diagram-svg .mk-open { fill: none; stroke: var(--accent); stroke-width: 1.3; }
+.diagram-svg .mk-fill { fill: var(--accent); }
+.diagram-svg .mk-dia { fill: var(--accent); stroke: var(--accent); }
+.diagram-svg .mk-ret { fill: none; stroke: var(--text-faint); stroke-width: 1.1; }
+.diagram-svg .mk-frame { fill: none; stroke: var(--accent-3); stroke-width: 1.1; }
+
+/* 凡例ブロック（各ページ・図種ごと） */
+.uml-legend {
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: .7rem 1rem; margin: 1rem auto 1.4rem; max-width: 860px; font-size: .82rem;
+}
+.uml-legend h4 { margin: 0 0 .5rem; color: var(--text-dim); font-size: .8rem;
+  text-transform: uppercase; letter-spacing: .6px; }
+.uml-legend .legend-grid { display: grid; gap: .35rem .9rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.uml-legend .li { display: flex; align-items: center; gap: .55rem; color: var(--text-dim); }
+.uml-legend .li svg { flex: 0 0 auto; }
+.uml-legend code { white-space: nowrap; }
+
 /* mobile */
 .menu-btn { display: none; background: var(--pill-bg); border: 1px solid var(--border); color: var(--text);
   border-radius: 7px; padding: .3em .65em; font-size: 1rem; cursor: pointer; }

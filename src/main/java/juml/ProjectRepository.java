@@ -98,6 +98,43 @@ public final class ProjectRepository implements AutoCloseable {
     }
 
     /**
+     * 最近開いたプロジェクト一覧から指定 id のエントリを削除する。
+     * {@code project_settings} は {@code ON DELETE CASCADE} なので連鎖削除される。
+     * ディスク上のプロジェクト本体には一切触れない。
+     *
+     * @return 1 件以上削除できたら {@code true}
+     */
+    public boolean deleteById(long id) {
+        if (connection == null) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM projects WHERE id = ?")) {
+            ps.setLong(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            System.err.println("[juml] Failed to delete project: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 最近開いたプロジェクト一覧から指定パスのエントリを削除する。
+     * ディスク上のプロジェクト本体には一切触れない。
+     *
+     * @return 1 件以上削除できたら {@code true}
+     */
+    public boolean delete(File projectRoot) {
+        if (connection == null || projectRoot == null) return false;
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM projects WHERE path = ?")) {
+            ps.setString(1, canonical(projectRoot));
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            System.err.println("[juml] Failed to delete project: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * プロジェクト固有設定をまとめて保存する。
      * 既存エントリは上書き、不要なキーはそのまま残す (削除しない)。
      */

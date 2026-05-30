@@ -7,11 +7,13 @@ import juml.ProjectRecord;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
@@ -27,6 +29,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.File;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 「Open Project」ボタン押下時に表示するダイアログ。
@@ -42,7 +45,8 @@ final class OpenProjectDialog extends JDialog {
     private Action action = Action.CANCEL;
     private File chosenRoot;
 
-    private OpenProjectDialog(Frame owner, List<ProjectRecord> records) {
+    private OpenProjectDialog(Frame owner, List<ProjectRecord> records,
+                              Consumer<ProjectRecord> onDelete) {
         super(owner, "Open Project", true);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(0, 0));
@@ -82,7 +86,11 @@ final class OpenProjectDialog extends JDialog {
             gbc.fill = GridBagConstraints.BOTH;
             gbc.weighty = 1;
 
-            JList<ProjectRecord> list = new JList<>(records.toArray(new ProjectRecord[0]));
+            DefaultListModel<ProjectRecord> model = new DefaultListModel<>();
+            for (ProjectRecord rec : records) {
+                model.addElement(rec);
+            }
+            JList<ProjectRecord> list = new JList<>(model);
             list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
             list.setCellRenderer(new ProjectListRenderer());
             list.setVisibleRowCount(8);
@@ -110,6 +118,11 @@ final class OpenProjectDialog extends JDialog {
                 }
             });
 
+            // 一覧から削除（ディスク上のプロジェクト本体は削除しない）
+            JButton remove = new JButton("一覧から削除");
+            remove.setEnabled(false);
+            remove.addActionListener(e -> removeSelected(list, model, onDelete));
+
             JButton browse = new JButton("新しいフォルダを参照...");
             browse.addActionListener(e -> {
                 action = Action.BROWSE;
@@ -122,6 +135,7 @@ final class OpenProjectDialog extends JDialog {
             list.addListSelectionListener(ev -> {
                 ProjectRecord sel = list.getSelectedValue();
                 openSelected.setEnabled(sel != null && sel.root().isDirectory());
+                remove.setEnabled(sel != null);
             });
             list.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
@@ -131,7 +145,20 @@ final class OpenProjectDialog extends JDialog {
                     }
                 }
             });
+            // Delete / BackSpace キーで選択中の項目を一覧から削除
+            list.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyPressed(java.awt.event.KeyEvent e) {
+                    int code = e.getKeyCode();
+                    if ((code == java.awt.event.KeyEvent.VK_DELETE
+                            || code == java.awt.event.KeyEvent.VK_BACK_SPACE)
+                            && list.getSelectedValue() != null) {
+                        removeSelected(list, model, onDelete);
+                    }
+                }
+            });
 
+            buttons.add(remove);
             buttons.add(openSelected);
             buttons.add(browse);
             buttons.add(cancel);
@@ -165,6 +192,39 @@ final class OpenProjectDialog extends JDialog {
     }
 
     /**
+     * 選択中のプロジェクトを最近一覧から削除する。
+     * 確認のうえ、リストモデルと永続化リポジトリ ({@code onDelete}) の両方から取り除く。
+     * ディスク上のプロジェクト本体には触れない。
+     */
+    private void removeSelected(JList<ProjectRecord> list,
+                                DefaultListModel<ProjectRecord> model,
+                                Consumer<ProjectRecord> onDelete) {
+        ProjectRecord sel = list.getSelectedValue();
+        if (sel == null) return;
+        int answer = JOptionPane.showConfirmDialog(
+                this,
+                "<html>「<b>" + ProjectListRenderer.escapeHtml(sel.getName())
+                        + "</b>」を最近開いたプロジェクト一覧から削除しますか?<br>"
+                        + "<font color='#888888'>※ ディスク上のフォルダやファイルは削除されません。</font></html>",
+                "一覧から削除",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (answer != JOptionPane.OK_OPTION) return;
+
+        int index = list.getSelectedIndex();
+        if (onDelete != null) {
+            onDelete.accept(sel);
+        }
+        model.removeElement(sel);
+        // 削除後は近い位置の項目を選び直す（残っていれば）
+        if (!model.isEmpty()) {
+            list.setSelectedIndex(Math.min(index, model.getSize() - 1));
+        } else {
+            list.clearSelection();
+        }
+    }
+
+    /**
      * ダイアログを表示し、ユーザーが選んだプロジェクトルートを返す。
      *
      * <ul>
@@ -172,9 +232,12 @@ final class OpenProjectDialog extends JDialog {
      *   <li>「新しいフォルダを参照」を選んだ → {@link JFileChooser} を開き選択パスを返す</li>
      *   <li>キャンセル → {@code null}</li>
      * </ul>
+     *
+     * @param onDelete 一覧から削除する際に呼ばれるコールバック (永続化層からの削除を委譲)。
+     *                 {@code null} 可。
      */
-    static File show(Frame owner, List<ProjectRecord> records) {
-        OpenProjectDialog d = new OpenProjectDialog(owner, records);
+    static File show(Frame owner, List<ProjectRecord> records, Consumer<ProjectRecord> onDelete) {
+        OpenProjectDialog d = new OpenProjectDialog(owner, records, onDelete);
         d.setVisible(true);
 
         if (d.action == Action.SELECTED) {

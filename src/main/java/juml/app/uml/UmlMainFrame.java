@@ -437,7 +437,13 @@ public class UmlMainFrame extends JFrame {
         } catch (RuntimeException ex) {
             records = java.util.Collections.emptyList();
         }
-        File chosen = OpenProjectDialog.show(this, records);
+        File chosen = OpenProjectDialog.show(this, records, rec -> {
+            try {
+                juml.ProjectRepository.getInstance().deleteById(rec.getId());
+            } catch (RuntimeException ignored) {
+                // 削除はベストエフォート (リポジトリ未初期化など)
+            }
+        });
         if (chosen != null) {
             loadProject(chosen);
         }

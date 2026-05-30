@@ -119,6 +119,50 @@ public class ProjectRepositoryTest {
     }
 
     @Test
+    public void deleteById_removesProjectFromRecent() throws Exception {
+        File root = tempDir.newFolder("ToDelete");
+        repo.touch(root);
+        long id = repo.listRecent(10).get(0).getId();
+
+        assertTrue("削除に成功するはず", repo.deleteById(id));
+        assertTrue("一覧から消えているはず", repo.listRecent(10).isEmpty());
+    }
+
+    @Test
+    public void deleteById_returnsFalseForUnknownId() throws Exception {
+        assertFalse(repo.deleteById(99999L));
+    }
+
+    @Test
+    public void deleteByFile_removesMatchingProject() throws Exception {
+        File a = tempDir.newFolder("KeepMe");
+        File b = tempDir.newFolder("DropMe");
+        repo.touch(a);
+        repo.touch(b);
+
+        assertTrue(repo.delete(b));
+        List<ProjectRecord> recent = repo.listRecent(10);
+        assertEquals(1, recent.size());
+        assertEquals("KeepMe", recent.get(0).getName());
+    }
+
+    @Test
+    public void deleteById_cascadesToProjectSettings() throws Exception {
+        File root = tempDir.newFolder("WithSettings");
+        repo.touch(root);
+        Map<String, String> settings = new LinkedHashMap<>();
+        settings.put("style.theme", "crt-green");
+        repo.saveSettings(root, settings);
+        long id = repo.listRecent(10).get(0).getId();
+
+        repo.deleteById(id);
+
+        // 同名フォルダを再登録すると新しい id になり、設定は引き継がれない (CASCADE 削除済み)
+        repo.touch(root);
+        assertTrue("関連設定も削除されているはず", repo.loadSettings(root).isEmpty());
+    }
+
+    @Test
     public void saveSettings_overwritesExistingKey() throws Exception {
         File root = tempDir.newFolder("App");
         repo.touch(root);

@@ -558,3 +558,29 @@ body.v2 .deflist dd { color: var(--text-dim); margin: 0; }
   body.v2 .table-wrap.cardify td:first-child { color: var(--text); }
   body.v2 .table-wrap.cardify td:first-child::before { color: var(--cat, var(--accent)); }
 }
+
+/* --- カードのアフォーダンスを正直に：押せる(a.card)＝浮いた箱＋常時「↗」、
+       表示専用(div.card)＝フラットなパネル（押せる印象を出さない）。 --- */
+body.v2 .card:not(a) {
+  background: var(--bg-soft); cursor: default;
+}
+body.v2 a.card {
+  background: var(--bg-card); cursor: pointer; position: relative;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+}
+body.v2 a.card h4 { padding-right: 1.3rem; }
+body.v2 a.card::after {
+  content: "↗"; position: absolute; top: .55rem; right: .7rem;
+  color: var(--accent); opacity: .55; font-size: .95rem;
+  transition: opacity .15s, transform .15s;
+}
+body.v2 a.card:hover {
+  border-color: var(--accent); transform: translateY(-3px);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+body.v2 a.card:hover::after { opacity: 1; transform: translate(2px, -2px); }
+body.v2 a.card:focus-visible { border-color: var(--accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  body.v2 a.card, body.v2 a.card::after { transition: none; }
+  body.v2 a.card:hover { transform: none; }
+}

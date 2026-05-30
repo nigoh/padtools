@@ -4,6 +4,12 @@ Change log
 2.1
 --------
 
+* **Android プロジェクト解析の詳細ドキュメントを追加** (`docs/android-analysis.html` 新規)
+    * Android Gradle プロジェクトを Juml がどう解析するかを、ソースから棚卸しして 1 ページに集約。`docs` サイトのナビ / index カードにも `Android 解析` を追加。
+    * 内容: 「2 系統の解析」(① 構造解析 `UmlGenerator.extractFromProjectDetailed` / ② Android 資産解析 `AndroidProjectAnalyzer.analyze`)、入口 (CLI `AndroidCommands` 各フラグ / GUI `DiagramKind` / API)、`AndroidProjectScanner` の収集・除外ルール、`inferModuleName` / sourceSet・qualifier 推定、並列パース・Manifest マージ・`DependencyJarIndex`、`AndroidProjectAnalysis` データモデル、各パーサ (Gradle / VersionCatalog / Manifest / Layout / Navigation)、Android 系の図生成、派生解析 (Room / 画面遷移 / 設定 / AOSP / AAOS)。
+    * 「**改造・拡張ポイント**」節を独立化: 新しいファイル種を拾う / 新パーサを足す / 新図種を CLI+GUI に足す手順と、改造時のハマりどころ (解析順序・best-effort・並列性・結果順序・FQN バックフィル・XXE 防御・Stage A/B) をまとめた。
+    * 目的: 利用者がこのアプリの Android 解析パイプラインを理解し、改造・更新できるようにするため。
+
 * **Soong (Android.bp) 図を GUI に追加** (`DiagramKind.SOONG` 新規 / `DiagramService.generateSoongPuml`)
     * これまで CLI (`--android-bp`) でしか出せなかった Android.bp モジュール依存図を、GUI のツールバー / Diagram メニューから図種 `Soong` として開けるようにした。
     * 既存の `AndroidBpParser` (Android.bp 走査・解析) と `PlantUmlSoongDependencyDiagram` (コンポーネント依存図描画) を再利用し、`DiagramService` でプロジェクトルートを起点に走査する (画面遷移図 `SCREEN_FLOW` と同じ「ルート必須」経路)。
